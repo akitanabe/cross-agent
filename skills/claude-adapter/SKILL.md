@@ -55,7 +55,6 @@ cross-agent から渡される `review_session_id` とコンテキストを受�
   "focus_question": null,
   "options": {
     "review_depth": "medium",
-    "quick_mode": false,
     "timeout_seconds": null
   }
 }

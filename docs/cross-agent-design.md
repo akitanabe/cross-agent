@@ -58,7 +58,7 @@ marketplace経由ではread-onlyになりうるため、状態保存には使わ
 | `status` | `cross-agent` | 全体の進行状態 |
 | `target_root` | `cross-agent` | レビュー対象全体のroot。必要に応じてagent側にもコピーする |
 | `current_round` | `cross-agent` | Round制御はorchestratorの責務 |
-| `options` | `cross-agent` | `max_rounds` / `quick_mode` / `review_depth` など |
+| `options` | `cross-agent` | `max_rounds` / `review_depth` など |
 | `context` | `cross-agent` | 各agentに渡す共通入力 |
 | `rounds` | `cross-agent` | Roundごとの実行履歴 |
 | `agents.codex` | `codex-adapter` | `thread_id` / resume / Codex固有ログ |
@@ -84,7 +84,6 @@ agent固有stateの作成・更新・復旧判断は各adapterに閉じる。
     "max_rounds": 2,
     "auto_deep_dive": true,
     "review_depth": "medium",
-    "quick_mode": false,
     "keep_artifacts": false
   },
   "context": {
@@ -214,7 +213,6 @@ Claude Code の Skill は関数APIではなく実行手順なので、cross-agen
   "focus_question": null,
   "options": {
     "review_depth": "medium",
-    "quick_mode": false,
     "timeout_seconds": null
   }
 }
@@ -350,9 +348,8 @@ v1は単純で確実な単一round単一agentフローにする。複数エー�
 - `initial_agent`: `--agent codex` 等。未指定なら `"codex"`
 - `focus_question`: 引用文字列や明示された質問
 - `target_files`: パスとして解釈できる引数
-- `quick_mode`: 「1回だけ」「クイックに」「ざっくり」等
-- `review_depth`: 既定 `medium`。深い検討なら `high`、軽い確認なら `low`
-- `max_rounds`: 既定 `2`。`quick_mode` の場合は `1`
+- `review_depth`: 既定 `medium`。「軽く」「ざっくり」なら `low`、「深く」「じっくり」なら `high`
+- `max_rounds`: 既定 `2`。「1回だけ」「クイックに」なら `1`
 
 対象や質問がまったく特定できない場合、通常会話でユーザーに確認する。このとき
 `session.status` はまだ作らないか、作成済みなら `active` のまま維持する。
@@ -396,7 +393,6 @@ state machineに載せず、通常会話として処理する。
     "max_rounds": 2,
     "auto_deep_dive": true,
     "review_depth": "medium",
-    "quick_mode": false,
     "keep_artifacts": false
   },
   "context": {},
@@ -455,7 +451,6 @@ state machineに載せず、通常会話として処理する。
 以下のいずれかに該当する場合、Round 2は実行しない。
 
 - `max_rounds <= 1`
-- `quick_mode: true`
 - Round 1の成功結果が短く、かつ明確に「問題なし」と結論している
 - ユーザー質問が単純なYes/Noで、Round 1で十分に回答された
 

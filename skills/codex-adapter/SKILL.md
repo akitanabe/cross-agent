@@ -42,7 +42,6 @@ cross-agent から request envelope を受け取る。
   "focus_question": null,
   "options": {
     "review_depth": "medium",
-    "quick_mode": false,
     "timeout_seconds": null
   }
 }

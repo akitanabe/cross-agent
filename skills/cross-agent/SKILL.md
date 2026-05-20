@@ -48,9 +48,8 @@ cross-agent は **オーケストレーター**。自分はレビューの中身
 - `initial_agent`: 未指定なら `"codex"`
 - `focus_question`: 引用文字列や明示された質問
 - `target_files`: パスとして解釈できる引数
-- `quick_mode`: 「1回だけ」「クイックに」「ざっくり」等
-- `review_depth`: 既定 `medium`。深い検討なら `high`、軽い確認なら `low`
-- `max_rounds`: 既定 `2`。`quick_mode` の場合は `1`
+- `review_depth`: 既定 `medium`。「軽く」「ざっくり」なら `low`、「深く」「じっくり」なら `high`
+- `max_rounds`: 既定 `2`。「1回だけ」「クイックに」なら `1`
 
 `review_depth` は cross-agent の抽象設定であり、各 adapter が agent 固有の実行設定へ翻訳する。
 
@@ -163,7 +162,6 @@ Round 1に記録したagentの Skill を `review_session_id` とコンテキス�
   "focus_question": null,
   "options": {
     "review_depth": "medium",
-    "quick_mode": false,
     "timeout_seconds": null
   }
 }
@@ -196,7 +194,7 @@ Round 1 の出力を読み、以下 3 観点を 1 つの追加プロンプトに
 2. **反論・批判的検証** — 妥当性の怪しい指摘を問い直す
 3. **見落とし確認** — R1 で触れられていない観点を 1〜2 個追加
 
-「1回だけ」「クイックに」と指定された場合はスキップ。
+`max_rounds <= 1` の場合はスキップ。
 Round 2はRound 1と同じagentで実行する。
 
 ### Step 7: 結果の統合・提示
