@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "cross-agent",
+  "displayName": "Cross-Agent Review",
+  "description": "複数の外部エージェント（Codex / Claude Subagent など）に横断的にセカンドオピニオン・批判的レビューを依頼するプラグイン。",
+  "version": "0.1.0",
+  "author": {
+    "name": "tanabe",
+    "email": "tanabe@determaind.biz"
+  },
+  "license": "MIT",
+  "keywords": [
+    "second-opinion",
+    "code-review",
+    "codex",
+    "subagent",
+    "cross-agent"
+  ]
+}
