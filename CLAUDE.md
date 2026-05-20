@@ -1,7 +1,7 @@
 # CLAUDE.md
 
-このリポジトリは **Claude Code プラグイン `cross-agent`** のソース。複数の外部エージェント
-（Codex、Claude Subagent など）に横断的にセカンドオピニオン・批判的レビューを依頼する。
+このリポジトリは **Claude Code プラグイン `cross-agent`** のソース。外部エージェント
+（Codex、Claude Subagent など）を選んでセカンドオピニオン・批判的レビューを依頼する。
 
 > 注: この CLAUDE.md はプラグインがインストールされた先では読み込まれない（プラグインの
 > CLAUDE.md は project context にならない仕様）。**このプラグイン自体を開発するときの**

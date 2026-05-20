@@ -2,7 +2,7 @@
 
 ## 概要
 
-複数の外部エージェント（Codex、Claude Subagentなど）に横断的に質問・レビューを依頼するスキル。
+外部エージェント（Codex、Claude Subagentなど）を選んで質問・レビューを依頼するスキル。
 セカンドオピニオン・批判的レビュー・設計判断の妥当性確認などに使用する。
 
 ## 設計方針
@@ -57,11 +57,10 @@ marketplace経由ではread-onlyになりうるため、状態保存には使わ
 | `created_at` / `updated_at` | state layer | 保存時に機械的に管理する |
 | `status` | `cross-agent` | 全体の進行状態 |
 | `target_root` | `cross-agent` | レビュー対象全体のroot。必要に応じてagent側にもコピーする |
-| `requested_agents` | `cross-agent` | ユーザー指定または既定選択の結果 |
 | `current_round` | `cross-agent` | Round制御はorchestratorの責務 |
 | `options` | `cross-agent` | `max_rounds` / `quick_mode` / `reasoning_effort` など |
 | `context` | `cross-agent` | 各agentに渡す共通入力 |
-| `rounds` | `cross-agent` | 複数agentの結果を束ねる履歴 |
+| `rounds` | `cross-agent` | Roundごとの実行履歴 |
 | `agents.codex` | `codex-subagent` | `thread_id` / resume / Codex固有ログ |
 | `agents.claude` | `claude-subagent` | 蓄積context / Claude呼び出し履歴 |
 | `artifacts` | 共有 | 作成者がappendする。他者の項目は書き換えない |
@@ -80,7 +79,6 @@ agent固有stateの作成・更新・復旧判断は各subagentに閉じる。
   "updated_at": "...",
   "status": "active",
   "target_root": "...",
-  "requested_agents": ["codex"],
   "current_round": 1,
   "options": {
     "max_rounds": 2,
@@ -110,15 +108,15 @@ agent固有stateの作成・更新・復旧判断は各subagentに閉じる。
     {
       "round": 1,
       "kind": "initial_review",
+      "agent": "codex",
       "prompt_file": "...",
       "started_at": "...",
       "completed_at": "...",
-      "agent_results": {
-        "codex": {
-          "status": "completed",
-          "output_file": "...",
-          "summary": null
-        }
+      "agent_result": {
+        "agent": "codex",
+        "status": "completed",
+        "output_file": "...",
+        "summary": null
       }
     }
   ],
@@ -150,7 +148,7 @@ session.statusは `active` のまま維持する。
 - `follow_up`
 - `recovery`
 
-`agent.status` / `agent_results.<agent>.status`:
+`agent.status` / `agent_result.status`:
 
 - `pending`
 - `running`
@@ -168,7 +166,7 @@ session.statusは `active` のまま維持する。
 ### Subagentの戻り値
 
 各subagentはagent固有stateを自分で更新したうえで、cross-agentへ以下の形で実行結果を返す。
-cross-agentはこの戻り値を `rounds[].agent_results` に記録する。
+cross-agentはこの戻り値を `rounds[].agent_result` に記録する。
 
 ```json
 {
@@ -285,8 +283,8 @@ subagent は `prompt_file` を主入力として扱う。`context_file` や `tar
 4. `cross-agent` がrequest envelopeを添えて対象subagentへ委譲する
 5. subagentが自分の `agents.<agent>` stateを更新する
 6. subagentがresponse envelopeを返す
-7. `cross-agent` がresponseを `rounds[].agent_results` に記録する
-8. 全agentの結果が揃ったら、`cross-agent` がroundを完了させる
+7. `cross-agent` がresponseを `rounds[].agent_result` に記録する
+8. `cross-agent` がroundを完了させる
 
 ### Artifacts
 
@@ -327,6 +325,183 @@ session全体が `failed` になるわけではない。復旧可能なagent失�
 }
 ```
 
+## cross-agent 実行フロー v1
+
+v1は単純で確実な単一round単一agentフローにする。複数エージェントによる同一roundの
+比較レビューは、MCP state serverや統合ポリシーを設計する段階で改めて扱う。
+ただし、フォローアップで別のagentへ追加相談することは、roundごとの `agent` で表現できる。
+
+### Phase 0: ユーザー入力の解釈
+
+`cross-agent` はユーザーの依頼から以下を抽出する。
+
+- `initial_agent`: `--agent codex` 等。未指定なら `"codex"`
+- `focus_question`: 引用文字列や明示された質問
+- `target_files`: パスとして解釈できる引数
+- `quick_mode`: 「1回だけ」「クイックに」「ざっくり」等
+- `reasoning_effort`: 既定 `high`。クイック指定なら `medium`、深く検討する指定なら `xhigh`
+- `max_rounds`: 既定 `2`。`quick_mode` の場合は `1`
+
+対象や質問がまったく特定できない場合、通常会話でユーザーに確認する。このとき
+`session.status` はまだ作らないか、作成済みなら `active` のまま維持する。
+v1では `needs_user_input` を使わない。
+
+### Phase 1: target_root の決定
+
+`target_root` はレビューセッション全体の作業rootとして `cross-agent` が決める。
+エージェント固有の実行方法や制約はここでは扱わない。
+
+優先順:
+
+1. `target_files` がある場合、そのファイル群に共通するgit root
+2. git rootが取れない場合、`package.json` / `pyproject.toml` / `go.mod` / `Cargo.toml` などのproject markerを親方向に探索
+3. markerもない場合、指定ファイルの親ディレクトリ
+4. `target_files` がない場合、Claude Codeの現在のcwd
+
+複数の候補rootが出て自動決定できない場合はユーザーへ確認する。確認待ちは
+state machineに載せず、通常会話として処理する。
+
+### Phase 2: セッション初期化
+
+`cross-agent` は以下を作成する。
+
+- `review_session_id`
+- `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json`
+- `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/`
+
+初期state:
+
+```json
+{
+  "schema_version": 1,
+  "review_session_id": "uuid-xxxx",
+  "created_at": "...",
+  "updated_at": "...",
+  "status": "active",
+  "target_root": "...",
+  "current_round": 0,
+  "options": {
+    "max_rounds": 2,
+    "auto_deep_dive": true,
+    "reasoning_effort": "high",
+    "quick_mode": false,
+    "keep_artifacts": false
+  },
+  "context": {},
+  "agents": {},
+  "rounds": [],
+  "artifacts": {
+    "files": []
+  },
+  "errors": []
+}
+```
+
+### Phase 3: 共通コンテキストと初回プロンプト作成
+
+`cross-agent` は会話・プラン・設計案・ユーザー指定ファイルを整理し、artifact directoryに
+以下を作る。
+
+- `context.md`: 会話や設計案の要約。ファイル指定だけで十分な場合は省略可
+- `round-1-prompt.md`: Round 1で選んだagentに渡す初回レビュー依頼
+
+`context` stateには以下を保存する。
+
+```json
+{
+  "context_file": ".../context.md",
+  "initial_prompt_file": ".../round-1-prompt.md",
+  "focus_question": "...",
+  "target_files": ["..."],
+  "source": "conversation | files | mixed"
+}
+```
+
+初回プロンプトには最低限以下を含める。
+
+- 独立したシニアエンジニアとして批判的・建設的にレビューすること
+- `focus_question`
+- `context_file`
+- `target_files`
+- レビュー観点: リスク、代替案、妥当性、実装注意点、テスト観点
+
+### Phase 4: Round 1 実行
+
+`cross-agent` は `rounds[]` に `kind: "initial_review"` と `agent` を持つroundを
+開始状態で追加し、そのagentに対応するsubagentを実行する。
+
+実行手順:
+
+1. request envelopeを組み立てる
+2. 対象subagentへ委譲する
+3. response envelopeを受け取る
+4. `rounds[].agent_result` に結果を記録する
+5. responseの `artifacts` と `error` をstateへappendする
+
+### Phase 5: Round 2 deep_dive 判断
+
+以下のいずれかに該当する場合、Round 2は実行しない。
+
+- `max_rounds <= 1`
+- `quick_mode: true`
+- Round 1の成功結果が短く、かつ明確に「問題なし」と結論している
+- ユーザー質問が単純なYes/Noで、Round 1で十分に回答された
+
+それ以外は `kind: "deep_dive"` のRound 2を実行する。
+
+### Phase 6: Round 2 プロンプト作成
+
+`cross-agent` はRound 1の成功した `output_file` を読み、1つの追加プロンプトを作る。
+
+- 深掘り: 重要だが具体性に欠ける指摘を詰める
+- 反論・批判的検証: 根拠が弱い指摘や言い過ぎに見える指摘を問い直す
+- 見落とし確認: Round 1で触れられていない重要観点を1から2個確認する
+
+### Phase 7: Round 2 実行
+
+Round 1と同じagentに対応するsubagentを実行する。
+`round_kind` は `deep_dive` とする。subagent側は `review_session_id` に紐づく自分の
+セッション状態を使い、Codexならresume、Claudeなら蓄積contextを再投入する。
+
+### Phase 8: 統合表示
+
+`cross-agent` はagent出力を読み、ユーザーには統合結果だけを出す。
+生のagent出力は必要に応じて参照できるよう `output_file` として残す。
+
+表示形式:
+
+1. 結論サマリ
+2. 重要な指摘
+3. 採用・保留・追加調査が必要な判断
+
+Round 2を実行した場合は、冒頭で「2往復のやり取りを統合した結果」と明示する。
+
+統合表示後、sessionはフォローアップ可能なため `status: "active"` のまま維持する。
+ユーザーが終了を示した時点で `completed` にする。
+
+### Phase 9: フォローアップ
+
+ユーザーが追加質問をした場合、既存の `review_session_id` を継続して
+`kind: "follow_up"` のroundを追加する。
+
+フォローアップでは、追加質問を `round-N-prompt.md` に保存し、同じrequest envelope形式で
+subagentへ渡す。agent指定があればそのagentをroundに記録し、未指定なら直前roundと同じ
+agentを使う。
+
+### Phase 10: 終了とcleanup
+
+ユーザーが「OK」「ありがとう」「終了」など終了を示したら、`session.status` を
+`completed` にする。
+
+cleanup方針:
+
+- `temporary: true` のartifactは削除してよい
+- `temporary: false` のartifactは残す
+- `keep_artifacts: true` の場合はtemporary artifactも残す
+
+ユーザーが明示的に中断した場合は `abandoned` とする。復旧不能なエラーで処理を終える場合は
+`failed` とする。
+
 ## 将来のMCP state server
 
 MCPは状態の実体ではなく、状態操作の境界として扱う。初期実装はJSONファイル直書きでも、
@@ -357,7 +532,7 @@ MCPは状態の実体ではなく、状態操作の境界として扱う。初�
 
 ### 捨てる部分
 - session id管理（thread_id抽出、resume）※ codex-subagent側に移動
-- `-C <target-root>` の複雑な解決ロジック ※ codex-subagent側に移動
+- Codex CLIの `-C <target-root>` 制約への対応 ※ codex-subagent側に移動
 - `--json` フラグ、JSONLパース ※ codex-subagent側に移動
 - セッション切れ時のフォールバック ※ codex-subagent側に移動
 - バージョン依存注記 ※ codex-subagent側に移動
@@ -371,6 +546,6 @@ MCPは状態の実体ではなく、状態操作の境界として扱う。初�
 ## 今後の検討事項
 
 - claude-subagentのセッション継続の具体的な実装方法
-- 複数エージェントへの並列投げ（現時点は直列フロー、将来的に対応予定）
+- 複数エージェントによる比較レビュー
 - MCP state serverの設計
 - `needs_user_input` を含む中断・再開ワークフロー設計

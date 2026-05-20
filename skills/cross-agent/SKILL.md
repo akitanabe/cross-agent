@@ -1,6 +1,6 @@
 ---
 name: cross-agent
-description: 複数の外部エージェント（Codex、Claude Subagent など）に横断的にセカンドオピニオン・批判的レビューを依頼するスキル。プランや設計案のレビュー、コードの問題点洗い出し、判断の妥当性確認など、独立した視点が欲しいときに使用する。「セカンドオピニオンが欲しい」「別のAIに聞いてみて」「第三者の目で見て」「クロスでレビューして」「cross-agent して」などの言葉が出たら使用する。
+description: 外部エージェント（Codex、Claude Subagent など）を選んでセカンドオピニオン・批判的レビューを依頼するスキル。プランや設計案のレビュー、コードの問題点洗い出し、判断の妥当性確認など、独立した視点が欲しいときに使用する。「セカンドオピニオンが欲しい」「別のAIに聞いてみて」「第三者の目で見て」「クロスでレビューして」「cross-agent して」などの言葉が出たら使用する。
 user-invocable: true
 ---
 
@@ -25,16 +25,16 @@ cross-agent は **オーケストレーター**。自分はレビューの中身
 /cross-agent                          # 直近プラン・設計案を既定エージェントに送ってレビュー
 /cross-agent "特定の質問"             # 質問にフォーカス
 /cross-agent path/to/file             # ファイルパスを渡してレビュー
-/cross-agent --agent codex,claude ... # エージェントを明示指定
+/cross-agent --agent claude ...       # エージェントを明示指定
 ```
 
 ---
 
 ## 実行手順
 
-### Step 1: エージェントの選択
+### Step 1: ユーザー入力の解釈
 
-ユーザー指定（`--agent` 等）があればそれを使う。なければ既定エージェント（TODO: 既定を決める。例 `codex`）を使う。
+ユーザー指定（`--agent` 等）があればそれを使う。なければ既定エージェントとして `codex` を使う。
 
 利用可能なエージェント Skill:
 
@@ -43,9 +43,37 @@ cross-agent は **オーケストレーター**。自分はレビューの中身
 | codex  | `codex-subagent`  |
 | claude | `claude-subagent` |
 
-> TODO: 複数エージェント指定時の扱いを決める。現時点の設計は直列フロー（将来的に並列対応）。
+以下を抽出する:
 
-### Step 2: review_session_id の生成・管理
+- `initial_agent`: 未指定なら `"codex"`
+- `focus_question`: 引用文字列や明示された質問
+- `target_files`: パスとして解釈できる引数
+- `quick_mode`: 「1回だけ」「クイックに」「ざっくり」等
+- `reasoning_effort`: 既定 `high`。クイック指定なら `medium`、深い検討指定なら `xhigh`
+- `max_rounds`: 既定 `2`。`quick_mode` の場合は `1`
+
+v1では1roundにつき1つのagentを使う。複数エージェントによる同一roundの比較レビューは、
+MCP state serverや統合ポリシーを設計する段階で改めて扱う。フォローアップで別agentに
+追加相談する場合は、そのroundの `agent` に記録する。
+
+対象や質問がまったく特定できない場合、Codexやsubagentを呼ぶ前に通常会話でユーザーに確認する。
+v1では `needs_user_input` stateは使わない。
+
+### Step 2: target_root の決定
+
+`target_root` はレビューセッション全体の作業rootとして cross-agent が決める。
+エージェント固有の実行方法や制約はここでは扱わない。
+
+優先順:
+
+1. `target_files` がある場合、そのファイル群に共通するgit root
+2. git rootが取れない場合、project markerを親方向に探索
+3. markerもない場合、指定ファイルの親ディレクトリ
+4. `target_files` がない場合、Claude Codeの現在のcwd
+
+複数の候補rootが出て自動決定できない場合はユーザーへ確認する。
+
+### Step 3: review_session_id の生成・管理
 
 cross-agent 側で `review_session_id`（UUID 等）を生成する。中身は各エージェントに渡すだけで管理しない。
 
@@ -64,7 +92,6 @@ cross-agent 側で `review_session_id`（UUID 等）を生成する。中身は�
   "created_at": "...",
   "updated_at": "...",
   "status": "active",
-  "requested_agents": ["codex"],
   "current_round": 1,
   "options": {},
   "context": {},
@@ -72,7 +99,15 @@ cross-agent 側で `review_session_id`（UUID 等）を生成する。中身は�
     "codex": { "thread_id": "..." },
     "claude": { "context_file": "..." }
   },
-  "rounds": [],
+  "rounds": [
+    {
+      "round": 1,
+      "kind": "initial_review",
+      "agent": "codex",
+      "prompt_file": "...",
+      "agent_result": null
+    }
+  ],
   "artifacts": { "files": [] },
   "errors": []
 }
@@ -85,7 +120,7 @@ state ownership:
 - `claude-subagent`: `agents.claude`
 - `artifacts` / `errors`: 作成者・発生元が append する共有領域
 
-### Step 3: コンテキスト・プロンプトの組み立て
+### Step 4: コンテキスト・プロンプトの組み立て
 
 [docs/SKILL.md](../../docs/SKILL.md) の Step 2-3 を転用する。
 
@@ -93,11 +128,20 @@ state ownership:
 - フォーカス質問・レビュー対象ファイルを整理する
 - レビュー観点（リスク・代替案・妥当性・実装注意点）を含むプロンプトを組む
 
-> TODO: advice スキルからコンテキスト書き出しとプロンプト組み立てを移植。
+artifact directory:
 
-### Step 4: 各エージェント Skill への委譲（Round 1）
+```text
+${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/
+```
 
-選択した各エージェントの Skill を `review_session_id` とコンテキストパスを渡して呼び出す。
+作成するファイル:
+
+- `context.md`: 会話や設計案の要約。ファイル指定だけで十分な場合は省略可
+- `round-1-prompt.md`: Round 1で選んだagentに渡す初回レビュー依頼
+
+### Step 5: エージェント Skill への委譲（Round 1）
+
+Round 1に記録したagentの Skill を `review_session_id` とコンテキストパスを渡して呼び出す。
 セッション管理・CLI コマンド・効率設定などエージェント固有の処理は委譲先に任せる。
 
 委譲時は依頼本文に request envelope を含める。
@@ -123,7 +167,7 @@ state ownership:
 }
 ```
 
-subagent は response envelope を返す。cross-agent はこれを `rounds[].agent_results` に
+subagent は response envelope を返す。cross-agent はこれを `rounds[].agent_result` に
 記録する。
 
 ```json
@@ -140,25 +184,44 @@ subagent は response envelope を返す。cross-agent はこれを `rounds[].ag
 }
 ```
 
-### Step 5: 自動深掘りループ（既定 2 往復）
+### Step 6: 自動深掘りループ（既定 2 往復）
 
 [docs/SKILL.md](../../docs/SKILL.md) の Step 5 を転用する。
 
-Round 1 の各エージェント出力を読み、以下 3 観点を 1 つの追加プロンプトに混ぜて Round 2 を投げる:
+Round 1 の出力を読み、以下 3 観点を 1 つの追加プロンプトに混ぜて Round 2 を投げる:
 
 1. **深掘り** — 具体性に欠ける指摘をコード例で詰める
 2. **反論・批判的検証** — 妥当性の怪しい指摘を問い直す
 3. **見落とし確認** — R1 で触れられていない観点を 1〜2 個追加
 
 「1回だけ」「クイックに」と指定された場合はスキップ。
+Round 2はRound 1と同じagentで実行する。
 
-### Step 6: 結果の統合・提示
+### Step 7: 結果の統合・提示
 
-[docs/SKILL.md](../../docs/SKILL.md) の Step 6 を転用する。複数エージェントの場合は
-各エージェントの見解を対比して提示する。
+[docs/SKILL.md](../../docs/SKILL.md) の Step 6 を転用する。
 
 1. **結論サマリ**（3〜5 行）
-2. **重要な指摘**（優先度順、必要に応じてエージェント間の異同を示す）
-3. **判断保留・要相談の項目**（エージェント間で見解が割れた点）
+2. **重要な指摘**（優先度順）
+3. **判断保留・要相談の項目**
 
-提示後「フォローアップ質問はありますか？」と確認。終了時は一時ファイルを片付ける。
+提示後はフォローアップ可能なため、sessionは `active` のまま維持する。
+ユーザーが終了を示した時点で `completed` にする。
+
+### Step 8: フォローアップ
+
+ユーザーが追加質問をした場合、既存の `review_session_id` を継続して
+`kind: "follow_up"` のroundを追加する。
+agent指定があればそのagentをroundに記録し、未指定なら直前roundと同じagentを使う。
+
+### Step 9: 終了とcleanup
+
+ユーザーが「OK」「ありがとう」「終了」など終了を示したら、`session.status` を
+`completed` にする。
+
+- `temporary: true` のartifactは削除してよい
+- `temporary: false` のartifactは残す
+- `keep_artifacts: true` の場合はtemporary artifactも残す
+
+ユーザーが明示的に中断した場合は `abandoned`、復旧不能なエラーで処理を終える場合は
+`failed` とする。

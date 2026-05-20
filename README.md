@@ -1,6 +1,6 @@
 # cross-agent
 
-複数の外部エージェント（Codex、Claude Subagent など）に横断的にセカンドオピニオン・
+外部エージェント（Codex、Claude Subagent など）を選んでセカンドオピニオン・
 批判的レビューを依頼する Claude Code プラグイン。
 
 > **ステータス**: テンプレート / 骨子段階。各 `SKILL.md` の `TODO` を埋めて実装を進めます。
