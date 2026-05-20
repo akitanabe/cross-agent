@@ -36,7 +36,7 @@ docs/
 
 - **状態の永続化は `${CLAUDE_PLUGIN_DATA}` に書く。`${CLAUDE_PLUGIN_ROOT}` は不可。**
   ROOT は更新のたびに変わる ephemeral なディレクトリで、marketplace 経由では read-only。
-  セッション JSON 等は `${CLAUDE_PLUGIN_DATA}/sessions/<id>.json`
+  セッション JSON 等は `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json`
 - マニフェスト・コンポーネントを変更したら `claude plugin validate . --strict` を通す
 - skills/agents/hooks はプラグインルート直下に置く（`.claude-plugin/` の中ではない）
 

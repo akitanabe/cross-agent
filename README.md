@@ -26,7 +26,7 @@ cross-agent/
 - **オーケストレーター + サブスキル**: `cross-agent` は中身を生成せず、コンテキストを
   組み立てて各エージェント Skill に委譲し、結果を統合する
 - **責務分離**: セッション管理（ID・マッピング・永続化）は各サブスキルが自律的に持つ
-- **状態の永続化先**: `${CLAUDE_PLUGIN_DATA}/sessions/<id>.json`
+- **状態の永続化先**: `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json`
   （`${CLAUDE_PLUGIN_ROOT}` は更新時に変わる ephemeral なため使わない）
 
 ## ローカルでの動作確認

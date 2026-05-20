@@ -45,11 +45,11 @@ cross-agent は **オーケストレーター**。自分はレビューの中身
 
 > TODO: 複数エージェント指定時の扱いを決める。現時点の設計は直列フロー（将来的に並列対応）。
 
-### Step 2: skill_session_id の生成・管理
+### Step 2: review_session_id の生成・管理
 
-cross-agent 側で `skill_session_id`（UUID 等）を生成する。中身は各エージェントに渡すだけで管理しない。
+cross-agent 側で `review_session_id`（UUID 等）を生成する。中身は各エージェントに渡すだけで管理しない。
 
-**永続化場所**: `${CLAUDE_PLUGIN_DATA}/sessions/<skill_session_id>.json`
+**永続化場所**: `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json`
 
 > ⚠️ **`${CLAUDE_PLUGIN_ROOT}` には状態を書かないこと。** プラグイン更新時に
 > ディレクトリが変わる ephemeral な場所であり、marketplace 経由ではキャッシュへ
@@ -59,17 +59,31 @@ cross-agent 側で `skill_session_id`（UUID 等）を生成する。中身は�
 
 ```json
 {
-  "skill_session_id": "uuid-xxxx",
+  "schema_version": 1,
+  "review_session_id": "uuid-xxxx",
   "created_at": "...",
+  "updated_at": "...",
+  "status": "active",
+  "requested_agents": ["codex"],
+  "current_round": 1,
+  "options": {},
+  "context": {},
   "agents": {
     "codex": { "thread_id": "..." },
     "claude": { "context_file": "..." }
-  }
+  },
+  "rounds": [],
+  "artifacts": { "files": [] },
+  "errors": []
 }
 ```
 
-> TODO: 各エージェント Skill が自分のセッション情報をこの JSON に読み書きする
-> 規約を確定する（cross-agent が書くのか、各 subagent が書くのか）。
+state ownership:
+
+- `cross-agent`: session root / options / context / rounds / 全体 status
+- `codex-subagent`: `agents.codex`
+- `claude-subagent`: `agents.claude`
+- `artifacts` / `errors`: 作成者・発生元が append する共有領域
 
 ### Step 3: コンテキスト・プロンプトの組み立て
 
@@ -83,7 +97,7 @@ cross-agent 側で `skill_session_id`（UUID 等）を生成する。中身は�
 
 ### Step 4: 各エージェント Skill への委譲（Round 1）
 
-選択した各エージェントの Skill を `skill_session_id` とコンテキストパスを渡して呼び出す。
+選択した各エージェントの Skill を `review_session_id` とコンテキストパスを渡して呼び出す。
 セッション管理・CLI コマンド・効率設定などエージェント固有の処理は委譲先に任せる。
 
 > TODO: Skill ツールでの呼び出し規約（引数の渡し方）を確定する。

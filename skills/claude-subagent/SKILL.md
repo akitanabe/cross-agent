@@ -1,6 +1,6 @@
 ---
 name: claude-subagent
-description: cross-agent から委譲される Claude Subagent 固有のサブスキル。skill_session_id をコンテキストファイルにマッピングし、Agent ツールで独立した Claude エージェントにレビューを依頼してセッションを継続する。通常はユーザーが直接呼ばず、cross-agent オーケストレーターから呼び出される。
+description: cross-agent から委譲される Claude Subagent 固有のサブスキル。review_session_id をコンテキストファイルにマッピングし、Agent ツールで独立した Claude エージェントにレビューを依頼してセッションを継続する。通常はユーザーが直接呼ばず、cross-agent オーケストレーターから呼び出される。
 user-invocable: false
 ---
 
@@ -10,13 +10,13 @@ user-invocable: false
 
 ## 責務
 
-cross-agent から渡される `skill_session_id` とコンテキストを受け取り、独立した Claude
+cross-agent から渡される `review_session_id` とコンテキストを受け取り、独立した Claude
 エージェント（Agent ツール）にレビューを依頼する。Codex と違い CLI セッションを持たないため、
 **コンテキストファイルの蓄積でセッション継続を表現する**。
 
 ## セッションマッピング
 
-`${CLAUDE_PLUGIN_DATA}/sessions/<skill_session_id>.json` の `agents.claude.context_file` を
+`${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json` の `agents.claude.context_file` を
 読み書きする。
 
 - **Round 1**: コンテキストファイルを新規作成し、レビュー依頼。応答を追記
@@ -38,5 +38,5 @@ cross-agent から渡される `skill_session_id` とコンテキストを受け
 
 ## 入出力
 
-入力は codex-subagent と同じ規約（`skill_session_id` / コンテキストパス / Round）。
+入力は codex-subagent と同じ規約（`review_session_id` / コンテキストパス / Round）。
 出力もレビュー本文を返すだけ。深掘りループ・統合は cross-agent が行う。
