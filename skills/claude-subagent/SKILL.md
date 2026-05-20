@@ -38,5 +38,43 @@ cross-agent から渡される `review_session_id` とコンテキストを受�
 
 ## 入出力
 
-入力は codex-subagent と同じ規約（`review_session_id` / コンテキストパス / Round）。
-出力もレビュー本文を返すだけ。深掘りループ・統合は cross-agent が行う。
+入力は codex-subagent と同じ request envelope 規約を使う。
+
+```json
+{
+  "contract_version": 1,
+  "review_session_id": "uuid-xxxx",
+  "agent": "claude",
+  "round": 1,
+  "round_kind": "initial_review",
+  "target_root": "...",
+  "state_file": "${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json",
+  "prompt_file": "...",
+  "context_file": "...",
+  "target_files": [],
+  "focus_question": null,
+  "options": {
+    "reasoning_effort": "high",
+    "quick_mode": false,
+    "timeout_seconds": null
+  }
+}
+```
+
+出力も codex-subagent と同じ response envelope を返す。
+
+```json
+{
+  "contract_version": 1,
+  "review_session_id": "uuid-xxxx",
+  "agent": "claude",
+  "round": 1,
+  "status": "completed",
+  "output_file": "...",
+  "summary": null,
+  "artifacts": [],
+  "error": null
+}
+```
+
+深掘りループ・統合は cross-agent が行う。

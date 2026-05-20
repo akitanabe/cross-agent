@@ -100,7 +100,45 @@ state ownership:
 選択した各エージェントの Skill を `review_session_id` とコンテキストパスを渡して呼び出す。
 セッション管理・CLI コマンド・効率設定などエージェント固有の処理は委譲先に任せる。
 
-> TODO: Skill ツールでの呼び出し規約（引数の渡し方）を確定する。
+委譲時は依頼本文に request envelope を含める。
+
+```json
+{
+  "contract_version": 1,
+  "review_session_id": "uuid-xxxx",
+  "agent": "codex",
+  "round": 1,
+  "round_kind": "initial_review",
+  "target_root": "...",
+  "state_file": "${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json",
+  "prompt_file": "...",
+  "context_file": "...",
+  "target_files": [],
+  "focus_question": null,
+  "options": {
+    "reasoning_effort": "high",
+    "quick_mode": false,
+    "timeout_seconds": null
+  }
+}
+```
+
+subagent は response envelope を返す。cross-agent はこれを `rounds[].agent_results` に
+記録する。
+
+```json
+{
+  "contract_version": 1,
+  "review_session_id": "uuid-xxxx",
+  "agent": "codex",
+  "round": 1,
+  "status": "completed",
+  "output_file": "...",
+  "summary": null,
+  "artifacts": [],
+  "error": null
+}
+```
 
 ### Step 5: 自動深掘りループ（既定 2 往復）
 

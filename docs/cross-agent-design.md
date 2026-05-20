@@ -181,6 +181,152 @@ cross-agentはこの戻り値を `rounds[].agent_results` に記録する。
 }
 ```
 
+## Skill間の入出力契約
+
+Claude Code の Skill は関数APIではなく実行手順なので、cross-agent から各subagentへ
+委譲するときは、依頼本文に以下のJSON envelopeを含める。将来MCPやスクリプト実装へ
+移す場合も、このenvelopeをそのまま境界契約として使う。
+
+### Subagent request envelope v1
+
+```json
+{
+  "contract_version": 1,
+  "review_session_id": "uuid-xxxx",
+  "agent": "codex",
+  "round": 1,
+  "round_kind": "initial_review",
+  "target_root": "...",
+  "state_file": "${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json",
+  "prompt_file": "...",
+  "context_file": "...",
+  "target_files": [],
+  "focus_question": null,
+  "options": {
+    "reasoning_effort": "high",
+    "quick_mode": false,
+    "timeout_seconds": null
+  }
+}
+```
+
+フィールドの責務:
+
+| Field | 必須 | 所有者 | 説明 |
+|---|---|---|---|
+| `contract_version` | yes | `cross-agent` | 入出力契約のバージョン |
+| `review_session_id` | yes | `cross-agent` | レビューセッションID |
+| `agent` | yes | `cross-agent` | 委譲先agent名 |
+| `round` | yes | `cross-agent` | 1始まりのround番号 |
+| `round_kind` | yes | `cross-agent` | `initial_review` / `deep_dive` / `follow_up` / `recovery` |
+| `target_root` | yes | `cross-agent` | レビュー対象の作業root |
+| `state_file` | yes | state layer | セッションstate JSONのパス |
+| `prompt_file` | yes | `cross-agent` | subagentへ投げるプロンプト本文のファイル |
+| `context_file` | no | `cross-agent` | 会話・設計案などの共通コンテキスト |
+| `target_files` | no | `cross-agent` | ユーザー指定のレビュー対象ファイル |
+| `focus_question` | no | `cross-agent` | ユーザーが指定した焦点質問 |
+| `options` | yes | `cross-agent` | 実行設定。agent固有値は必要に応じて拡張する |
+
+subagent は `prompt_file` を主入力として扱う。`context_file` や `target_files` は
+補助入力であり、agentの性質に応じてプロンプトへ明示的に含めるか、CLI引数・作業rootで
+参照可能にする。
+
+### Subagent response envelope v1
+
+```json
+{
+  "contract_version": 1,
+  "review_session_id": "uuid-xxxx",
+  "agent": "codex",
+  "round": 1,
+  "status": "completed",
+  "output_file": "...",
+  "summary": null,
+  "artifacts": [
+    {
+      "path": "...",
+      "kind": "agent_output",
+      "temporary": false
+    }
+  ],
+  "error": null
+}
+```
+
+失敗時は `status: "failed"` とし、`error` を必ず含める。
+
+```json
+{
+  "contract_version": 1,
+  "review_session_id": "uuid-xxxx",
+  "agent": "codex",
+  "round": 2,
+  "status": "failed",
+  "output_file": null,
+  "summary": null,
+  "artifacts": [],
+  "error": {
+    "code": "codex_resume_failed",
+    "message": "codex exec resume failed.",
+    "recoverable": true,
+    "details_file": "..."
+  }
+}
+```
+
+`summary` は任意。v1ではsubagentが要約を作れない場合は `null` でよい。
+最終的な統合要約は cross-agent が `output_file` を読んで作る。
+
+### 呼び出し順序
+
+1. `cross-agent` が `review_session_id` とstate fileを作成する
+2. `cross-agent` が `context_file` と `prompt_file` を作成し、artifactとして登録する
+3. `cross-agent` が `rounds[]` にround開始を記録する
+4. `cross-agent` がrequest envelopeを添えて対象subagentへ委譲する
+5. subagentが自分の `agents.<agent>` stateを更新する
+6. subagentがresponse envelopeを返す
+7. `cross-agent` がresponseを `rounds[].agent_results` に記録する
+8. 全agentの結果が揃ったら、`cross-agent` がroundを完了させる
+
+### Artifacts
+
+生成物はstateの `artifacts.files[]` にappendする。作成者以外が既存artifactを
+書き換えない。
+
+```json
+{
+  "path": "...",
+  "kind": "context | prompt | agent_output | event_log | accumulated_context | diagnostic",
+  "owner": "cross-agent | codex-subagent | claude-subagent",
+  "round": 1,
+  "agent": "codex",
+  "created_at": "...",
+  "temporary": false
+}
+```
+
+`temporary: true` は通常の終了時に削除してよいファイル、`temporary: false` は
+デバッグやフォローアップのため残すファイルを表す。v1では安全側に倒し、agent outputと
+蓄積contextは原則 `temporary: false` とする。
+
+### Errors
+
+エラーはstateの `errors[]` にappendする。エラーをappendしても、必ずしも
+session全体が `failed` になるわけではない。復旧可能なagent失敗や確認待ちの診断は、
+`recoverable: true` として記録し、全体statusは `active` のまま維持できる。
+
+```json
+{
+  "code": "ambiguous_target_root",
+  "message": "Multiple target roots were found.",
+  "agent": null,
+  "round": null,
+  "recoverable": true,
+  "details_file": null,
+  "created_at": "..."
+}
+```
+
 ## 将来のMCP state server
 
 MCPは状態の実体ではなく、状態操作の境界として扱う。初期実装はJSONファイル直書きでも、

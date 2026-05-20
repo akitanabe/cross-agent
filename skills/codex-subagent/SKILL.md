@@ -25,12 +25,31 @@ cross-agent から渡される `review_session_id` とコンテキストを受�
 
 ## 入力（cross-agent から）
 
-| 引数 | 内容 |
-|---|---|
-| `review_session_id` | cross-agent が生成したレビューセッション ID |
-| コンテキストファイルパス | レビュー対象の会話・プラン・ファイル |
-| reasoning effort | 既定 `high`（`medium` / `xhigh` に上下可） |
-| Round | Round 1（新規）か Round 2 以降（resume）か |
+cross-agent から request envelope を受け取る。
+
+```json
+{
+  "contract_version": 1,
+  "review_session_id": "uuid-xxxx",
+  "agent": "codex",
+  "round": 1,
+  "round_kind": "initial_review",
+  "target_root": "...",
+  "state_file": "${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json",
+  "prompt_file": "...",
+  "context_file": "...",
+  "target_files": [],
+  "focus_question": null,
+  "options": {
+    "reasoning_effort": "high",
+    "quick_mode": false,
+    "timeout_seconds": null
+  }
+}
+```
+
+`prompt_file` をCodexへ投げる主入力とし、`target_root` を `codex exec -C` の作業rootにする。
+`context_file` と `target_files` はプロンプト内で参照されるファイルとして扱う。
 
 ## セッションマッピング
 
@@ -57,10 +76,13 @@ cross-agent 側が行うため、ここでは生のレビュー結果を返す�
 
 ```json
 {
+  "contract_version": 1,
+  "review_session_id": "uuid-xxxx",
   "agent": "codex",
   "round": 1,
   "status": "completed",
   "output_file": "...",
+  "artifacts": [],
   "summary": null,
   "error": null
 }
