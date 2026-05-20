@@ -11,3 +11,6 @@ sessions/
 # 一時ファイル
 *.tmp
 *.log
+
+# Node.js
+node_modules/

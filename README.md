@@ -31,9 +31,20 @@ cross-agent/
 
 ## ローカルでの動作確認
 
+前提:
+
+- Node.js 24+
+
 ```bash
 claude --plugin-dir /path/to/cross-agent
 claude plugin validate /path/to/cross-agent
+node --test
+```
+
+Codex adapter の実行ロジックは Node.js スクリプトとして実装する。
+
+```bash
+node scripts/codex-adapter.mjs --request /path/to/request-envelope.json
 ```
 
 ## 配布

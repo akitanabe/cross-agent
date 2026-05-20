@@ -1,0 +1,476 @@
+#!/usr/bin/env node
+
+import { spawn } from "node:child_process";
+import { createWriteStream } from "node:fs";
+import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const OWNER = "codex-adapter";
+
+export function effortForReviewDepth(reviewDepth) {
+  if (reviewDepth === "low") return { effort: "medium", warning: null };
+  if (reviewDepth === "medium") return { effort: "high", warning: null };
+  if (reviewDepth === "high") return { effort: "xhigh", warning: null };
+  return {
+    effort: "high",
+    warning: `Unknown review_depth "${reviewDepth ?? ""}". Falling back to high.`,
+  };
+}
+
+export function artifactDirFor(stateFile, reviewSessionId) {
+  // plugin root へ書かないように、artifact は state store の隣に置く。
+  return resolve(dirname(stateFile), "..", "artifacts", reviewSessionId);
+}
+
+export function artifactPaths(artifactDir, round) {
+  return {
+    outputFile: resolve(artifactDir, `round-${round}-codex-output.md`),
+    eventLog: resolve(artifactDir, `round-${round}-codex-events.jsonl`),
+    diagnosticFile: resolve(artifactDir, `round-${round}-codex-diagnostic.md`),
+    responseFile: resolve(artifactDir, `round-${round}-codex-response.json`),
+  };
+}
+
+export function extractThreadIdFromJsonl(text) {
+  // Codex は人間向け診断を混ぜることがあるため、構造化 event だけを採用する。
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const event = JSON.parse(line);
+      if (event?.type === "thread.started" && typeof event.thread_id === "string" && event.thread_id) {
+        return event.thread_id;
+      }
+    } catch {
+      // stderr を event log に混ぜる実装では、JSON ではない行も入りうる。
+    }
+  }
+  return null;
+}
+
+export function shouldStartNewSession(agentState, targetRoot) {
+  // Codex session は初回 cwd に固定されるため、target_root 変更時は新しい thread が必要。
+  if (!agentState?.thread_id) {
+    return { startNew: true, reason: "missing_thread_id" };
+  }
+  if (agentState.target_root !== targetRoot) {
+    return { startNew: true, reason: "target_root_changed" };
+  }
+  return { startNew: false, reason: "resume" };
+}
+
+function parseArgs(argv) {
+  const args = {
+    requestFile: null,
+    codexBin: "codex",
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--request" || arg === "-r") {
+      args.requestFile = argv[++index];
+    } else if (arg === "--codex-bin") {
+      args.codexBin = argv[++index];
+    } else if (arg === "--help" || arg === "-h") {
+      args.help = true;
+    } else {
+      throw new Error(`Unknown argument: ${arg}`);
+    }
+  }
+
+  return args;
+}
+
+function usage() {
+  return `Usage: node scripts/codex-adapter.mjs --request <request-envelope.json> [--codex-bin codex]
+
+Reads a cross-agent adapter request envelope, executes Codex CLI, updates state JSON,
+and writes the adapter response envelope to stdout and the artifact directory.`;
+}
+
+async function readStdin() {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+async function pathExists(filePath) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readJson(filePath) {
+  return JSON.parse(await readFile(filePath, "utf8"));
+}
+
+async function writeJsonAtomic(filePath, value) {
+  // 書き込み途中で落ちても state file が半端に壊れないようにする。
+  const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await rename(tmp, filePath);
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function artifact(path, kind, round, agent = "codex") {
+  return {
+    path,
+    kind,
+    owner: OWNER,
+    round,
+    agent,
+    created_at: nowIso(),
+    temporary: false,
+  };
+}
+
+function makeError(code, message, detailsFile = null) {
+  return {
+    code,
+    message,
+    recoverable: true,
+    details_file: detailsFile,
+  };
+}
+
+function makeResponse(request, status, outputFile, artifacts, error) {
+  return {
+    contract_version: 1,
+    review_session_id: request?.review_session_id ?? null,
+    agent: "codex",
+    round: request?.round ?? null,
+    status,
+    output_file: outputFile,
+    artifacts,
+    error,
+  };
+}
+
+async function writeDiagnostic(filePath, lines) {
+  await writeFile(filePath, `${lines.filter(Boolean).join("\n")}\n`, "utf8");
+}
+
+async function validateRequest(request) {
+  // ここでは adapter 境界だけを検証する。レビュー判断の意味解釈は cross-agent の責務。
+  const required = [
+    "contract_version",
+    "review_session_id",
+    "agent",
+    "round",
+    "round_kind",
+    "target_root",
+    "state_file",
+    "prompt_file",
+    "options",
+  ];
+  const missing = required.filter((key) => request[key] === undefined || request[key] === null || request[key] === "");
+  if (missing.length) {
+    return makeError("invalid_request_envelope", `Missing required fields: ${missing.join(", ")}`);
+  }
+  if (request.contract_version !== 1) {
+    return makeError("invalid_request_envelope", "contract_version must be 1.");
+  }
+  if (request.agent !== "codex") {
+    return makeError("invalid_request_envelope", 'agent must be "codex".');
+  }
+
+  try {
+    const rootStat = await stat(request.target_root);
+    if (!rootStat.isDirectory()) return makeError("target_root_missing", "target_root is not a directory.");
+  } catch {
+    return makeError("target_root_missing", "target_root does not exist.");
+  }
+
+  if (!(await pathExists(request.prompt_file))) {
+    return makeError("prompt_file_missing", "prompt_file does not exist.");
+  }
+  if (!(await pathExists(request.state_file))) {
+    return makeError("state_file_missing", "state_file does not exist.");
+  }
+
+  return null;
+}
+
+async function runCodex({ codexBin, mode, request, promptText, effort, outputFile, eventLog, threadId }) {
+  // prompt は shell 展開を通さず、argv の 1 要素として渡す。
+  const args =
+    mode === "initial"
+      ? [
+          "exec",
+          "-C",
+          request.target_root,
+          "--json",
+          "--skip-git-repo-check",
+          "-c",
+          `model_reasoning_effort=${effort}`,
+          "-o",
+          outputFile,
+          promptText,
+        ]
+      : [
+          "exec",
+          "resume",
+          "--skip-git-repo-check",
+          "-c",
+          `model_reasoning_effort=${effort}`,
+          "-o",
+          outputFile,
+          threadId,
+          promptText,
+        ];
+
+  await mkdir(dirname(eventLog), { recursive: true });
+
+  return await new Promise((resolvePromise) => {
+    const eventStream = createWriteStream(eventLog, { flags: "w" });
+    // CLI trace を 1 つの診断 artifact に残すため、stderr も stdout と同じ log に保存する。
+    const child = spawn(codexBin, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+
+    child.stdout.pipe(eventStream, { end: false });
+    child.stderr.pipe(eventStream, { end: false });
+
+    child.on("error", (error) => {
+      eventStream.end(() => {
+        resolvePromise({ code: null, signal: null, error, args });
+      });
+    });
+
+    child.on("close", (code, signal) => {
+      eventStream.end(() => {
+        resolvePromise({ code, signal, error: null, args });
+      });
+    });
+  });
+}
+
+async function appendStateArtifacts(state, artifacts) {
+  state.artifacts ??= {};
+  state.artifacts.files ??= [];
+  state.artifacts.files.push(...artifacts);
+}
+
+async function handleFailure({ request, state, paths, code, message, commandResult = null, extraDiagnostics = [] }) {
+  // 失敗時も response envelope を返し、state が有効なら復旧可能な診断を追記する。
+  const diagnosticArtifact = artifact(paths.diagnosticFile, "diagnostic", request.round);
+  const error = makeError(code, message, paths.diagnosticFile);
+  const response = makeResponse(request, "failed", null, [diagnosticArtifact], error);
+
+  await writeDiagnostic(paths.diagnosticFile, [
+    `# Codex adapter diagnostic`,
+    ``,
+    `- status: failed`,
+    `- code: ${code}`,
+    `- message: ${message}`,
+    `- round: ${request.round}`,
+    `- target_root: ${request.target_root}`,
+    commandResult ? `- exit_code: ${commandResult.code}` : null,
+    commandResult?.signal ? `- signal: ${commandResult.signal}` : null,
+    commandResult?.error ? `- spawn_error: ${commandResult.error.message}` : null,
+    ...extraDiagnostics,
+  ]);
+
+  if (state) {
+    state.updated_at = nowIso();
+    state.agents ??= {};
+    const previous = state.agents.codex ?? {};
+    state.agents.codex = {
+      ...previous,
+      status: "failed",
+      thread_id: previous.thread_id ?? null,
+      target_root: previous.target_root ?? request.target_root,
+      last_output_file: previous.last_output_file ?? null,
+      last_event_log: paths.eventLog,
+      last_error: error,
+    };
+    await appendStateArtifacts(state, [diagnosticArtifact]);
+    state.errors ??= [];
+    state.errors.push({ ...error, agent: "codex", round: request.round, created_at: nowIso() });
+    await writeJsonAtomic(request.state_file, state);
+  }
+
+  await writeJsonAtomic(paths.responseFile, response);
+  return response;
+}
+
+export async function runAdapter(request, options = {}) {
+  // adapter は agents.codex だけを所有する。rounds と全体 status は cross-agent の所有物。
+  const codexBin = options.codexBin ?? "codex";
+  const artifactDir = artifactDirFor(request.state_file ?? ".", request.review_session_id ?? "unknown");
+  const paths = artifactPaths(artifactDir, request.round ?? "unknown");
+  await mkdir(artifactDir, { recursive: true });
+
+  const validationError = await validateRequest(request);
+  if (validationError) {
+    const response = await handleFailure({
+      request,
+      state: null,
+      paths,
+      code: validationError.code,
+      message: validationError.message,
+    });
+    return response;
+  }
+
+  let state;
+  try {
+    state = await readJson(request.state_file);
+  } catch (error) {
+    return await handleFailure({
+      request,
+      state: null,
+      paths,
+      code: "state_file_invalid",
+      message: `state_file is not valid JSON: ${error.message}`,
+    });
+  }
+
+  if (state.review_session_id !== request.review_session_id) {
+    return await handleFailure({
+      request,
+      state: null,
+      paths,
+      code: "state_file_invalid",
+      message: "state_file review_session_id does not match request.",
+    });
+  }
+
+  const promptText = await readFile(request.prompt_file, "utf8");
+  const { effort, warning } = effortForReviewDepth(request.options?.review_depth);
+  const existingAgentState = state.agents?.codex ?? {};
+  // thread と固定済み target_root の両方が一致する場合だけ resume する。
+  const decision = shouldStartNewSession(existingAgentState, request.target_root);
+  const oldThreadId = existingAgentState.thread_id ?? null;
+  const oldTargetRoot = existingAgentState.target_root ?? null;
+  const commandResult = await runCodex({
+    codexBin,
+    mode: decision.startNew ? "initial" : "resume",
+    request,
+    promptText,
+    effort,
+    outputFile: paths.outputFile,
+    eventLog: paths.eventLog,
+    threadId: existingAgentState.thread_id,
+  });
+
+  const eventLogText = (await pathExists(paths.eventLog)) ? await readFile(paths.eventLog, "utf8") : "";
+  if (commandResult.error || commandResult.code !== 0) {
+    return await handleFailure({
+      request,
+      state,
+      paths,
+      code: decision.startNew ? "codex_exec_failed" : "codex_resume_failed",
+      message: decision.startNew ? "codex exec failed." : "codex exec resume failed.",
+      commandResult,
+      extraDiagnostics: [
+        `- mode: ${decision.startNew ? "initial" : "resume"}`,
+        `- decision_reason: ${decision.reason}`,
+        warning ? `- warning: ${warning}` : null,
+      ],
+    });
+  }
+
+  let threadId = existingAgentState.thread_id;
+  if (decision.startNew) {
+    // 新規 session では thread.started が必須。resume では既存 thread_id を維持する。
+    threadId = extractThreadIdFromJsonl(eventLogText);
+    if (!threadId) {
+      return await handleFailure({
+        request,
+        state,
+        paths,
+        code: "codex_thread_id_missing",
+        message: "thread.started event with thread_id was not found.",
+        commandResult,
+        extraDiagnostics: [
+          `- mode: initial`,
+          `- decision_reason: ${decision.reason}`,
+          oldThreadId ? `- previous_thread_id: ${oldThreadId}` : null,
+          oldTargetRoot ? `- previous_target_root: ${oldTargetRoot}` : null,
+        ],
+      });
+    }
+  }
+
+  if (!(await pathExists(paths.outputFile))) {
+    return await handleFailure({
+      request,
+      state,
+      paths,
+      code: "codex_output_missing",
+      message: "codex output file was not created.",
+      commandResult,
+    });
+  }
+
+  const artifacts = [
+    artifact(paths.outputFile, "agent_output", request.round),
+    artifact(paths.eventLog, "event_log", request.round),
+  ];
+
+  if (warning || decision.reason === "target_root_changed") {
+    // 成功時でも target_root 切り替えなど、後で追いたい診断は残す。
+    await writeDiagnostic(paths.diagnosticFile, [
+      `# Codex adapter diagnostic`,
+      ``,
+      `- status: completed`,
+      `- mode: ${decision.startNew ? "initial" : "resume"}`,
+      `- decision_reason: ${decision.reason}`,
+      `- thread_id: ${threadId}`,
+      warning ? `- warning: ${warning}` : null,
+      decision.reason === "target_root_changed" ? `- warning: target_root_changed` : null,
+      oldThreadId ? `- previous_thread_id: ${oldThreadId}` : null,
+      oldTargetRoot ? `- previous_target_root: ${oldTargetRoot}` : null,
+      `- target_root: ${request.target_root}`,
+    ]);
+    artifacts.push(artifact(paths.diagnosticFile, "diagnostic", request.round));
+  }
+
+  state.updated_at = nowIso();
+  state.agents ??= {};
+  // Codex 所有 state を、最後に使えることが確認できた thread mapping へ更新する。
+  state.agents.codex = {
+    status: "active",
+    thread_id: threadId,
+    target_root: request.target_root,
+    last_output_file: paths.outputFile,
+    last_event_log: paths.eventLog,
+    last_error: null,
+  };
+  await appendStateArtifacts(state, artifacts);
+  await writeJsonAtomic(request.state_file, state);
+
+  const response = makeResponse(request, "completed", paths.outputFile, artifacts, null);
+  await writeJsonAtomic(paths.responseFile, response);
+  return response;
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    process.stdout.write(`${usage()}\n`);
+    return;
+  }
+
+  const input = args.requestFile ? await readFile(args.requestFile, "utf8") : await readStdin();
+  const request = JSON.parse(input);
+  const response = await runAdapter(request, { codexBin: args.codexBin });
+  process.stdout.write(`${JSON.stringify(response, null, 2)}\n`);
+  process.exitCode = response.status === "completed" ? 0 : 1;
+}
+
+const invokedPath = process.argv[1] ? resolve(process.argv[1]) : null;
+if (invokedPath && invokedPath === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    process.stderr.write(`${error.stack ?? error.message}\n`);
+    process.exitCode = 1;
+  });
+}

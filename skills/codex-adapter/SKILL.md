@@ -13,6 +13,16 @@ cross-agent は `agents.codex.thread_id` の中身を直接変更しない。`re
 Codex の `thread_id` へのマッピング、resume の成否判定、Codex CLI の event log 保存は
 この adapter に閉じる。
 
+実行の中核はリポジトリ内の `scripts/codex-adapter.mjs` に実装する。Skill は入出力契約と
+呼び出し方を定義し、JSON parsing、state 更新、Codex CLI 起動、artifact 作成はスクリプトで行う。
+
+```bash
+node scripts/codex-adapter.mjs --request "<request-envelope.json>"
+```
+
+スクリプトは response envelope を stdout に出力し、同じ内容を
+`round-<N>-codex-response.json` に保存する。
+
 ## 責務
 
 - `review_session_id` -> `thread_id` のマッピングを `${CLAUDE_PLUGIN_DATA}` 配下の state JSON に保存する
