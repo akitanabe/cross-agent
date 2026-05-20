@@ -58,7 +58,7 @@ marketplace経由ではread-onlyになりうるため、状態保存には使わ
 | `status` | `cross-agent` | 全体の進行状態 |
 | `target_root` | `cross-agent` | レビュー対象全体のroot。必要に応じてagent側にもコピーする |
 | `current_round` | `cross-agent` | Round制御はorchestratorの責務 |
-| `options` | `cross-agent` | `max_rounds` / `quick_mode` / `reasoning_effort` など |
+| `options` | `cross-agent` | `max_rounds` / `quick_mode` / `review_depth` など |
 | `context` | `cross-agent` | 各agentに渡す共通入力 |
 | `rounds` | `cross-agent` | Roundごとの実行履歴 |
 | `agents.codex` | `codex-adapter` | `thread_id` / resume / Codex固有ログ |
@@ -83,7 +83,7 @@ agent固有stateの作成・更新・復旧判断は各adapterに閉じる。
   "options": {
     "max_rounds": 2,
     "auto_deep_dive": true,
-    "reasoning_effort": "high",
+    "review_depth": "medium",
     "quick_mode": false,
     "keep_artifacts": false
   },
@@ -156,6 +156,18 @@ session.statusは `active` のまま維持する。
 - `failed`
 - `skipped`
 
+`options.review_depth`:
+
+- `low`: 軽い確認。速度優先
+- `medium`: 既定。通常の設計レビュー・コードレビュー・判断の妥当性確認
+- `high`: 深い検討
+
+`review_depth` は cross-agent の抽象設定であり、adapter が各agent固有の実行設定へ翻訳する。
+例: Codex adapter は `low -> medium`, `medium -> high`, `high -> xhigh` として
+Codex CLI の `model_reasoning_effort` へ変換する。
+Claude adapter は `low -> medium`, `medium -> high`, `high -> xhigh` として
+Claude subagent の `effort` へ変換する。
+
 ### 各エージェントの責務
 
 | エージェント | セッション継続の仕組み |
@@ -201,7 +213,7 @@ Claude Code の Skill は関数APIではなく実行手順なので、cross-agen
   "target_files": [],
   "focus_question": null,
   "options": {
-    "reasoning_effort": "high",
+    "review_depth": "medium",
     "quick_mode": false,
     "timeout_seconds": null
   }
@@ -223,7 +235,7 @@ Claude Code の Skill は関数APIではなく実行手順なので、cross-agen
 | `context_file` | no | `cross-agent` | 会話・設計案などの共通コンテキスト |
 | `target_files` | no | `cross-agent` | ユーザー指定のレビュー対象ファイル |
 | `focus_question` | no | `cross-agent` | ユーザーが指定した焦点質問 |
-| `options` | yes | `cross-agent` | 実行設定。agent固有値は必要に応じて拡張する |
+| `options` | yes | `cross-agent` | 実行設定。adapterは必要に応じてagent固有値へ翻訳する |
 
 adapter は `prompt_file` を主入力として扱う。`context_file` や `target_files` は
 補助入力であり、agentの性質に応じてプロンプトへ明示的に含めるか、CLI引数・作業rootで
@@ -339,7 +351,7 @@ v1は単純で確実な単一round単一agentフローにする。複数エー�
 - `focus_question`: 引用文字列や明示された質問
 - `target_files`: パスとして解釈できる引数
 - `quick_mode`: 「1回だけ」「クイックに」「ざっくり」等
-- `reasoning_effort`: 既定 `high`。クイック指定なら `medium`、深く検討する指定なら `xhigh`
+- `review_depth`: 既定 `medium`。深い検討なら `high`、軽い確認なら `low`
 - `max_rounds`: 既定 `2`。`quick_mode` の場合は `1`
 
 対象や質問がまったく特定できない場合、通常会話でユーザーに確認する。このとき
@@ -383,7 +395,7 @@ state machineに載せず、通常会話として処理する。
   "options": {
     "max_rounds": 2,
     "auto_deep_dive": true,
-    "reasoning_effort": "high",
+    "review_depth": "medium",
     "quick_mode": false,
     "keep_artifacts": false
   },

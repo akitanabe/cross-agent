@@ -54,12 +54,20 @@ cross-agent から渡される `review_session_id` とコンテキストを受�
   "target_files": [],
   "focus_question": null,
   "options": {
-    "reasoning_effort": "high",
+    "review_depth": "medium",
     "quick_mode": false,
     "timeout_seconds": null
   }
 }
 ```
+
+`options.review_depth` は Claude subagent の `effort` へ adapter 側で翻訳する。
+
+| `review_depth` | Claude `effort` |
+|---|---|
+| `low` | `medium` |
+| `medium` | `high` |
+| `high` | `xhigh` |
 
 出力も codex-adapter と同じ response envelope を返す。
 

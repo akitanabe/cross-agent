@@ -41,7 +41,7 @@ cross-agent から request envelope を受け取る。
   "target_files": [],
   "focus_question": null,
   "options": {
-    "reasoning_effort": "high",
+    "review_depth": "medium",
     "quick_mode": false,
     "timeout_seconds": null
   }
@@ -50,6 +50,13 @@ cross-agent から request envelope を受け取る。
 
 `prompt_file` をCodexへ投げる主入力とし、`target_root` を `codex exec -C` の作業rootにする。
 `context_file` と `target_files` はプロンプト内で参照されるファイルとして扱う。
+`options.review_depth` は Codex CLI の `model_reasoning_effort` へ adapter 側で翻訳する。
+
+| `review_depth` | Codex `model_reasoning_effort` |
+|---|---|
+| `low` | `medium` |
+| `medium` | `high` |
+| `high` | `xhigh` |
 
 ## セッションマッピング
 

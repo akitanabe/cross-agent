@@ -49,8 +49,10 @@ cross-agent は **オーケストレーター**。自分はレビューの中身
 - `focus_question`: 引用文字列や明示された質問
 - `target_files`: パスとして解釈できる引数
 - `quick_mode`: 「1回だけ」「クイックに」「ざっくり」等
-- `reasoning_effort`: 既定 `high`。クイック指定なら `medium`、深い検討指定なら `xhigh`
+- `review_depth`: 既定 `medium`。深い検討なら `high`、軽い確認なら `low`
 - `max_rounds`: 既定 `2`。`quick_mode` の場合は `1`
+
+`review_depth` は cross-agent の抽象設定であり、各 adapter が agent 固有の実行設定へ翻訳する。
 
 v1では1roundにつき1つのagentを使う。複数エージェントによる同一roundの比較レビューは、
 MCP state serverや統合ポリシーを設計する段階で改めて扱う。フォローアップで別agentに
@@ -160,7 +162,7 @@ Round 1に記録したagentの Skill を `review_session_id` とコンテキス�
   "target_files": [],
   "focus_question": null,
   "options": {
-    "reasoning_effort": "high",
+    "review_depth": "medium",
     "quick_mode": false,
     "timeout_seconds": null
   }
