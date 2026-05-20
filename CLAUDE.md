@@ -51,4 +51,3 @@ claude --plugin-dir .                   # ローカルでこのプラグイン�
 
 - ブランチ: `main`
 - author: akitanabe <tanabe@determaind.biz>（global 設定）
-- コミット時は末尾に `Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>` を付ける
