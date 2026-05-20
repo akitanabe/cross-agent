@@ -114,8 +114,7 @@ agent固有stateの作成・更新・復旧判断は各adapterに閉じる。
       "agent_result": {
         "agent": "codex",
         "status": "completed",
-        "output_file": "...",
-        "summary": null
+        "output_file": "..."
       }
     }
   ],
@@ -185,7 +184,6 @@ cross-agentはこの戻り値を `rounds[].agent_result` に記録する。
   "round": 1,
   "status": "completed",
   "output_file": "...",
-  "summary": null,
   "error": null
 }
 ```
@@ -249,7 +247,6 @@ adapter は `prompt_file` を主入力として扱う。`context_file` や `targ
   "round": 1,
   "status": "completed",
   "output_file": "...",
-  "summary": null,
   "artifacts": [
     {
       "path": "...",
@@ -271,7 +268,6 @@ adapter は `prompt_file` を主入力として扱う。`context_file` や `targ
   "round": 2,
   "status": "failed",
   "output_file": null,
-  "summary": null,
   "artifacts": [],
   "error": {
     "code": "codex_resume_failed",
@@ -282,7 +278,7 @@ adapter は `prompt_file` を主入力として扱う。`context_file` や `targ
 }
 ```
 
-`summary` は任意。v1ではadapterが要約を作れない場合は `null` でよい。
+adapter response envelope は要約フィールドを持たない。
 最終的な統合要約は cross-agent が `output_file` を読んで作る。
 
 ### 呼び出し順序

@@ -246,7 +246,6 @@ target_root 変更による新規 session は resume 失敗からの自動復旧
   "round": 1,
   "status": "completed",
   "output_file": ".../round-1-codex-output.md",
-  "summary": null,
   "artifacts": [
     {
       "path": ".../round-1-codex-output.md",
@@ -269,7 +268,7 @@ target_root 変更による新規 session は resume 失敗からの自動復旧
 }
 ```
 
-`summary` は v1 では `null` でよい。Codex 出力の統合・要約は cross-agent が行う。
+Codex 出力の統合・要約は cross-agent が `output_file` を読んで行う。
 
 ## 失敗時 response envelope
 
@@ -283,7 +282,6 @@ target_root 変更による新規 session は resume 失敗からの自動復旧
   "round": 2,
   "status": "failed",
   "output_file": null,
-  "summary": null,
   "artifacts": [
     {
       "path": ".../round-2-codex-diagnostic.md",

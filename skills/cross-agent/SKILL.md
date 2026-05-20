@@ -178,7 +178,6 @@ adapter は response envelope を返す。cross-agent はこれを `rounds[].age
   "round": 1,
   "status": "completed",
   "output_file": "...",
-  "summary": null,
   "artifacts": [],
   "error": null
 }

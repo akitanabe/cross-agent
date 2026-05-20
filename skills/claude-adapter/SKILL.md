@@ -78,7 +78,6 @@ cross-agent から渡される `review_session_id` とコンテキストを受�
   "round": 1,
   "status": "completed",
   "output_file": "...",
-  "summary": null,
   "artifacts": [],
   "error": null
 }
