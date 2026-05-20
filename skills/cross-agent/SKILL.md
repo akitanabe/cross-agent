@@ -1,6 +1,6 @@
 ---
 name: cross-agent
-description: 外部エージェント（Codex、Claude Subagent など）を選んでセカンドオピニオン・批判的レビューを依頼するスキル。プランや設計案のレビュー、コードの問題点洗い出し、判断の妥当性確認など、独立した視点が欲しいときに使用する。「セカンドオピニオンが欲しい」「別のAIに聞いてみて」「第三者の目で見て」「クロスでレビューして」「cross-agent して」などの言葉が出たら使用する。
+description: 外部エージェント（Codex、Claude など）を選んでセカンドオピニオン・批判的レビューを依頼するスキル。プランや設計案のレビュー、コードの問題点洗い出し、判断の妥当性確認など、独立した視点が欲しいときに使用する。「セカンドオピニオンが欲しい」「別のAIに聞いてみて」「第三者の目で見て」「クロスでレビューして」「cross-agent して」などの言葉が出たら使用する。
 user-invocable: true
 ---
 
@@ -11,12 +11,12 @@ user-invocable: true
 ## 概要
 
 cross-agent は **オーケストレーター**。自分はレビューの中身を生成せず、
-コンテキストを組み立てて各エージェント Skill に委譲し、結果を統合して提示する。
+コンテキストを組み立てて各エージェント adapter に委譲し、結果を統合して提示する。
 
 設計方針（[docs/cross-agent-design.md](../../docs/cross-agent-design.md) より）:
 
-- **拡張性**: 新エージェント追加は `skills/<name>-subagent/SKILL.md` を増やすだけ
-- **責務分離**: cross-agent はセッションの中身を知らない。各エージェント Skill が自律的にセッション管理を持つ
+- **拡張性**: 新エージェント追加は `skills/<name>-adapter/SKILL.md` を増やすだけ
+- **責務分離**: cross-agent はセッションの中身を知らない。各 adapter が自律的にセッション管理を持つ
 - **プログラム的処理**: セッション管理（ID 生成・マッピング・永続化）はコードで行い、Claude の記憶に頼らない
 
 ## 使い方
@@ -40,8 +40,8 @@ cross-agent は **オーケストレーター**。自分はレビューの中身
 
 | エージェント | 委譲先 Skill |
 |---|---|
-| codex  | `codex-subagent`  |
-| claude | `claude-subagent` |
+| codex  | `codex-adapter`  |
+| claude | `claude-adapter` |
 
 以下を抽出する:
 
@@ -56,7 +56,7 @@ v1では1roundにつき1つのagentを使う。複数エージェントによる
 MCP state serverや統合ポリシーを設計する段階で改めて扱う。フォローアップで別agentに
 追加相談する場合は、そのroundの `agent` に記録する。
 
-対象や質問がまったく特定できない場合、Codexやsubagentを呼ぶ前に通常会話でユーザーに確認する。
+対象や質問がまったく特定できない場合、adapterを呼ぶ前に通常会話でユーザーに確認する。
 v1では `needs_user_input` stateは使わない。
 
 ### Step 2: target_root の決定
@@ -116,8 +116,8 @@ cross-agent 側で `review_session_id`（UUID 等）を生成する。中身は�
 state ownership:
 
 - `cross-agent`: session root / options / context / rounds / 全体 status
-- `codex-subagent`: `agents.codex`
-- `claude-subagent`: `agents.claude`
+- `codex-adapter`: `agents.codex`
+- `claude-adapter`: `agents.claude`
 - `artifacts` / `errors`: 作成者・発生元が append する共有領域
 
 ### Step 4: コンテキスト・プロンプトの組み立て
@@ -142,7 +142,7 @@ ${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/
 ### Step 5: エージェント Skill への委譲（Round 1）
 
 Round 1に記録したagentの Skill を `review_session_id` とコンテキストパスを渡して呼び出す。
-セッション管理・CLI コマンド・効率設定などエージェント固有の処理は委譲先に任せる。
+セッション管理・CLI コマンド・効率設定などエージェント固有の処理は adapter に任せる。
 
 委譲時は依頼本文に request envelope を含める。
 
@@ -167,7 +167,7 @@ Round 1に記録したagentの Skill を `review_session_id` とコンテキス�
 }
 ```
 
-subagent は response envelope を返す。cross-agent はこれを `rounds[].agent_result` に
+adapter は response envelope を返す。cross-agent はこれを `rounds[].agent_result` に
 記録する。
 
 ```json

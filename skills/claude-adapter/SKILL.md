@@ -1,17 +1,17 @@
 ---
-name: claude-subagent
-description: cross-agent から委譲される Claude Subagent 固有のサブスキル。review_session_id をコンテキストファイルにマッピングし、Agent ツールで独立した Claude エージェントにレビューを依頼してセッションを継続する。通常はユーザーが直接呼ばず、cross-agent オーケストレーターから呼び出される。
+name: claude-adapter
+description: cross-agent から委譲される Claude 固有のアダプター。review_session_id をコンテキストファイルにマッピングし、Claude subagent 機能で独立した Claude エージェントにレビューを依頼してセッションを継続する。通常はユーザーが直接呼ばず、cross-agent オーケストレーターから呼び出される。
 user-invocable: false
 ---
 
 > **テンプレート段階**: このファイルは骨子です。
 > [docs/cross-agent-design.md](../../docs/cross-agent-design.md) の「今後の検討事項」に
-> 「claude-subagent のセッション継続の具体的な実装方法」が未確定とある。まずここを設計する。
+> 「claude-adapter のセッション継続の具体的な実装方法」が未確定とある。まずここを設計する。
 
 ## 責務
 
-cross-agent から渡される `review_session_id` とコンテキストを受け取り、独立した Claude
-エージェント（Agent ツール）にレビューを依頼する。Codex と違い CLI セッションを持たないため、
+cross-agent から渡される `review_session_id` とコンテキストを受け取り、Claude subagent 機能で
+独立した Claude エージェントにレビューを依頼する。Codex と違い CLI セッションを持たないため、
 **コンテキストファイルの蓄積でセッション継続を表現する**。
 
 ## セッションマッピング
@@ -21,7 +21,7 @@ cross-agent から渡される `review_session_id` とコンテキストを受�
 
 - **Round 1**: コンテキストファイルを新規作成し、レビュー依頼。応答を追記
 - **Round 2 以降**: 蓄積済みコンテキストファイルを読み込み、追加質問とともに新しい
-  Agent 呼び出しへ渡す（Claude Subagent は毎回コールドスタートのため、過去のやり取りを
+  Agent 呼び出しへ渡す（Claude subagent は毎回コールドスタートのため、過去のやり取りを
   コンテキストとして明示的に渡し直す必要がある）
 
 > ⚠️ 状態は `${CLAUDE_PLUGIN_DATA}` に書く。`${CLAUDE_PLUGIN_ROOT}` は不可。
@@ -38,7 +38,7 @@ cross-agent から渡される `review_session_id` とコンテキストを受�
 
 ## 入出力
 
-入力は codex-subagent と同じ request envelope 規約を使う。
+入力は codex-adapter と同じ request envelope 規約を使う。
 
 ```json
 {
@@ -61,7 +61,7 @@ cross-agent から渡される `review_session_id` とコンテキストを受�
 }
 ```
 
-出力も codex-subagent と同じ response envelope を返す。
+出力も codex-adapter と同じ response envelope を返す。
 
 ```json
 {

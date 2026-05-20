@@ -1,6 +1,6 @@
 ---
-name: codex-subagent
-description: cross-agent から委譲される Codex CLI（codex exec）固有のサブスキル。review_session_id を Codex の thread_id にマッピングしてセッションを継続し、レビューを実行する。通常はユーザーが直接呼ばず、cross-agent オーケストレーターから呼び出される。
+name: codex-adapter
+description: cross-agent から委譲される Codex CLI（codex exec）固有のアダプター。review_session_id を Codex の thread_id にマッピングしてセッションを継続し、レビューを実行する。通常はユーザーが直接呼ばず、cross-agent オーケストレーターから呼び出される。
 user-invocable: false
 ---
 
@@ -13,7 +13,7 @@ user-invocable: false
 cross-agent から渡される `review_session_id` とコンテキストを受け取り、Codex CLI で
 レビューを実行する。Codex 固有のセッション管理・CLI 呼び出しはすべてここに閉じる。
 
-[docs/cross-agent-design.md](../../docs/cross-agent-design.md) で「codex-subagent 側に移動」と
+[docs/cross-agent-design.md](../../docs/cross-agent-design.md) で「codex-adapter 側に移動」と
 された部分の実装場所:
 
 - `review_session_id` → `thread_id` のマッピング（自前管理）
