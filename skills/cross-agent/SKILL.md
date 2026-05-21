@@ -30,7 +30,7 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 `context_text` として整理し、構造化 input を stdin から渡して以下を実行する。
 
 ```bash
-node scripts/cross-agent.mjs prepare-initial <<'JSON'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent.mjs" prepare-initial <<'JSON'
 {
   "agent": "codex",
   "target_root": "<target_root>",
@@ -84,7 +84,7 @@ runner は以下の JSON を返す。
 adapter response を受け取ったら、round 完了処理も runner に任せる。
 
 ```bash
-node scripts/cross-agent.mjs complete-round <<'JSON'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent.mjs" complete-round <<'JSON'
 {
   "state_file": "<state_file>",
   "response": <adapter_response_json>
