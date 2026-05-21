@@ -18,6 +18,7 @@ function nowIso() {
 }
 
 async function writeJsonAtomic(filePath, value) {
+  // state 更新中に落ちても JSON が半端に壊れないようにする。
   const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
   await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   await rename(tmp, filePath);
@@ -38,6 +39,7 @@ async function ensureDirectory(path, label) {
 }
 
 export function sessionPaths(dataDir, reviewSessionId) {
+  // plugin root ではなく、永続 data store 配下に session と artifact をまとめる。
   const sessionsDir = resolve(dataDir, "sessions");
   const artifactDir = resolve(dataDir, "artifacts", reviewSessionId);
   return {
@@ -48,6 +50,7 @@ export function sessionPaths(dataDir, reviewSessionId) {
 }
 
 function artifact(path, kind, round = null, agent = null) {
+  // cross-agent が作った artifact だけ owner=cross-agent として記録する。
   return {
     path,
     kind,
@@ -60,6 +63,7 @@ function artifact(path, kind, round = null, agent = null) {
 }
 
 export function normalizeOptions(options = {}) {
+  // Skill 側が省略した値を、state に残る安定した既定値へそろえる。
   return {
     ...DEFAULT_OPTIONS,
     ...options,
@@ -67,6 +71,7 @@ export function normalizeOptions(options = {}) {
 }
 
 export function buildInitialPrompt({ focusQuestion, contextFile, targetFiles = [] }) {
+  // 会話要約そのものは Skill 側で作り、この関数は定型レビュー依頼だけを組み立てる。
   const sections = [
     "あなたは独立したシニアエンジニアです。以下の情報を読み、批判的・建設的なセカンドオピニオンを提供してください。",
   ];
@@ -106,6 +111,7 @@ export function buildAdapterRequest({
   focusQuestion = null,
   options,
 }) {
+  // adapter 境界は v1 envelope に固定し、agent 固有の解釈は adapter 側へ任せる。
   return {
     contract_version: 1,
     review_session_id: reviewSessionId,
@@ -126,6 +132,7 @@ export function buildAdapterRequest({
 }
 
 export async function prepareInitialSession(input) {
+  // 初回実行で必要な state、artifact、adapter request を一括で作る。
   const dataDir = input.data_dir ?? process.env.CLAUDE_PLUGIN_DATA;
   if (!dataDir) throw new Error("data_dir or CLAUDE_PLUGIN_DATA is required.");
 
@@ -148,6 +155,7 @@ export async function prepareInitialSession(input) {
   let contextFile = null;
   const artifacts = [];
   if (contextText) {
+    // context_text はすでに要約済みの入力として扱い、ここでは保存だけ行う。
     contextFile = resolve(paths.artifactDir, "context.md");
     await writeFile(contextFile, contextText.endsWith("\n") ? contextText : `${contextText}\n`, "utf8");
     artifacts.push(artifact(contextFile, "context"));
@@ -177,6 +185,7 @@ export async function prepareInitialSession(input) {
   artifacts.push(artifact(adapterRequestFile, "adapter_request", 1, agent));
 
   const createdAt = nowIso();
+  // agents.* は各 adapter の所有領域なので、初期 state では空にしておく。
   const state = {
     schema_version: 1,
     review_session_id: reviewSessionId,
@@ -225,6 +234,7 @@ export async function prepareInitialSession(input) {
 }
 
 export async function completeRound({ state_file: stateFile, response_file: responseFile, response }) {
+  // adapter は artifacts/errors を自分で append する。ここでは round 結果だけを閉じる。
   if (!stateFile) throw new Error("state_file is required.");
   const state = await readJson(stateFile);
   const agentResponse = response ?? (responseFile ? await readJson(responseFile) : null);
