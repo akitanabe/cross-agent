@@ -190,7 +190,7 @@ export async function startSession(input) {
 }
 
 // 初回 round に必要な artifact、prompt、adapter request を作成する。
-export async function prepareInitialSession(input) {
+export async function prepareInitialRound(input) {
   const dataDir = resolveDataDir(input.data_dir);
   const reviewSessionId = input.review_session_id;
   if (!reviewSessionId) throw new Error("review_session_id is required.");
@@ -415,7 +415,7 @@ async function main() {
   if (args.command === "start-session") {
     result = await startSession(input);
   } else if (args.command === "prepare-initial") {
-    result = await prepareInitialSession(input);
+    result = await prepareInitialRound(input);
   } else if (args.command === "complete-round") {
     result = commandOutput("json", await completeRound(input));
   } else if (args.command === "get-round-output") {

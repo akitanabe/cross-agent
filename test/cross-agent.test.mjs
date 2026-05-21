@@ -13,7 +13,7 @@ import {
   getRound,
   getRoundOutput,
   normalizeOptions,
-  prepareInitialSession,
+  prepareInitialRound,
   sessionPaths,
   startSession,
 } from "../scripts/cross-agent-runner.mjs";
@@ -148,7 +148,7 @@ test("start-session command writes review session id as text", async () => {
   }
 });
 
-test("prepareInitialSession creates prompt and adapter request", async () => {
+test("prepareInitialRound creates prompt and adapter request", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
     const targetRoot = join(temp, "repo");
@@ -161,7 +161,7 @@ test("prepareInitialSession creates prompt and adapter request", async () => {
       options: { review_depth: "low", max_rounds: 1 },
     });
 
-    const result = await prepareInitialSession({
+    const result = await prepareInitialRound({
       data_dir: dataDir,
       review_session_id: "session-1",
       agent: "codex",
@@ -205,7 +205,7 @@ test("completeRound records adapter response into state", async () => {
       review_session_id: "session-1",
       target_root: targetRoot,
     });
-    const prepareResult = await prepareInitialSession({
+    const prepareResult = await prepareInitialRound({
       data_dir: dataDir,
       review_session_id: "session-1",
       context_text: "context",
@@ -250,7 +250,7 @@ test("getRound returns round state", async () => {
       review_session_id: "session-1",
       target_root: targetRoot,
     });
-    await prepareInitialSession({
+    await prepareInitialRound({
       data_dir: dataDir,
       review_session_id: "session-1",
     });
@@ -295,7 +295,7 @@ test("getRoundOutput returns text command output by default", async () => {
       review_session_id: "session-1",
       target_root: targetRoot,
     });
-    await prepareInitialSession({
+    await prepareInitialRound({
       data_dir: dataDir,
       review_session_id: "session-1",
     });
@@ -339,7 +339,7 @@ test("get-round-output command writes text by default", async () => {
       review_session_id: "session-1",
       target_root: targetRoot,
     });
-    await prepareInitialSession({
+    await prepareInitialRound({
       data_dir: dataDir,
       review_session_id: "session-1",
     });
