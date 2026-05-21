@@ -1,17 +1,51 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   buildAdapterRequest,
   buildInitialPrompt,
   completeRound,
+  getRound,
+  getRoundOutput,
   normalizeOptions,
   prepareInitialSession,
   sessionPaths,
 } from "../scripts/cross-agent-runner.mjs";
+
+const runnerPath = fileURLToPath(new URL("../scripts/cross-agent-runner.mjs", import.meta.url));
+
+function runRunner(args, input) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [runnerPath, ...args], {
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+      } else {
+        reject(new Error(`runner exited with ${code}: ${stderr}`));
+      }
+    });
+    child.stdin.end(input);
+  });
+}
 
 test("normalizeOptions fills defaults", () => {
   assert.deepEqual(normalizeOptions({ review_depth: "high" }), {
@@ -131,6 +165,126 @@ test("completeRound records adapter response into state", async () => {
     assert.equal(state.rounds[0].agent_result.output_file, outputFile);
     assert.equal(state.rounds[0].agent_result.agent_state_file, undefined);
     assert.equal(state.artifacts.files.every((entry) => entry.owner === "cross-agent"), true);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("getRound returns round state", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await prepareInitialSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      target_root: targetRoot,
+    });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
+    await writeFile(outputFile, "review output", "utf8");
+
+    await completeRound({
+      data_dir: dataDir,
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 1,
+      status: "completed",
+      output_file: outputFile,
+      artifacts: [],
+      error: null,
+    });
+
+    const output = await getRound({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      round: 1,
+    });
+
+    assert.equal(output.output_file, outputFile);
+    assert.equal(output.output_text, undefined);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("getRoundOutput returns text command output by default", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await prepareInitialSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      target_root: targetRoot,
+    });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
+    await writeFile(outputFile, "review output", "utf8");
+
+    await completeRound({
+      data_dir: dataDir,
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 1,
+      status: "completed",
+      output_file: outputFile,
+      artifacts: [],
+      error: null,
+    });
+
+    const output = await getRoundOutput({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      round: 1,
+    });
+
+    assert.deepEqual(output, { output_type: "text", content: "review output" });
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("get-round-output command writes text by default", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await prepareInitialSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      target_root: targetRoot,
+    });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
+    await writeFile(outputFile, "plain review output", "utf8");
+
+    await completeRound({
+      data_dir: dataDir,
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 1,
+      status: "completed",
+      output_file: outputFile,
+      artifacts: [],
+      error: null,
+    });
+
+    const result = await runRunner(
+      ["get-round-output"],
+      `${JSON.stringify({ data_dir: dataDir, review_session_id: "session-1", round: 1 }, null, 2)}\n`,
+    );
+
+    assert.equal(result.stdout, "plain review output\n");
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

@@ -151,6 +151,33 @@ runner は対象 round の `completed_at` と `agent_result` だけを更新す�
 adapter 由来の artifacts/errors は各 adapter の agent state file に閉じるため、
 top-level session state へ重複 append しない。
 
+## Runner: get-round-output
+
+完了済み round の agent output を読み、統合表示に必要な本文を返す処理は runner に任せる。
+
+```bash
+node scripts/cross-agent-runner.mjs get-round-output <<'ROUND_OUTPUT_REQUEST_JSON'
+{
+  "review_session_id": "...",
+  "round": 1
+}
+ROUND_OUTPUT_REQUEST_JSON
+```
+
+input:
+
+```json
+{
+  "review_session_id": "...",
+  "round": 1
+}
+```
+
+`data_dir` を省略した場合は `CLAUDE_PLUGIN_DATA` を使う。
+`round` を省略した場合は、`output_file` を持つ最後の round を読む。
+
+stdout には output 本文だけを出力する。
+
 ## State ownership
 
 | State | 所有者 | 備考 |
@@ -264,7 +291,7 @@ adapter は `${CLAUDE_PLUGIN_DATA}` と `review_session_id` から必要な stat
 ```
 
 response envelope は要約フィールドを持たない。
-最終的な統合要約は cross-agent が `output_file` を読んで作る。
+最終的な統合要約は cross-agent が `get-round-output` で取得した本文から作る。
 
 ## Status / kind
 
@@ -294,7 +321,7 @@ response envelope は要約フィールドを持たない。
 
 `max_rounds <= 1` の場合は Round 2 を実行しない。
 
-Round 1 の成功した `output_file` を読み、追加確認が必要な場合は `kind: "deep_dive"` の
+Round 1 の成功した出力本文を `get-round-output` で取得し、追加確認が必要な場合は `kind: "deep_dive"` の
 Round 2 を実行する。Round 2 は原則として Round 1 と同じ agent に送る。
 
 Round 2 prompt には以下を含める。

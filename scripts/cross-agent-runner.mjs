@@ -278,6 +278,47 @@ export async function completeRound(input) {
   };
 }
 
+// state から対象 round の結果を取得する。
+export async function getRound(input) {
+  const dataDir = resolveDataDir(input.data_dir);
+  const reviewSessionId = input.review_session_id;
+  if (!reviewSessionId) throw new Error("review_session_id is required.");
+
+  const stateFile = sessionPaths(dataDir, reviewSessionId).stateFile;
+  const state = await readJson(stateFile);
+  if (state.review_session_id !== reviewSessionId) {
+    throw new Error("state review_session_id does not match input review_session_id.");
+  }
+
+  const rounds = state.rounds ?? [];
+  const round =
+    input.round !== undefined
+      ? rounds.find((entry) => entry.round === input.round)
+      : rounds
+          .slice()
+          .reverse()
+          .find((entry) => entry.agent_result?.output_file);
+
+  if (!round) throw new Error("round not found.");
+  const result = round.agent_result;
+  if (!result) throw new Error(`round is not completed: ${round.round}/${round.agent}`);
+  return {
+    review_session_id: state.review_session_id,
+    round: round.round,
+    agent: round.agent,
+    status: result.status,
+    output_file: result.output_file,
+    error: result.error,
+  };
+}
+
+// round の output file を読み、CLI が stdout へ出す text output を作る。
+export async function getRoundOutput(input) {
+  const round = await getRound(input);
+  if (!round.output_file) throw new Error(`round has no output_file: ${round.round}/${round.agent}`);
+  return commandOutput("text", await readFile(round.output_file, "utf8"));
+}
+
 // CLI 引数を、この runner が扱う command/input option に変換する。
 function parseArgs(argv) {
   const args = { command: argv[0], inputFile: null };
@@ -298,7 +339,22 @@ function parseArgs(argv) {
 function usage() {
   return `Usage:
   node scripts/cross-agent-runner.mjs prepare-initial --input <input.json>
-  node scripts/cross-agent-runner.mjs complete-round --input <input.json>`;
+  node scripts/cross-agent-runner.mjs complete-round --input <input.json>
+  node scripts/cross-agent-runner.mjs get-round-output --input <input.json>`;
+}
+
+// command result を stdout へ出す形式へそろえる。
+function commandOutput(outputType, content) {
+  return { output_type: outputType, content };
+}
+
+function writeCommandOutput(result) {
+  if (result.output_type === "text") {
+    const text = String(result.content ?? "");
+    process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
+    return;
+  }
+  process.stdout.write(`${JSON.stringify(result.content, null, 2)}\n`);
 }
 
 // runner input を stdin から読み取る。
@@ -323,15 +379,17 @@ async function main() {
   }
 
   const input = await readInput(args.inputFile);
-  const result =
-    args.command === "prepare-initial"
-      ? await prepareInitialSession(input)
-      : args.command === "complete-round"
-        ? await completeRound(input)
-        : null;
+  let result = null;
+  if (args.command === "prepare-initial") {
+    result = commandOutput("json", await prepareInitialSession(input));
+  } else if (args.command === "complete-round") {
+    result = commandOutput("json", await completeRound(input));
+  } else if (args.command === "get-round-output") {
+    result = await getRoundOutput(input);
+  }
 
   if (!result) throw new Error(`Unknown command: ${args.command}`);
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  writeCommandOutput(result);
 }
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : null;

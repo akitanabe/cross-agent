@@ -102,12 +102,21 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-round <<'AD
 ADAPTER_RESPONSE_JSON
 ```
 
-その後、adapter response の `output_file` を読み、ユーザーへ統合結果を提示する。
+その後、`get-round-output` で adapter の出力本文を取得し、ユーザーへ統合結果を提示する。
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" get-round-output <<'ROUND_OUTPUT_REQUEST_JSON'
+{
+  "review_session_id": "...",
+  "round": 1
+}
+ROUND_OUTPUT_REQUEST_JSON
+```
 
 ## 守ること
 
 - state や artifact の直接編集はせず、runner に任せる
-- adapter response は要約せず、`output_file` を読んで最終表示だけを統合する
+- adapter response は要約せず、`get-round-output` で取得した本文を使って最終表示だけを統合する
 
 ## 深掘りと統合
 
