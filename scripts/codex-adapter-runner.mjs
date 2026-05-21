@@ -102,7 +102,9 @@ function parseArgs(argv) {
 
 // CLI の使い方テキストを返す。
 function usage() {
-  return `Usage: node scripts/codex-adapter-runner.mjs --request <request-envelope.json> [--codex-bin codex] [--data-dir <CLAUDE_PLUGIN_DATA>]
+  return `Usage:
+  node scripts/codex-adapter-runner.mjs [--codex-bin codex] [--data-dir <CLAUDE_PLUGIN_DATA>]
+  node scripts/codex-adapter-runner.mjs --request <request-envelope.json> [--codex-bin codex] [--data-dir <CLAUDE_PLUGIN_DATA>]
 
 Reads a cross-agent adapter request envelope, executes Codex CLI, updates state JSON,
 and writes the adapter response envelope to stdout and the artifact directory.`;
