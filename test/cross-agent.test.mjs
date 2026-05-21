@@ -113,7 +113,8 @@ test("completeRound records adapter response into state", async () => {
     await writeFile(outputFile, "ok", "utf8");
 
     const result = await completeRound({
-      state_file: prepared.state_file,
+      data_dir: dataDir,
+      review_session_id: "session-1",
       response: {
         contract_version: 1,
         review_session_id: "session-1",

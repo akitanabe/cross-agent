@@ -31,6 +31,13 @@ async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
 
+// input または環境変数から plugin data directory を解決する。
+function resolveDataDir(inputDataDir) {
+  const dataDir = inputDataDir ?? process.env.CLAUDE_PLUGIN_DATA;
+  if (!dataDir) throw new Error("data_dir or CLAUDE_PLUGIN_DATA is required.");
+  return dataDir;
+}
+
 // 指定パスが存在し、ディレクトリであることを検証する。
 async function ensureDirectory(path, label) {
   try {
@@ -143,8 +150,7 @@ export function buildAdapterRequest({
 // 初回 round に必要な state、artifact、prompt、adapter request を作成する。
 export async function prepareInitialSession(input) {
   // 初回実行で必要な state、artifact、adapter request を一括で作る。
-  const dataDir = input.data_dir ?? process.env.CLAUDE_PLUGIN_DATA;
-  if (!dataDir) throw new Error("data_dir or CLAUDE_PLUGIN_DATA is required.");
+  const dataDir = resolveDataDir(input.data_dir);
 
   const agent = input.agent ?? "codex";
   const targetRoot = input.target_root;
@@ -242,12 +248,22 @@ export async function prepareInitialSession(input) {
 }
 
 // adapter response を既存 state の rounds[].agent_result に反映し、round を完了させる。
-export async function completeRound({ state_file: stateFile, response_file: responseFile, response }) {
+export async function completeRound({ data_dir: inputDataDir, review_session_id: reviewSessionId, response_file: responseFile, response }) {
   // adapter は artifacts/errors を自分で append する。ここでは round 結果だけを閉じる。
-  if (!stateFile) throw new Error("state_file is required.");
-  const state = await readJson(stateFile);
+  const dataDir = resolveDataDir(inputDataDir);
+  if (!reviewSessionId) throw new Error("review_session_id is required.");
+
+  const stateFile = sessionPaths(dataDir, reviewSessionId).stateFile;
   const agentResponse = response ?? (responseFile ? await readJson(responseFile) : null);
   if (!agentResponse) throw new Error("response or response_file is required.");
+  if (agentResponse.review_session_id !== reviewSessionId) {
+    throw new Error("response review_session_id does not match input review_session_id.");
+  }
+
+  const state = await readJson(stateFile);
+  if (state.review_session_id !== reviewSessionId) {
+    throw new Error("state review_session_id does not match input review_session_id.");
+  }
 
   const round = state.rounds?.find((entry) => entry.round === agentResponse.round && entry.agent === agentResponse.agent);
   if (!round) throw new Error(`round not found: ${agentResponse.round}/${agentResponse.agent}`);

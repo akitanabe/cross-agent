@@ -107,12 +107,13 @@ runner は以下を作成する。
 ## Runner: complete-round
 
 adapter response を top-level session state の `rounds[].agent_result` に反映する処理は
-runner に任せる。
+runner に任せる。runner は `data_dir` または `CLAUDE_PLUGIN_DATA` と `review_session_id`
+から session state file を導出する。
 
 ```bash
 node scripts/cross-agent-runner.mjs complete-round <<'JSON'
 {
-  "state_file": "...",
+  "review_session_id": "...",
   "response": {
     "contract_version": 1,
     "review_session_id": "...",
@@ -131,7 +132,7 @@ input:
 
 ```json
 {
-  "state_file": "...",
+  "review_session_id": "...",
   "response_file": null,
   "response": {
     "contract_version": 1,
@@ -147,6 +148,7 @@ input:
 ```
 
 `response` または `response_file` のどちらかを指定する。
+`data_dir` を省略した場合は `CLAUDE_PLUGIN_DATA` を使う。
 同じ JSON は `--input <input.json>` でファイルから読ませることもできる。
 
 runner は対象 round の `completed_at` と `agent_result` だけを更新する。

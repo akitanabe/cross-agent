@@ -81,12 +81,13 @@ runner は以下の JSON を返す。
 | `codex` | `codex-adapter` |
 | `claude` | `claude-adapter` |
 
-adapter response を受け取ったら、round 完了処理も runner に任せる。
+adapter response を受け取ったら、round 完了処理も runner に任せる。runner は
+`review_session_id` から session state file を導出する。
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-round <<'JSON'
 {
-  "state_file": "<state_file>",
+  "review_session_id": "<review_session_id>",
   "response": <adapter_response_json>
 }
 JSON
