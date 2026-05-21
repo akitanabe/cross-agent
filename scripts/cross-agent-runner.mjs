@@ -236,15 +236,7 @@ export async function prepareInitialSession(input) {
 
   await writeJsonAtomic(paths.stateFile, state);
 
-  return {
-    review_session_id: reviewSessionId,
-    state_file: paths.stateFile,
-    artifact_dir: paths.artifactDir,
-    context_file: contextFile,
-    prompt_file: promptFile,
-    adapter_request_file: adapterRequestFile,
-    adapter_request: adapterRequest,
-  };
+  return adapterRequest;
 }
 
 // adapter response を既存 state の rounds[].agent_result に反映し、round を完了させる。

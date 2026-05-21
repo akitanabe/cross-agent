@@ -45,36 +45,28 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-initial <<'J
 JSON
 ```
 
-runner は以下の JSON を返す。
+runner は次に渡す adapter request envelope をそのまま返す。
 
 ```json
 {
+  "contract_version": 1,
   "review_session_id": "...",
-  "state_file": "...",
-  "artifact_dir": "...",
-  "context_file": "...",
+  "agent": "codex",
+  "round": 1,
+  "round_kind": "initial_review",
+  "target_root": "...",
   "prompt_file": "...",
-  "adapter_request_file": "...",
-  "adapter_request": {
-    "contract_version": 1,
-    "review_session_id": "...",
-    "agent": "codex",
-    "round": 1,
-    "round_kind": "initial_review",
-    "target_root": "...",
-    "prompt_file": "...",
-    "context_file": "...",
-    "target_files": [],
-    "focus_question": null,
-    "options": {
-      "review_depth": "medium",
-      "timeout_seconds": null
-    }
+  "context_file": "...",
+  "target_files": [],
+  "focus_question": null,
+  "options": {
+    "review_depth": "medium",
+    "timeout_seconds": null
   }
 }
 ```
 
-`adapter_request` を依頼本文に含め、対応する adapter Skill を呼ぶ。
+返ってきた JSON 全体を依頼本文に含め、対応する adapter Skill を呼ぶ。
 
 | Agent | 委譲先 Skill |
 |---|---|

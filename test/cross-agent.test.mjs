@@ -63,7 +63,7 @@ test("prepareInitialSession creates state, prompt, and adapter request", async (
     const dataDir = join(temp, "data");
     await mkdir(targetRoot, { recursive: true });
 
-    const result = await prepareInitialSession({
+    const adapterRequest = await prepareInitialSession({
       data_dir: dataDir,
       review_session_id: "session-1",
       agent: "codex",
@@ -75,11 +75,11 @@ test("prepareInitialSession creates state, prompt, and adapter request", async (
     });
 
     const paths = sessionPaths(dataDir, "session-1");
-    assert.equal(result.state_file, paths.stateFile);
-    assert.equal(result.adapter_request.agent, "codex");
-    assert.equal(result.adapter_request.state_file, undefined);
-    assert.equal(result.adapter_request.agent_state_file, undefined);
-    assert.equal(result.adapter_request.options.review_depth, "low");
+    assert.equal(adapterRequest.review_session_id, "session-1");
+    assert.equal(adapterRequest.agent, "codex");
+    assert.equal(adapterRequest.state_file, undefined);
+    assert.equal(adapterRequest.agent_state_file, undefined);
+    assert.equal(adapterRequest.options.review_depth, "low");
 
     const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
     assert.equal(state.current_round, 1);
@@ -88,7 +88,7 @@ test("prepareInitialSession creates state, prompt, and adapter request", async (
     assert.equal(state.rounds[0].agent_result, null);
     assert.equal(state.artifacts.files.length, 3);
 
-    const prompt = await readFile(result.prompt_file, "utf8");
+    const prompt = await readFile(adapterRequest.prompt_file, "utf8");
     assert.match(prompt, /レビューして/);
     assert.match(prompt, /README\.md/);
   } finally {
@@ -102,14 +102,15 @@ test("completeRound records adapter response into state", async () => {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
     await mkdir(targetRoot, { recursive: true });
-    const prepared = await prepareInitialSession({
+    const adapterRequest = await prepareInitialSession({
       data_dir: dataDir,
       review_session_id: "session-1",
       target_root: targetRoot,
       context_text: "context",
     });
 
-    const outputFile = join(prepared.artifact_dir, "round-1-codex-output.md");
+    const paths = sessionPaths(dataDir, "session-1");
+    const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(outputFile, "ok", "utf8");
 
     const result = await completeRound({
@@ -128,7 +129,8 @@ test("completeRound records adapter response into state", async () => {
     });
 
     assert.equal(result.status, "completed");
-    const state = JSON.parse(await readFile(prepared.state_file, "utf8"));
+    assert.equal(adapterRequest.review_session_id, "session-1");
+    const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
     assert.equal(state.rounds[0].agent_result.output_file, outputFile);
     assert.equal(state.rounds[0].agent_result.agent_state_file, undefined);
     assert.equal(state.artifacts.files.every((entry) => entry.owner === "cross-agent"), true);

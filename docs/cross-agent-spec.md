@@ -85,16 +85,24 @@ output:
 
 ```json
 {
+  "contract_version": 1,
   "review_session_id": "...",
-  "state_file": "...",
-  "artifact_dir": "...",
-  "context_file": "...",
+  "agent": "codex",
+  "round": 1,
+  "round_kind": "initial_review",
+  "target_root": "...",
   "prompt_file": "...",
-  "adapter_request_file": "...",
-  "adapter_request": {}
+  "context_file": "...",
+  "target_files": [],
+  "focus_question": null,
+  "options": {
+    "review_depth": "medium",
+    "timeout_seconds": null
+  }
 }
 ```
 
+stdout には次に adapter へ渡す request envelope だけを返す。
 runner は以下を作成する。
 
 - `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json`
