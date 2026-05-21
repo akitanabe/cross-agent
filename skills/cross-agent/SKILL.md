@@ -89,24 +89,25 @@ adapter response を受け取ったら、round 完了処理も runner に任せ�
 `review_session_id` から session state file を導出する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-round <<'JSON'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-round <<'ADAPTER_RESPONSE_JSON'
 {
-  "review_session_id": "<review_session_id>",
-  "response": <adapter_response_json>
+  "contract_version": 1,
+  "review_session_id": "...",
+  "agent": "codex",
+  "round": 1,
+  "status": "completed",
+  "output_file": "...",
+  "artifacts": [],
+  "error": null
 }
-JSON
+ADAPTER_RESPONSE_JSON
 ```
 
 その後、adapter response の `output_file` を読み、ユーザーへ統合結果を提示する。
 
 ## 守ること
 
-- state は `${CLAUDE_PLUGIN_DATA}` 配下にだけ書く。`${CLAUDE_PLUGIN_ROOT}` には書かない
-- state / artifact / prompt / adapter request の初期作成は `prepare-initial` に任せる
-- adapter response の `rounds[].agent_result` 反映は `complete-round` に任せる
-- cross-agent は agent 固有 state を直接変更しない
-- `state_file` や `agent_state_file` は adapter request envelope に含めない
-- adapter 由来の artifacts/errors を top-level state に重複 append しない
+- state や artifact の直接編集はせず、runner に任せる
 - adapter response は要約せず、`output_file` を読んで最終表示だけを統合する
 
 ## 深掘りと統合

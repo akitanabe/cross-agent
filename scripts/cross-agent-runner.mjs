@@ -240,17 +240,14 @@ export async function prepareInitialSession(input) {
 }
 
 // adapter response を既存 state の rounds[].agent_result に反映し、round を完了させる。
-export async function completeRound({ data_dir: inputDataDir, review_session_id: reviewSessionId, response_file: responseFile, response }) {
+export async function completeRound(input) {
   // adapter は artifacts/errors を自分で append する。ここでは round 結果だけを閉じる。
-  const dataDir = resolveDataDir(inputDataDir);
+  const dataDir = resolveDataDir(input.data_dir);
+  const agentResponse = input;
+  const reviewSessionId = agentResponse.review_session_id;
   if (!reviewSessionId) throw new Error("review_session_id is required.");
 
   const stateFile = sessionPaths(dataDir, reviewSessionId).stateFile;
-  const agentResponse = response ?? (responseFile ? await readJson(responseFile) : null);
-  if (!agentResponse) throw new Error("response or response_file is required.");
-  if (agentResponse.review_session_id !== reviewSessionId) {
-    throw new Error("response review_session_id does not match input review_session_id.");
-  }
 
   const state = await readJson(stateFile);
   if (state.review_session_id !== reviewSessionId) {

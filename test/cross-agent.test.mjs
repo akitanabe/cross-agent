@@ -115,17 +115,14 @@ test("completeRound records adapter response into state", async () => {
 
     const result = await completeRound({
       data_dir: dataDir,
+      contract_version: 1,
       review_session_id: "session-1",
-      response: {
-        contract_version: 1,
-        review_session_id: "session-1",
-        agent: "codex",
-        round: 1,
-        status: "completed",
-        output_file: outputFile,
-        artifacts: [{ path: outputFile, kind: "agent_output", owner: "codex-adapter" }],
-        error: null,
-      },
+      agent: "codex",
+      round: 1,
+      status: "completed",
+      output_file: outputFile,
+      artifacts: [{ path: outputFile, kind: "agent_output", owner: "codex-adapter" }],
+      error: null,
     });
 
     assert.equal(result.status, "completed");

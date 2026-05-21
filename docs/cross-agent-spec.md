@@ -114,43 +114,36 @@ runner に任せる。runner は `data_dir` または `CLAUDE_PLUGIN_DATA` と `
 から session state file を導出する。
 
 ```bash
-node scripts/cross-agent-runner.mjs complete-round <<'JSON'
+node scripts/cross-agent-runner.mjs complete-round <<'ADAPTER_RESPONSE_JSON'
 {
+  "contract_version": 1,
   "review_session_id": "...",
-  "response": {
-    "contract_version": 1,
-    "review_session_id": "...",
-    "agent": "codex",
-    "round": 1,
-    "status": "completed",
-    "output_file": "...",
-    "artifacts": [],
-    "error": null
-  }
+  "agent": "codex",
+  "round": 1,
+  "status": "completed",
+  "output_file": "...",
+  "artifacts": [],
+  "error": null
 }
-JSON
+ADAPTER_RESPONSE_JSON
 ```
 
 input:
 
 ```json
 {
+  "contract_version": 1,
   "review_session_id": "...",
-  "response_file": null,
-  "response": {
-    "contract_version": 1,
-    "review_session_id": "...",
-    "agent": "codex",
-    "round": 1,
-    "status": "completed",
-    "output_file": "...",
-    "artifacts": [],
-    "error": null
-  }
+  "agent": "codex",
+  "round": 1,
+  "status": "completed",
+  "output_file": "...",
+  "artifacts": [],
+  "error": null
 }
 ```
 
-`response` または `response_file` のどちらかを指定する。
+adapter response envelope をそのまま指定する。
 `data_dir` を省略した場合は `CLAUDE_PLUGIN_DATA` を使う。
 同じ JSON は `--input <input.json>` でファイルから読ませることもできる。
 
