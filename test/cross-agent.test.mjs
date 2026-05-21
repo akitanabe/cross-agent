@@ -11,7 +11,7 @@ import {
   normalizeOptions,
   prepareInitialSession,
   sessionPaths,
-} from "../scripts/cross-agent.mjs";
+} from "../scripts/cross-agent-runner.mjs";
 
 test("normalizeOptions fills defaults", () => {
   assert.deepEqual(normalizeOptions({ review_depth: "high" }), {

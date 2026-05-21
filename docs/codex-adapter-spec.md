@@ -3,7 +3,7 @@
 ## 概要
 
 codex-adapter は Codex CLI 実行境界を担当する。cross-agent から request envelope を受け取り、
-`scripts/codex-adapter.mjs` で `codex exec` / `codex exec resume` を実行し、Codex 固有 state を
+`scripts/codex-adapter-runner.mjs` で `codex exec` / `codex exec resume` を実行し、Codex 固有 state を
 更新して response envelope を返す。
 
 cross-agent は Codex の agent state file の中身を直接変更しない。`review_session_id` から

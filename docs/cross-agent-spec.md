@@ -8,7 +8,7 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 state の round 結果を更新し、最終的な統合表示を行う。
 
 機械的な session 初期化、artifact 作成、初回 prompt 作成、adapter request 作成、
-round 完了反映は `scripts/cross-agent.mjs` で行う。
+round 完了反映は `scripts/cross-agent-runner.mjs` で行う。
 
 ## 入力
 
@@ -44,7 +44,7 @@ v1 では `needs_user_input` state は使わない。
 初回 session の機械的な作成は runner に任せる。
 
 ```bash
-node scripts/cross-agent.mjs prepare-initial <<'JSON'
+node scripts/cross-agent-runner.mjs prepare-initial <<'JSON'
 {
   "agent": "codex",
   "target_root": "...",
@@ -110,7 +110,7 @@ adapter response を top-level session state の `rounds[].agent_result` に反�
 runner に任せる。
 
 ```bash
-node scripts/cross-agent.mjs complete-round <<'JSON'
+node scripts/cross-agent-runner.mjs complete-round <<'JSON'
 {
   "state_file": "...",
   "response": {

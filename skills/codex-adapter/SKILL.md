@@ -17,7 +17,7 @@ Node.js runner を実行して response envelope を返す。
 request envelope を JSON ファイルとして保存し、以下を実行する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter.mjs" --request "<request-envelope.json>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" --request "<request-envelope.json>"
 ```
 
 runner は response envelope を stdout に出力し、同じ内容を artifact directory の
@@ -34,7 +34,7 @@ runner は response envelope を stdout に出力し、同じ内容を artifact 
 
 ## 実装メモ
 
-- 実装本体: `scripts/codex-adapter.mjs`
+- 実装本体: `scripts/codex-adapter-runner.mjs`
 - テスト: `test/codex-adapter.test.mjs`
 - Node.js: 24+
 

@@ -26,11 +26,11 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 
 対象や質問が特定できない場合は、adapter を呼ぶ前に通常会話で確認する。
 
-機械的にできる初期化処理は runner に任せる。会話要約や設計案が必要な場合は
+機械的にできる初期化処理は `cross-agent-runner.mjs` に任せる。会話要約や設計案が必要な場合は
 `context_text` として整理し、構造化 input を stdin から渡して以下を実行する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent.mjs" prepare-initial <<'JSON'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-initial <<'JSON'
 {
   "agent": "codex",
   "target_root": "<target_root>",
@@ -84,7 +84,7 @@ runner は以下の JSON を返す。
 adapter response を受け取ったら、round 完了処理も runner に任せる。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent.mjs" complete-round <<'JSON'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-round <<'JSON'
 {
   "state_file": "<state_file>",
   "response": <adapter_response_json>
@@ -120,7 +120,7 @@ adapter request 形式で原則同じ agent に送る。現時点では Round 2 
 
 ## 実装メモ
 
-- 実装本体: `scripts/cross-agent.mjs`
+- 実装本体: `scripts/cross-agent-runner.mjs`
 - 仕様: `docs/cross-agent-spec.md`
 - 設計背景: `docs/cross-agent-design.md`
 - テスト: `test/cross-agent.test.mjs`

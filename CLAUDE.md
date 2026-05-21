@@ -24,8 +24,8 @@ docs/
   codex-adapter-spec.md        # codex-adapter 詳細仕様
   SKILL.md                     # 移植元の既存 advice スキル（Codex 実装の参照）
 scripts/
-  cross-agent.mjs             # cross-agent runner
-  codex-adapter.mjs            # Codex adapter runner
+  cross-agent-runner.mjs       # cross-agent runner
+  codex-adapter-runner.mjs     # Codex adapter runner
 test/
   cross-agent.test.mjs         # cross-agent runner のテスト
   codex-adapter.test.mjs       # Codex adapter runner のテスト

@@ -20,7 +20,7 @@ cross-agent/
 │   ├── cross-agent-design.md        # 設計骨子
 │   └── codex-adapter-spec.md        # codex-adapter 詳細仕様
 ├── scripts/
-│   └── codex-adapter.mjs            # Codex adapter runner
+│   └── codex-adapter-runner.mjs     # Codex adapter runner
 ├── test/
 │   └── codex-adapter.test.mjs       # Codex adapter runner のテスト
 └── README.md
@@ -49,9 +49,9 @@ node --test
 Codex adapter の実行ロジックは Node.js スクリプトとして実装する。
 
 ```bash
-node scripts/cross-agent.mjs prepare-initial --input /path/to/input.json
-node scripts/codex-adapter.mjs --request /path/to/request-envelope.json
-node scripts/cross-agent.mjs complete-round --input /path/to/complete-round.json
+node scripts/cross-agent-runner.mjs prepare-initial --input /path/to/input.json
+node scripts/codex-adapter-runner.mjs --request /path/to/request-envelope.json
+node scripts/cross-agent-runner.mjs complete-round --input /path/to/complete-round.json
 ```
 
 ## 配布

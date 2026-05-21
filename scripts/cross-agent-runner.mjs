@@ -292,8 +292,8 @@ function parseArgs(argv) {
 // CLI の使い方テキストを返す。
 function usage() {
   return `Usage:
-  node scripts/cross-agent.mjs prepare-initial --input <input.json>
-  node scripts/cross-agent.mjs complete-round --input <input.json>`;
+  node scripts/cross-agent-runner.mjs prepare-initial --input <input.json>
+  node scripts/cross-agent-runner.mjs complete-round --input <input.json>`;
 }
 
 // runner input を stdin から読み取る。

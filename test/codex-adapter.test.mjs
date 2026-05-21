@@ -9,7 +9,7 @@ import {
   extractThreadIdFromJsonl,
   sessionStateFileFor,
   shouldStartNewSession,
-} from "../scripts/codex-adapter.mjs";
+} from "../scripts/codex-adapter-runner.mjs";
 
 test("effortForReviewDepth maps abstract depth to Codex effort", () => {
   assert.deepEqual(effortForReviewDepth("low"), { effort: "medium", warning: null });
