@@ -34,24 +34,20 @@ Skill はレビューセッション全体の作業 root を adapter 呼び出�
 runner は受け取った `target_root` が存在する directory であることだけを検証する。
 エージェント固有の実行方法や制約は adapter 側で扱う。
 
-## Runner: prepare-initial
+## Runner: start-session
 
-初回 session の機械的な作成は runner に任せる。
+review session の空 state 作成と `review_session_id` 生成は runner に任せる。
 
 ```bash
-node scripts/cross-agent-runner.mjs prepare-initial <<'JSON'
+node scripts/cross-agent-runner.mjs start-session <<'SESSION_START_JSON'
 {
-  "agent": "codex",
   "target_root": "...",
-  "focus_question": "...",
-  "context_text": "...",
-  "target_files": [],
   "options": {
     "review_depth": "medium",
     "max_rounds": 2
   }
 }
-JSON
+SESSION_START_JSON
 ```
 
 input:
@@ -60,11 +56,7 @@ input:
 {
   "data_dir": "...",
   "review_session_id": null,
-  "agent": "codex",
   "target_root": "...",
-  "focus_question": "...",
-  "context_text": "...",
-  "target_files": [],
   "options": {
     "review_depth": "medium",
     "max_rounds": 2
@@ -74,6 +66,29 @@ input:
 
 `data_dir` を省略した場合は `CLAUDE_PLUGIN_DATA` を使う。
 `review_session_id` を省略した場合は runner が UUID を生成する。
+
+stdout には `review_session_id` だけを text で返す。
+
+runner は `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json` に空の session state を作る。
+
+## Runner: prepare-initial
+
+初回 round の artifact、prompt、adapter request 作成は runner に任せる。
+対象 session は `review_session_id` から導出した既存 state file で特定する。
+
+```bash
+node scripts/cross-agent-runner.mjs prepare-initial <<'INITIAL_ROUND_JSON'
+{
+  "review_session_id": "...",
+  "agent": "codex",
+  "focus_question": "...",
+  "context_text": "...",
+  "target_files": []
+}
+INITIAL_ROUND_JSON
+```
+
+`data_dir` を省略した場合は `CLAUDE_PLUGIN_DATA` を使う。
 同じ JSON は `--input <input.json>` でファイルから読ませることもできる。
 
 output:
@@ -100,11 +115,12 @@ output:
 stdout には次に adapter へ渡す request envelope だけを返す。
 runner は以下を作成する。
 
-- `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json`
 - `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/context.md`
 - `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-1-prompt.md`
 - `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-1-adapter-request.json`
 
+runner は既存の `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json` に
+context、round、artifact metadata を反映する。
 `context.md` は `context_text` がある場合だけ作成する。
 
 ## Runner: complete-round

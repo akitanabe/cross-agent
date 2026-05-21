@@ -147,12 +147,9 @@ export function buildAdapterRequest({
   };
 }
 
-// 初回 round に必要な state、artifact、prompt、adapter request を作成する。
-export async function prepareInitialSession(input) {
-  // 初回実行で必要な state、artifact、adapter request を一括で作る。
+// review session の空 state を作成する。
+export async function startSession(input) {
   const dataDir = resolveDataDir(input.data_dir);
-
-  const agent = input.agent ?? "codex";
   const targetRoot = input.target_root;
   if (!targetRoot) throw new Error("target_root is required.");
   await ensureDirectory(targetRoot, "target_root");
@@ -163,6 +160,50 @@ export async function prepareInitialSession(input) {
   await mkdir(paths.artifactDir, { recursive: true });
 
   const options = normalizeOptions(input.options);
+  const createdAt = nowIso();
+  const state = {
+    schema_version: 1,
+    review_session_id: reviewSessionId,
+    created_at: createdAt,
+    updated_at: createdAt,
+    status: "active",
+    target_root: targetRoot,
+    current_round: 0,
+    options,
+    context: {
+      context_file: null,
+      initial_prompt_file: null,
+      focus_question: null,
+      target_files: [],
+      source: "files",
+    },
+    rounds: [],
+    artifacts: {
+      files: [],
+    },
+    errors: [],
+  };
+
+  await writeJsonAtomic(paths.stateFile, state);
+
+  return commandOutput("text", reviewSessionId);
+}
+
+// 初回 round に必要な artifact、prompt、adapter request を作成する。
+export async function prepareInitialSession(input) {
+  const dataDir = resolveDataDir(input.data_dir);
+  const reviewSessionId = input.review_session_id;
+  if (!reviewSessionId) throw new Error("review_session_id is required.");
+
+  const paths = sessionPaths(dataDir, reviewSessionId);
+  const state = await readJson(paths.stateFile);
+  if (state.review_session_id !== reviewSessionId) {
+    throw new Error("state review_session_id does not match input review_session_id.");
+  }
+
+  const agent = input.agent ?? "codex";
+  const targetRoot = state.target_root;
+  const options = state.options;
   const targetFiles = input.target_files ?? [];
   const focusQuestion = input.focus_question ?? null;
   const contextText = input.context_text ?? null;
@@ -199,40 +240,30 @@ export async function prepareInitialSession(input) {
   await writeJsonAtomic(adapterRequestFile, adapterRequest);
   artifacts.push(artifact(adapterRequestFile, "adapter_request", 1, agent));
 
-  const createdAt = nowIso();
-  // agent state の中身と配置は各 adapter に閉じ、top-level には持たない。
-  const state = {
-    schema_version: 1,
-    review_session_id: reviewSessionId,
-    created_at: createdAt,
-    updated_at: createdAt,
-    status: "active",
-    target_root: targetRoot,
-    current_round: 1,
-    options,
-    context: {
-      context_file: contextFile,
-      initial_prompt_file: promptFile,
-      focus_question: focusQuestion,
-      target_files: targetFiles,
-      source,
-    },
-    rounds: [
-      {
-        round: 1,
-        kind: "initial_review",
-        agent,
-        prompt_file: promptFile,
-        started_at: createdAt,
-        completed_at: null,
-        agent_result: null,
-      },
-    ],
-    artifacts: {
-      files: artifacts,
-    },
-    errors: [],
+  const now = nowIso();
+  state.updated_at = now;
+  state.current_round = 1;
+  state.context = {
+    context_file: contextFile,
+    initial_prompt_file: promptFile,
+    focus_question: focusQuestion,
+    target_files: targetFiles,
+    source,
   };
+  state.rounds = [
+    {
+      round: 1,
+      kind: "initial_review",
+      agent,
+      prompt_file: promptFile,
+      started_at: now,
+      completed_at: null,
+      agent_result: null,
+    },
+  ];
+  state.artifacts ??= { files: [] };
+  state.artifacts.files ??= [];
+  state.artifacts.files.push(...artifacts);
 
   await writeJsonAtomic(paths.stateFile, state);
 
@@ -338,6 +369,7 @@ function parseArgs(argv) {
 // CLI の使い方テキストを返す。
 function usage() {
   return `Usage:
+  node scripts/cross-agent-runner.mjs start-session --input <input.json>
   node scripts/cross-agent-runner.mjs prepare-initial --input <input.json>
   node scripts/cross-agent-runner.mjs complete-round --input <input.json>
   node scripts/cross-agent-runner.mjs get-round-output --input <input.json>`;
@@ -380,7 +412,9 @@ async function main() {
 
   const input = await readInput(args.inputFile);
   let result = null;
-  if (args.command === "prepare-initial") {
+  if (args.command === "start-session") {
+    result = await startSession(input);
+  } else if (args.command === "prepare-initial") {
     result = commandOutput("json", await prepareInitialSession(input));
   } else if (args.command === "complete-round") {
     result = commandOutput("json", await completeRound(input));

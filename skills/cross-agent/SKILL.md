@@ -38,23 +38,36 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 
 複数候補があり自動決定できない場合はユーザーへ確認する。
 
-機械的にできる初期化処理は `cross-agent-runner.mjs` に任せる。会話要約や設計案が必要な場合は
-`context_text` として整理し、構造化 input を stdin から渡して以下を実行する。
+機械的にできる session state の作成は `cross-agent-runner.mjs` に任せる。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-initial <<'JSON'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session <<'SESSION_START_JSON'
 {
-  "agent": "codex",
   "target_root": "<target_root>",
-  "focus_question": "<focus_question>",
-  "context_text": "<context_text>",
-  "target_files": [],
   "options": {
     "review_depth": "medium",
     "max_rounds": 2
   }
 }
-JSON
+SESSION_START_JSON
+```
+
+runner は `review_session_id` だけを stdout に返す。以降の runner / adapter 呼び出しにはこの
+`review_session_id` を渡す。
+
+会話要約や設計案が必要な場合は `context_text` として整理し、構造化 input を stdin から渡して
+初回 round を準備する。
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-initial <<'INITIAL_ROUND_JSON'
+{
+  "review_session_id": "<review_session_id>",
+  "agent": "codex",
+  "focus_question": "<focus_question>",
+  "context_text": "<context_text>",
+  "target_files": []
+}
+INITIAL_ROUND_JSON
 ```
 
 runner は次に渡す adapter request envelope をそのまま返す。

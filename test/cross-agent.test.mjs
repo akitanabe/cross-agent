@@ -15,6 +15,7 @@ import {
   normalizeOptions,
   prepareInitialSession,
   sessionPaths,
+  startSession,
 } from "../scripts/cross-agent-runner.mjs";
 
 const runnerPath = fileURLToPath(new URL("../scripts/cross-agent-runner.mjs", import.meta.url));
@@ -90,22 +91,83 @@ test("buildAdapterRequest creates v1 envelope", () => {
   assert.equal(request.options.review_depth, "medium");
 });
 
-test("prepareInitialSession creates state, prompt, and adapter request", async () => {
+test("startSession creates empty state", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
     await mkdir(targetRoot, { recursive: true });
 
+    const result = await startSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      target_root: targetRoot,
+      options: { review_depth: "low", max_rounds: 1 },
+    });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    assert.deepEqual(result, { output_type: "text", content: "session-1" });
+
+    const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
+    assert.equal(state.status, "active");
+    assert.equal(state.current_round, 0);
+    assert.equal(state.rounds.length, 0);
+    assert.equal(state.artifacts.files.length, 0);
+    assert.equal(state.options.review_depth, "low");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("start-session command writes review session id as text", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+
+    const result = await runRunner(
+      ["start-session"],
+      `${JSON.stringify(
+        {
+          data_dir: dataDir,
+          review_session_id: "session-1",
+          target_root: targetRoot,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    assert.equal(result.stdout, "session-1\n");
+    const paths = sessionPaths(dataDir, "session-1");
+    const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
+    assert.equal(state.review_session_id, "session-1");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("prepareInitialSession creates prompt and adapter request", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      target_root: targetRoot,
+      options: { review_depth: "low", max_rounds: 1 },
+    });
+
     const adapterRequest = await prepareInitialSession({
       data_dir: dataDir,
       review_session_id: "session-1",
       agent: "codex",
-      target_root: targetRoot,
       focus_question: "レビューして",
       context_text: "# Context\nhello",
       target_files: ["README.md"],
-      options: { review_depth: "low", max_rounds: 1 },
     });
 
     const paths = sessionPaths(dataDir, "session-1");
@@ -136,10 +198,14 @@ test("completeRound records adapter response into state", async () => {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
     await mkdir(targetRoot, { recursive: true });
-    const adapterRequest = await prepareInitialSession({
+    await startSession({
       data_dir: dataDir,
       review_session_id: "session-1",
       target_root: targetRoot,
+    });
+    const adapterRequest = await prepareInitialSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
       context_text: "context",
     });
 
@@ -176,10 +242,14 @@ test("getRound returns round state", async () => {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
     await mkdir(targetRoot, { recursive: true });
-    await prepareInitialSession({
+    await startSession({
       data_dir: dataDir,
       review_session_id: "session-1",
       target_root: targetRoot,
+    });
+    await prepareInitialSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
     });
 
     const paths = sessionPaths(dataDir, "session-1");
@@ -217,10 +287,14 @@ test("getRoundOutput returns text command output by default", async () => {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
     await mkdir(targetRoot, { recursive: true });
-    await prepareInitialSession({
+    await startSession({
       data_dir: dataDir,
       review_session_id: "session-1",
       target_root: targetRoot,
+    });
+    await prepareInitialSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
     });
 
     const paths = sessionPaths(dataDir, "session-1");
@@ -257,10 +331,14 @@ test("get-round-output command writes text by default", async () => {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
     await mkdir(targetRoot, { recursive: true });
-    await prepareInitialSession({
+    await startSession({
       data_dir: dataDir,
       review_session_id: "session-1",
       target_root: targetRoot,
+    });
+    await prepareInitialSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
     });
 
     const paths = sessionPaths(dataDir, "session-1");
