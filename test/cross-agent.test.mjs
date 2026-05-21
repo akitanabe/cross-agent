@@ -161,7 +161,7 @@ test("prepareInitialSession creates prompt and adapter request", async () => {
       options: { review_depth: "low", max_rounds: 1 },
     });
 
-    const adapterRequest = await prepareInitialSession({
+    const result = await prepareInitialSession({
       data_dir: dataDir,
       review_session_id: "session-1",
       agent: "codex",
@@ -169,8 +169,10 @@ test("prepareInitialSession creates prompt and adapter request", async () => {
       context_text: "# Context\nhello",
       target_files: ["README.md"],
     });
+    const adapterRequest = result.content;
 
     const paths = sessionPaths(dataDir, "session-1");
+    assert.equal(result.output_type, "json");
     assert.equal(adapterRequest.review_session_id, "session-1");
     assert.equal(adapterRequest.agent, "codex");
     assert.equal(adapterRequest.state_file, undefined);
@@ -203,11 +205,12 @@ test("completeRound records adapter response into state", async () => {
       review_session_id: "session-1",
       target_root: targetRoot,
     });
-    const adapterRequest = await prepareInitialSession({
+    const prepareResult = await prepareInitialSession({
       data_dir: dataDir,
       review_session_id: "session-1",
       context_text: "context",
     });
+    const adapterRequest = prepareResult.content;
 
     const paths = sessionPaths(dataDir, "session-1");
     const outputFile = join(paths.artifactDir, "round-1-codex-output.md");

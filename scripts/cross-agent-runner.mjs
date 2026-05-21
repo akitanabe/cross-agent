@@ -267,7 +267,7 @@ export async function prepareInitialSession(input) {
 
   await writeJsonAtomic(paths.stateFile, state);
 
-  return adapterRequest;
+  return commandOutput("json", adapterRequest);
 }
 
 // adapter response を既存 state の rounds[].agent_result に反映し、round を完了させる。
@@ -415,7 +415,7 @@ async function main() {
   if (args.command === "start-session") {
     result = await startSession(input);
   } else if (args.command === "prepare-initial") {
-    result = commandOutput("json", await prepareInitialSession(input));
+    result = await prepareInitialSession(input);
   } else if (args.command === "complete-round") {
     result = commandOutput("json", await completeRound(input));
   } else if (args.command === "get-round-output") {
