@@ -21,7 +21,12 @@ skills/
   claude-adapter/SKILL.md      # Claude 固有の実装（user-invocable: false）
 docs/
   cross-agent-design.md        # 設計骨子（責務分離・セッション管理方針）
+  codex-adapter-spec.md        # codex-adapter 詳細仕様
   SKILL.md                     # 移植元の既存 advice スキル（Codex 実装の参照）
+scripts/
+  codex-adapter.mjs            # Codex adapter runner
+test/
+  codex-adapter.test.mjs       # Codex adapter runner のテスト
 ```
 
 ## 設計の要点

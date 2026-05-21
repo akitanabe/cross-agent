@@ -17,7 +17,12 @@ cross-agent/
 │   └── claude-adapter/SKILL.md      # Claude 固有の実装
 ├── docs/
 │   ├── SKILL.md                     # 既存 advice スキル（移植元の参照）
-│   └── cross-agent-design.md        # 設計骨子
+│   ├── cross-agent-design.md        # 設計骨子
+│   └── codex-adapter-spec.md        # codex-adapter 詳細仕様
+├── scripts/
+│   └── codex-adapter.mjs            # Codex adapter runner
+├── test/
+│   └── codex-adapter.test.mjs       # Codex adapter runner のテスト
 └── README.md
 ```
 
