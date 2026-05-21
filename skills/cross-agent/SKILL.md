@@ -106,10 +106,6 @@ artifact directory、初回 prompt、adapter request envelope をまとめて作
   "current_round": 1,
   "options": {},
   "context": {},
-  "agents": {
-    "codex": { "thread_id": "..." },
-    "claude": { "context_file": "..." }
-  },
   "rounds": [
     {
       "round": 1,
@@ -127,9 +123,9 @@ artifact directory、初回 prompt、adapter request envelope をまとめて作
 state ownership:
 
 - `cross-agent`: session root / options / context / rounds / 全体 status
-- `codex-adapter`: `agents.codex`
-- `claude-adapter`: `agents.claude`
-- `artifacts` / `errors`: 作成者・発生元が append する共有領域
+- `codex-adapter`: `review_session_id` から自分で導出する Codex 個別 state file
+- `claude-adapter`: `review_session_id` から自分で導出する Claude 個別 state file
+- top-level `artifacts` / `errors`: cross-agent 自身が作成・検出したものだけ
 
 ### Step 4: コンテキスト・プロンプトの組み立て
 
@@ -168,7 +164,6 @@ Round 1に記録したagentの Skill を `review_session_id` とコンテキス�
   "round": 1,
   "round_kind": "initial_review",
   "target_root": "...",
-  "state_file": "${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json",
   "prompt_file": "...",
   "context_file": "...",
   "target_files": [],

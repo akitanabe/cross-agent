@@ -26,9 +26,9 @@ runner は response envelope を stdout に出力し、同じ内容を artifact 
 ## 守ること
 
 - state は `${CLAUDE_PLUGIN_DATA}` 配下にだけ書く。`${CLAUDE_PLUGIN_ROOT}` には書かない
-- adapter が所有する state は `agents.codex` のみ。`rounds[]` や session 全体の `status` は cross-agent が更新する
-- `agents.codex.thread_id` が無い場合は新規 Codex session を作る
-- 保存済み `agents.codex.target_root` と request の `target_root` が異なる場合も新規 Codex session を作る
+- adapter が所有する state は `review_session_id` から自分で導出する Codex 個別 state file のみ。`rounds[]` や session 全体の `status` は cross-agent が更新する
+- agent state file の `thread_id` が無い場合は新規 Codex session を作る
+- agent state file の `target_root` と request の `target_root` が異なる場合も新規 Codex session を作る
 - `thread_id` があり、かつ `target_root` が一致する場合だけ `codex exec resume` を使う
 - Codex の出力統合や要約は行わず、`output_file` を返すだけにする
 

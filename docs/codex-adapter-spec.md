@@ -6,9 +6,9 @@ codex-adapter は Codex CLI 実行境界を担当する。cross-agent から req
 `scripts/codex-adapter.mjs` で `codex exec` / `codex exec resume` を実行し、Codex 固有 state を
 更新して response envelope を返す。
 
-cross-agent は `agents.codex.thread_id` の中身を直接変更しない。`review_session_id` から
-Codex の `thread_id` へのマッピング、resume の成否判定、Codex CLI の event log 保存は
-この adapter に閉じる。
+cross-agent は Codex の agent state file の中身を直接変更しない。`review_session_id` から
+Codex の `thread_id` へのマッピング、resume の成否判定、Codex CLI の event log 保存、
+Codex 由来の artifacts/errors はこの adapter に閉じる。
 
 ## 入力
 
@@ -22,7 +22,6 @@ cross-agent から request envelope を受け取る。
   "round": 1,
   "round_kind": "initial_review",
   "target_root": "...",
-  "state_file": "${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json",
   "prompt_file": "...",
   "context_file": "...",
   "target_files": [],
@@ -38,11 +37,11 @@ cross-agent から request envelope を受け取る。
 
 - `contract_version` は `1`
 - `agent` は `"codex"`
-- `review_session_id`, `round`, `round_kind`, `target_root`, `state_file`, `prompt_file`, `options` が存在する
+- `review_session_id`, `round`, `round_kind`, `target_root`, `prompt_file`, `options` が存在する
 - `prompt_file` は読み取り可能
 - `target_root` は存在するディレクトリ
-- `state_file` は存在する JSON ファイル
-- `state_file` の `review_session_id` が envelope の値と一致する
+- session state file は `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json` から導出し、`review_session_id` が envelope の値と一致する
+- Codex agent state file は存在しなくてもよい。存在する場合は `review_session_id` と `agent` が envelope と一致する
 
 `context_file` と `target_files` は補助情報であり、Codex に渡す本文は `prompt_file` を正とする。
 それらのパス参照は cross-agent が `prompt_file` 内に含める。
@@ -59,7 +58,7 @@ cross-agent から request envelope を受け取る。
 
 ## Artifact パス
 
-artifact directory は `state_file` と同じ `review_session_id` から決める。
+artifact directory は `${CLAUDE_PLUGIN_DATA}` と `review_session_id` から決める。
 
 ```text
 ${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/
@@ -79,48 +78,55 @@ round-<N>-codex-response.json
 - `codex-diagnostic.md`: CLI 終了コード、実行コマンド要約、抽出した thread_id、警告、stderr 相当の要約
 - `codex-response.json`: adapter が返した response envelope の保存コピー
 
-## State 更新範囲
+## Agent state 更新範囲
 
-codex-adapter が変更してよい state は以下に限定する。
+codex-adapter が変更してよい state は自分で導出する Codex agent state file に限定する。
+パスは `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>/agents/codex.json` とする。
 
-- `agents.codex`
-- `artifacts.files[]` への append
+- `thread_id` / `target_root` / `status` / `last_*`
+- `artifacts[]` への append
 - `errors[]` への append
 - 機械的な `updated_at`
 
-`rounds[]`, `current_round`, session root の `status`, `context`, `options` は cross-agent の所有物なので、
-codex-adapter は変更しない。
+top-level session state の `rounds[]`, `current_round`, `status`, `context`, `options` は
+cross-agent の所有物なので、codex-adapter は変更しない。
 
-`agents.codex` の形:
+Codex agent state file の形:
 
 ```json
 {
+  "schema_version": 1,
+  "review_session_id": "...",
+  "agent": "codex",
   "status": "active",
   "thread_id": "...",
   "target_root": "...",
   "last_output_file": "...",
   "last_event_log": "...",
-  "last_error": null
+  "last_error": null,
+  "artifacts": [],
+  "errors": []
 }
 ```
 
 ## 実行仕様
 
 1. request envelope を読み取り、入力検証する
-2. `state_file` を読み、`agents.codex` を取得する
-3. artifact directory を作成する
-4. `prompt_file` の本文を読み込む
-5. `review_depth` を `model_reasoning_effort` に翻訳する
-6. `review_session_id` に対応する `agents.codex.thread_id` と `agents.codex.target_root` を見る
-7. `thread_id` が無い、または保存済み `target_root` と envelope の `target_root` が異なる場合は初回起動として新規 Codex session を作る
-8. `thread_id` があり、かつ `target_root` が一致する場合は resume 実行に分岐する
-9. Codex CLI の終了コード、出力ファイル、event log を確認する
-10. state の `agents.codex` と artifacts/errors を更新する
-11. response envelope を `round-<N>-codex-response.json` に保存し、同じ JSON を stdout に返す
+2. session state file を導出して読み、session と request の `review_session_id` 一致を確認する
+3. Codex agent state file を導出して読み、存在しなければ Codex agent state を新規作成する
+4. artifact directory を作成する
+5. `prompt_file` の本文を読み込む
+6. `review_depth` を `model_reasoning_effort` に翻訳する
+7. agent state の `thread_id` と `target_root` を見る
+8. `thread_id` が無い、または保存済み `target_root` と envelope の `target_root` が異なる場合は初回起動として新規 Codex session を作る
+9. `thread_id` があり、かつ `target_root` が一致する場合は resume 実行に分岐する
+10. Codex CLI の終了コード、出力ファイル、event log を確認する
+11. agent state file の Codex state と artifacts/errors を更新する
+12. response envelope を `round-<N>-codex-response.json` に保存し、同じ JSON を stdout に返す
 
 ### 初回起動
 
-`agents.codex.thread_id` が無い場合、または保存済み `agents.codex.target_root` と envelope の
+agent state の `thread_id` が無い場合、または保存済み `target_root` と envelope の
 `target_root` が異なる場合は初回起動として扱い、`target_root` を Codex session の作業 root として固定する。
 
 ```bash
@@ -150,7 +156,7 @@ event を採用する。見つからない場合は `codex_thread_id_missing` �
 
 ### 既存 session: resume
 
-`agents.codex.thread_id` があり、かつ保存済み `agents.codex.target_root` と envelope の
+agent state の `thread_id` があり、かつ保存済み `target_root` と envelope の
 `target_root` が一致する場合は、同じ Codex session に追加入力する。
 
 ```bash
@@ -207,8 +213,8 @@ resume 実行そのものに失敗した場合は `codex_resume_failed` とし�
 | code | recoverable | 意味 |
 |---|---:|---|
 | `invalid_request_envelope` | true | 必須フィールド欠落、agent 不一致、contract_version 不一致 |
-| `state_file_missing` | true | 指定された state file が存在しない |
-| `state_file_invalid` | true | state JSON が壊れている、または review_session_id 不一致 |
+| `state_file_missing` | true | 導出した session state file が存在しない |
+| `state_file_invalid` | true | session / agent state JSON が壊れている、または review_session_id 不一致 |
 | `prompt_file_missing` | true | prompt file が読めない |
 | `target_root_missing` | true | target_root が存在しない |
 | `codex_exec_failed` | true | 新規 `codex exec` が非 0 終了 |

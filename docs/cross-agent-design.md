@@ -61,13 +61,13 @@ marketplace経由ではread-onlyになりうるため、状態保存には使わ
 | `options` | `cross-agent` | `max_rounds` / `review_depth` など |
 | `context` | `cross-agent` | 各agentに渡す共通入力 |
 | `rounds` | `cross-agent` | Roundごとの実行履歴 |
-| `agents.codex` | `codex-adapter` | `thread_id` / resume / Codex固有ログ |
-| `agents.claude` | `claude-adapter` | 蓄積context / Claude呼び出し履歴 |
-| `artifacts` | 共有 | 作成者がappendする。他者の項目は書き換えない |
-| `errors` | 共有 | 発生元がappendする。他者の項目は書き換えない |
+| Codex agent state file | `codex-adapter` | `thread_id` / resume / Codex固有ログ / artifacts / errors |
+| Claude agent state file | `claude-adapter` | 蓄積context / Claude呼び出し履歴 / artifacts / errors |
+| `artifacts` | `cross-agent` | cross-agent 自身が作成した context / prompt / request |
+| `errors` | `cross-agent` | cross-agent 自身が検出したエラー |
 
-`cross-agent` は `agents.codex.thread_id` などのagent固有stateを直接変更しない。
-agent固有stateの作成・更新・復旧判断は各adapterに閉じる。
+`cross-agent` は Codex の `thread_id` などのagent固有stateを直接変更しない。
+agent固有stateの作成・更新・復旧判断、個別state file のパス導出は各adapterに閉じる。
 
 ### State schema v1
 
@@ -93,16 +93,6 @@ agent固有stateの作成・更新・復旧判断は各adapterに閉じる。
     "target_files": [],
     "source": "conversation"
   },
-  "agents": {
-    "codex": {
-      "status": "active",
-      "thread_id": "...",
-      "target_root": "...",
-      "last_output_file": "...",
-      "last_event_log": "...",
-      "last_error": null
-    }
-  },
   "rounds": [
     {
       "round": 1,
@@ -121,6 +111,24 @@ agent固有stateの作成・更新・復旧判断は各adapterに閉じる。
   "artifacts": {
     "files": []
   },
+  "errors": []
+}
+```
+
+Codex agent state file:
+
+```json
+{
+  "schema_version": 1,
+  "review_session_id": "uuid-xxxx",
+  "agent": "codex",
+  "status": "active",
+  "thread_id": "...",
+  "target_root": "...",
+  "last_output_file": "...",
+  "last_event_log": "...",
+  "last_error": null,
+  "artifacts": [],
   "errors": []
 }
 ```
@@ -204,7 +212,6 @@ Claude Code の Skill は関数APIではなく実行手順なので、cross-agen
   "round": 1,
   "round_kind": "initial_review",
   "target_root": "...",
-  "state_file": "${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json",
   "prompt_file": "...",
   "context_file": "...",
   "target_files": [],
@@ -226,7 +233,6 @@ Claude Code の Skill は関数APIではなく実行手順なので、cross-agen
 | `round` | yes | `cross-agent` | 1始まりのround番号 |
 | `round_kind` | yes | `cross-agent` | `initial_review` / `deep_dive` / `follow_up` / `recovery` |
 | `target_root` | yes | `cross-agent` | レビュー対象の作業root |
-| `state_file` | yes | state layer | セッションstate JSONのパス |
 | `prompt_file` | yes | `cross-agent` | adapterへ投げるプロンプト本文のファイル |
 | `context_file` | no | `cross-agent` | 会話・設計案などの共通コンテキスト |
 | `target_files` | no | `cross-agent` | ユーザー指定のレビュー対象ファイル |
@@ -287,15 +293,16 @@ adapter response envelope は要約フィールドを持たない。
 2. `cross-agent` が `context_file` と `prompt_file` を作成し、artifactとして登録する
 3. `cross-agent` が `rounds[]` にround開始を記録する
 4. `cross-agent` がrequest envelopeを添えて対象adapterへ委譲する
-5. adapterが自分の `agents.<agent>` stateを更新する
+5. adapterが自分で導出した agent state file を更新する
 6. adapterがresponse envelopeを返す
 7. `cross-agent` がresponseを `rounds[].agent_result` に記録する
 8. `cross-agent` がroundを完了させる
 
 ### Artifacts
 
-生成物はstateの `artifacts.files[]` にappendする。作成者以外が既存artifactを
-書き換えない。
+cross-agent が生成した context / prompt / adapter request は top-level session state の
+`artifacts.files[]` にappendする。adapter が生成した agent output / event log / diagnostic は
+各 agent state file の `artifacts[]` にappendする。作成者以外が既存artifactを書き換えない。
 
 ```json
 {
@@ -315,8 +322,9 @@ adapter response envelope は要約フィールドを持たない。
 
 ### Errors
 
-エラーはstateの `errors[]` にappendする。エラーをappendしても、必ずしも
-session全体が `failed` になるわけではない。復旧可能なagent失敗や確認待ちの診断は、
+cross-agent 自身が検出したエラーは top-level session state の `errors[]` にappendする。
+adapter が検出したエラーは各 agent state file の `errors[]` にappendする。エラーをappendしても、
+必ずしも session 全体が `failed` になるわけではない。復旧可能なagent失敗や確認待ちの診断は、
 `recoverable: true` として記録し、全体statusは `active` のまま維持できる。
 
 ```json
@@ -374,6 +382,9 @@ state machineに載せず、通常会話として処理する。
 - `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json`
 - `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/`
 
+個別agentの state directory は各adapterが必要になった時点で導出・作成する。
+cross-agent はその具体パスを request envelope や top-level state に含めない。
+
 初期state:
 
 ```json
@@ -392,7 +403,6 @@ state machineに載せず、通常会話として処理する。
     "keep_artifacts": false
   },
   "context": {},
-  "agents": {},
   "rounds": [],
   "artifacts": {
     "files": []
@@ -441,7 +451,7 @@ state machineに載せず、通常会話として処理する。
 3. response envelopeを受け取る
 4. `rounds[].agent_result` に結果を記録する
 
-adapter は自分が生成した `artifacts` と `errors` を自分で state に append する。
+adapter は自分が生成した `artifacts` と `errors` を自分で導出した agent state file に append する。
 cross-agent は response envelope の内容を `rounds[].agent_result` に記録するだけで、
 adapter 由来の `artifacts` / `errors` を重複 append しない。
 

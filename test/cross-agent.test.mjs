@@ -42,7 +42,6 @@ test("buildAdapterRequest creates v1 envelope", () => {
     round: 1,
     roundKind: "initial_review",
     targetRoot: "C:/repo",
-    stateFile: "C:/data/sessions/session-1.json",
     promptFile: "C:/data/artifacts/session-1/round-1-prompt.md",
     contextFile: null,
     targetFiles: [],
@@ -52,6 +51,8 @@ test("buildAdapterRequest creates v1 envelope", () => {
 
   assert.equal(request.contract_version, 1);
   assert.equal(request.review_session_id, "session-1");
+  assert.equal(request.state_file, undefined);
+  assert.equal(request.agent_state_file, undefined);
   assert.equal(request.options.review_depth, "medium");
 });
 
@@ -76,10 +77,14 @@ test("prepareInitialSession creates state, prompt, and adapter request", async (
     const paths = sessionPaths(dataDir, "session-1");
     assert.equal(result.state_file, paths.stateFile);
     assert.equal(result.adapter_request.agent, "codex");
+    assert.equal(result.adapter_request.state_file, undefined);
+    assert.equal(result.adapter_request.agent_state_file, undefined);
     assert.equal(result.adapter_request.options.review_depth, "low");
 
     const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
     assert.equal(state.current_round, 1);
+    assert.equal(state.agent_state_files, undefined);
+    assert.equal(state.agents, undefined);
     assert.equal(state.rounds[0].agent_result, null);
     assert.equal(state.artifacts.files.length, 3);
 
@@ -124,6 +129,7 @@ test("completeRound records adapter response into state", async () => {
     assert.equal(result.status, "completed");
     const state = JSON.parse(await readFile(prepared.state_file, "utf8"));
     assert.equal(state.rounds[0].agent_result.output_file, outputFile);
+    assert.equal(state.rounds[0].agent_result.agent_state_file, undefined);
     assert.equal(state.artifacts.files.every((entry) => entry.owner === "cross-agent"), true);
   } finally {
     await rm(temp, { recursive: true, force: true });

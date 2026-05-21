@@ -46,9 +46,11 @@ async function ensureDirectory(path, label) {
 export function sessionPaths(dataDir, reviewSessionId) {
   // plugin root ではなく、永続 data store 配下に session と artifact をまとめる。
   const sessionsDir = resolve(dataDir, "sessions");
+  const sessionDir = resolve(sessionsDir, reviewSessionId);
   const artifactDir = resolve(dataDir, "artifacts", reviewSessionId);
   return {
     sessionsDir,
+    sessionDir,
     artifactDir,
     stateFile: resolve(sessionsDir, `${reviewSessionId}.json`),
   };
@@ -113,7 +115,6 @@ export function buildAdapterRequest({
   round,
   roundKind,
   targetRoot,
-  stateFile,
   promptFile,
   contextFile = null,
   targetFiles = [],
@@ -128,7 +129,6 @@ export function buildAdapterRequest({
     round,
     round_kind: roundKind,
     target_root: targetRoot,
-    state_file: stateFile,
     prompt_file: promptFile,
     context_file: contextFile,
     target_files: targetFiles,
@@ -182,7 +182,6 @@ export async function prepareInitialSession(input) {
     round: 1,
     roundKind: "initial_review",
     targetRoot,
-    stateFile: paths.stateFile,
     promptFile,
     contextFile,
     targetFiles,
@@ -195,7 +194,7 @@ export async function prepareInitialSession(input) {
   artifacts.push(artifact(adapterRequestFile, "adapter_request", 1, agent));
 
   const createdAt = nowIso();
-  // agents.* は各 adapter の所有領域なので、初期 state では空にしておく。
+  // agent state の中身と配置は各 adapter に閉じ、top-level には持たない。
   const state = {
     schema_version: 1,
     review_session_id: reviewSessionId,
@@ -212,7 +211,6 @@ export async function prepareInitialSession(input) {
       target_files: targetFiles,
       source,
     },
-    agents: {},
     rounds: [
       {
         round: 1,

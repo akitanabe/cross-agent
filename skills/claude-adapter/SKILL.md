@@ -16,8 +16,7 @@ cross-agent から渡される `review_session_id` とコンテキストを受�
 
 ## セッションマッピング
 
-`${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json` の `agents.claude.context_file` を
-読み書きする。
+`review_session_id` から Claude 個別 state JSON のパスを導出して読み書きする。
 
 - **Round 1**: コンテキストファイルを新規作成し、レビュー依頼。応答を追記
 - **Round 2 以降**: 蓄積済みコンテキストファイルを読み込み、追加質問とともに新しい
@@ -48,7 +47,6 @@ cross-agent から渡される `review_session_id` とコンテキストを受�
   "round": 1,
   "round_kind": "initial_review",
   "target_root": "...",
-  "state_file": "${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json",
   "prompt_file": "...",
   "context_file": "...",
   "target_files": [],

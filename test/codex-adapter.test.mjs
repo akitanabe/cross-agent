@@ -2,10 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  agentStateFileFor,
   artifactDirFor,
   artifactPaths,
   effortForReviewDepth,
   extractThreadIdFromJsonl,
+  sessionStateFileFor,
   shouldStartNewSession,
 } from "../scripts/codex-adapter.mjs";
 
@@ -52,9 +54,15 @@ test("shouldStartNewSession resumes when thread id and target root match", () =>
   });
 });
 
-test("artifact path helpers use state file sibling data layout", () => {
-  const artifactDir = artifactDirFor("C:/data/sessions/session-1.json", "session-1");
+test("artifact path helpers use data directory layout", () => {
+  const artifactDir = artifactDirFor("C:/data", "session-1");
   assert.match(artifactDir.replaceAll("\\", "/"), /C:\/data\/artifacts\/session-1$/);
+
+  const sessionStateFile = sessionStateFileFor("C:/data", "session-1");
+  assert.match(sessionStateFile.replaceAll("\\", "/"), /C:\/data\/sessions\/session-1\.json$/);
+
+  const agentStateFile = agentStateFileFor("C:/data", "session-1");
+  assert.match(agentStateFile.replaceAll("\\", "/"), /C:\/data\/sessions\/session-1\/agents\/codex\.json$/);
 
   const paths = artifactPaths(artifactDir, 2);
   assert.match(paths.outputFile.replaceAll("\\", "/"), /round-2-codex-output\.md$/);
