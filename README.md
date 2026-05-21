@@ -49,7 +49,9 @@ node --test
 Codex adapter の実行ロジックは Node.js スクリプトとして実装する。
 
 ```bash
+node scripts/cross-agent.mjs prepare-initial --input /path/to/input.json
 node scripts/codex-adapter.mjs --request /path/to/request-envelope.json
+node scripts/cross-agent.mjs complete-round --input /path/to/complete-round.json
 ```
 
 ## 配布

@@ -300,7 +300,7 @@ adapter response envelope は要約フィールドを持たない。
 ```json
 {
   "path": "...",
-  "kind": "context | prompt | agent_output | event_log | accumulated_context | diagnostic",
+  "kind": "context | prompt | adapter_request | agent_output | event_log | accumulated_context | diagnostic",
   "owner": "cross-agent | codex-adapter | claude-adapter",
   "round": 1,
   "agent": "codex",
@@ -440,7 +440,10 @@ state machineに載せず、通常会話として処理する。
 2. 対象adapterへ委譲する
 3. response envelopeを受け取る
 4. `rounds[].agent_result` に結果を記録する
-5. responseの `artifacts` と `error` をstateへappendする
+
+adapter は自分が生成した `artifacts` と `errors` を自分で state に append する。
+cross-agent は response envelope の内容を `rounds[].agent_result` に記録するだけで、
+adapter 由来の `artifacts` / `errors` を重複 append しない。
 
 ### Phase 5: Round 2 deep_dive 判断
 

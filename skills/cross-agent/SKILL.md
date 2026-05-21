@@ -13,6 +13,14 @@ user-invocable: true
 cross-agent は **オーケストレーター**。自分はレビューの中身を生成せず、
 コンテキストを組み立てて各エージェント adapter に委譲し、結果を統合して提示する。
 
+セッション初期化、state JSON 作成、artifact 作成、初回 adapter request envelope 作成、
+adapter response の state 反映は `scripts/cross-agent.mjs` で行う。
+
+```bash
+node scripts/cross-agent.mjs prepare-initial --input "<input.json>"
+node scripts/cross-agent.mjs complete-round --input "<input.json>"
+```
+
 設計方針（[docs/cross-agent-design.md](../../docs/cross-agent-design.md) より）:
 
 - **拡張性**: 新エージェント追加は `skills/<name>-adapter/SKILL.md` を増やすだけ
@@ -77,6 +85,8 @@ v1では `needs_user_input` stateは使わない。
 ### Step 3: review_session_id の生成・管理
 
 cross-agent 側で `review_session_id`（UUID 等）を生成する。中身は各エージェントに渡すだけで管理しない。
+実装では `scripts/cross-agent.mjs prepare-initial` が `review_session_id`、state file、
+artifact directory、初回 prompt、adapter request envelope をまとめて作る。
 
 **永続化場所**: `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json`
 
@@ -140,6 +150,9 @@ ${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/
 - `context.md`: 会話や設計案の要約。ファイル指定だけで十分な場合は省略可
 - `round-1-prompt.md`: Round 1で選んだagentに渡す初回レビュー依頼
 
+定型の初回プロンプトファイル作成は `scripts/cross-agent.mjs prepare-initial` に任せる。
+ユーザー入力の解釈や会話要約の作成は Skill 側で行い、runner には構造化済み input として渡す。
+
 ### Step 5: エージェント Skill への委譲（Round 1）
 
 Round 1に記録したagentの Skill を `review_session_id` とコンテキストパスを渡して呼び出す。
@@ -182,6 +195,8 @@ adapter は response envelope を返す。cross-agent はこれを `rounds[].age
   "error": null
 }
 ```
+
+adapter response を受け取ったら `scripts/cross-agent.mjs complete-round` で state に反映する。
 
 ### Step 6: 自動深掘りループ（既定 2 往復）
 
