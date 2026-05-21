@@ -13,10 +13,12 @@ const DEFAULT_OPTIONS = {
   keep_artifacts: false,
 };
 
+// state や artifact に記録する現在時刻を ISO 文字列で返す。
 function nowIso() {
   return new Date().toISOString();
 }
 
+// JSON を一時ファイルへ書いてから rename し、対象ファイルを atomic に更新する。
 async function writeJsonAtomic(filePath, value) {
   // state 更新中に落ちても JSON が半端に壊れないようにする。
   const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
@@ -24,10 +26,12 @@ async function writeJsonAtomic(filePath, value) {
   await rename(tmp, filePath);
 }
 
+// JSON ファイルを読み込み、オブジェクトとして返す。
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
 
+// 指定パスが存在し、ディレクトリであることを検証する。
 async function ensureDirectory(path, label) {
   try {
     const entry = await stat(path);
@@ -38,6 +42,7 @@ async function ensureDirectory(path, label) {
   }
 }
 
+// data directory と review_session_id から session/state/artifact のパスを組み立てる。
 export function sessionPaths(dataDir, reviewSessionId) {
   // plugin root ではなく、永続 data store 配下に session と artifact をまとめる。
   const sessionsDir = resolve(dataDir, "sessions");
@@ -49,6 +54,7 @@ export function sessionPaths(dataDir, reviewSessionId) {
   };
 }
 
+// state に append する cross-agent 生成 artifact metadata を作る。
 function artifact(path, kind, round = null, agent = null) {
   // cross-agent が作った artifact だけ owner=cross-agent として記録する。
   return {
@@ -62,6 +68,7 @@ function artifact(path, kind, round = null, agent = null) {
   };
 }
 
+// 省略された cross-agent option を既定値で補完する。
 export function normalizeOptions(options = {}) {
   // Skill 側が省略した値を、state に残る安定した既定値へそろえる。
   return {
@@ -70,6 +77,7 @@ export function normalizeOptions(options = {}) {
   };
 }
 
+// 初回レビュー用の定型 prompt 本文を組み立てる。
 export function buildInitialPrompt({ focusQuestion, contextFile, targetFiles = [] }) {
   // 会話要約そのものは Skill 側で作り、この関数は定型レビュー依頼だけを組み立てる。
   const sections = [
@@ -98,6 +106,7 @@ export function buildInitialPrompt({ focusQuestion, contextFile, targetFiles = [
   return `${sections.join("\n\n")}\n`;
 }
 
+// adapter に渡す request envelope v1 を組み立てる。
 export function buildAdapterRequest({
   reviewSessionId,
   agent,
@@ -131,6 +140,7 @@ export function buildAdapterRequest({
   };
 }
 
+// 初回 round に必要な state、artifact、prompt、adapter request を作成する。
 export async function prepareInitialSession(input) {
   // 初回実行で必要な state、artifact、adapter request を一括で作る。
   const dataDir = input.data_dir ?? process.env.CLAUDE_PLUGIN_DATA;
@@ -233,6 +243,7 @@ export async function prepareInitialSession(input) {
   };
 }
 
+// adapter response を既存 state の rounds[].agent_result に反映し、round を完了させる。
 export async function completeRound({ state_file: stateFile, response_file: responseFile, response }) {
   // adapter は artifacts/errors を自分で append する。ここでは round 結果だけを閉じる。
   if (!stateFile) throw new Error("state_file is required.");
@@ -264,6 +275,7 @@ export async function completeRound({ state_file: stateFile, response_file: resp
   };
 }
 
+// CLI 引数を、この runner が扱う command/input option に変換する。
 function parseArgs(argv) {
   const args = { command: argv[0], inputFile: null };
   for (let index = 1; index < argv.length; index += 1) {
@@ -279,23 +291,27 @@ function parseArgs(argv) {
   return args;
 }
 
+// CLI の使い方テキストを返す。
 function usage() {
   return `Usage:
   node scripts/cross-agent.mjs prepare-initial --input <input.json>
   node scripts/cross-agent.mjs complete-round --input <input.json>`;
 }
 
+// runner input を stdin から読み取る。
 async function readStdin() {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
   return Buffer.concat(chunks).toString("utf8");
 }
 
+// runner input をファイルまたは stdin から読み込み、JSON として返す。
 async function readInput(inputFile) {
   const text = inputFile ? await readFile(inputFile, "utf8") : await readStdin();
   return JSON.parse(text);
 }
 
+// CLI entrypoint。command に応じて prepare-initial または complete-round を実行する。
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.command) {

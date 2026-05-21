@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const OWNER = "codex-adapter";
 
+// cross-agent の抽象 review_depth を Codex CLI の reasoning effort に変換する。
 export function effortForReviewDepth(reviewDepth) {
   if (reviewDepth === "low") return { effort: "medium", warning: null };
   if (reviewDepth === "medium") return { effort: "high", warning: null };
@@ -18,11 +19,13 @@ export function effortForReviewDepth(reviewDepth) {
   };
 }
 
+// state file の位置から、この review session 用の artifact directory を導出する。
 export function artifactDirFor(stateFile, reviewSessionId) {
   // plugin root へ書かないように、artifact は state store の隣に置く。
   return resolve(dirname(stateFile), "..", "artifacts", reviewSessionId);
 }
 
+// round 番号から Codex adapter が生成する artifact 群のパスを組み立てる。
 export function artifactPaths(artifactDir, round) {
   return {
     outputFile: resolve(artifactDir, `round-${round}-codex-output.md`),
@@ -32,6 +35,7 @@ export function artifactPaths(artifactDir, round) {
   };
 }
 
+// Codex の JSONL event stream から、新規 session の thread_id を抽出する。
 export function extractThreadIdFromJsonl(text) {
   // Codex は人間向け診断を混ぜることがあるため、構造化 event だけを採用する。
   for (const line of text.split(/\r?\n/)) {
@@ -48,6 +52,7 @@ export function extractThreadIdFromJsonl(text) {
   return null;
 }
 
+// 保存済み Codex state と今回の target_root から、新規 session が必要か判定する。
 export function shouldStartNewSession(agentState, targetRoot) {
   // Codex session は初回 cwd に固定されるため、target_root 変更時は新しい thread が必要。
   if (!agentState?.thread_id) {
@@ -59,6 +64,7 @@ export function shouldStartNewSession(agentState, targetRoot) {
   return { startNew: false, reason: "resume" };
 }
 
+// CLI 引数を、この runner が扱う option に変換する。
 function parseArgs(argv) {
   const args = {
     requestFile: null,
@@ -81,6 +87,7 @@ function parseArgs(argv) {
   return args;
 }
 
+// CLI の使い方テキストを返す。
 function usage() {
   return `Usage: node scripts/codex-adapter.mjs --request <request-envelope.json> [--codex-bin codex]
 
@@ -88,12 +95,14 @@ Reads a cross-agent adapter request envelope, executes Codex CLI, updates state 
 and writes the adapter response envelope to stdout and the artifact directory.`;
 }
 
+// request envelope を stdin から読み取る。
 async function readStdin() {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
   return Buffer.concat(chunks).toString("utf8");
 }
 
+// 指定パスが存在するかを boolean で返す。
 async function pathExists(filePath) {
   try {
     await access(filePath);
@@ -103,10 +112,12 @@ async function pathExists(filePath) {
   }
 }
 
+// JSON ファイルを読み込み、オブジェクトとして返す。
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
 
+// JSON を一時ファイルへ書いてから rename し、対象ファイルを atomic に更新する。
 async function writeJsonAtomic(filePath, value) {
   // 書き込み途中で落ちても state file が半端に壊れないようにする。
   const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
@@ -114,10 +125,12 @@ async function writeJsonAtomic(filePath, value) {
   await rename(tmp, filePath);
 }
 
+// state や artifact に記録する現在時刻を ISO 文字列で返す。
 function nowIso() {
   return new Date().toISOString();
 }
 
+// state に append する artifact metadata を作る。
 function artifact(path, kind, round, agent = "codex") {
   return {
     path,
@@ -130,6 +143,7 @@ function artifact(path, kind, round, agent = "codex") {
   };
 }
 
+// response envelope と state に記録する recoverable error を作る。
 function makeError(code, message, detailsFile = null) {
   return {
     code,
@@ -139,6 +153,7 @@ function makeError(code, message, detailsFile = null) {
   };
 }
 
+// cross-agent へ返す adapter response envelope を作る。
 function makeResponse(request, status, outputFile, artifacts, error) {
   return {
     contract_version: 1,
@@ -152,10 +167,12 @@ function makeResponse(request, status, outputFile, artifacts, error) {
   };
 }
 
+// 診断情報を Markdown ファイルとして保存する。
 async function writeDiagnostic(filePath, lines) {
   await writeFile(filePath, `${lines.filter(Boolean).join("\n")}\n`, "utf8");
 }
 
+// request envelope と参照先ファイル/ディレクトリが実行可能な状態か検証する。
 async function validateRequest(request) {
   // ここでは adapter 境界だけを検証する。レビュー判断の意味解釈は cross-agent の責務。
   const required = [
@@ -197,6 +214,7 @@ async function validateRequest(request) {
   return null;
 }
 
+// Codex CLI を initial/resume のどちらかの mode で実行し、event log を保存する。
 async function runCodex({ codexBin, mode, request, promptText, effort, outputFile, eventLog, threadId }) {
   // prompt は shell 展開を通さず、argv の 1 要素として渡す。
   const args =
@@ -252,12 +270,14 @@ async function runCodex({ codexBin, mode, request, promptText, effort, outputFil
   });
 }
 
+// state の artifacts.files に adapter 生成 artifact を追記する。
 async function appendStateArtifacts(state, artifacts) {
   state.artifacts ??= {};
   state.artifacts.files ??= [];
   state.artifacts.files.push(...artifacts);
 }
 
+// 失敗時の diagnostic、response envelope、可能なら state 更新をまとめて行う。
 async function handleFailure({ request, state, paths, code, message, commandResult = null, extraDiagnostics = [] }) {
   // 失敗時も response envelope を返し、state が有効なら復旧可能な診断を追記する。
   const diagnosticArtifact = artifact(paths.diagnosticFile, "diagnostic", request.round);
@@ -301,6 +321,7 @@ async function handleFailure({ request, state, paths, code, message, commandResu
   return response;
 }
 
+// codex-adapter の主処理。request を受け、Codex 実行、state 更新、response 生成まで行う。
 export async function runAdapter(request, options = {}) {
   // adapter は agents.codex だけを所有する。rounds と全体 status は cross-agent の所有物。
   const codexBin = options.codexBin ?? "codex";
@@ -453,6 +474,7 @@ export async function runAdapter(request, options = {}) {
   return response;
 }
 
+// CLI entrypoint。request を読み込み runner を実行して response を stdout に出す。
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
