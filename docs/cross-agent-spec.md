@@ -27,17 +27,12 @@ v1 では `needs_user_input` state は使わない。
 
 ## target_root 決定
 
-`target_root` はレビューセッション全体の作業 root として cross-agent が決める。
+v1 では `target_root` の決定は Skill 側の責務とする。
+Skill はレビューセッション全体の作業 root を adapter 呼び出し前に決め、
+確定した `target_root` を runner input に含める。
+
+runner は受け取った `target_root` が存在する directory であることだけを検証する。
 エージェント固有の実行方法や制約は adapter 側で扱う。
-
-優先順:
-
-1. `target_files` がある場合、そのファイル群に共通する git root
-2. git root が取れない場合、project marker を親方向に探索
-3. marker もない場合、指定ファイルの親ディレクトリ
-4. `target_files` がない場合、現在の cwd
-
-複数候補があり自動決定できない場合はユーザーへ確認する。
 
 ## Runner: prepare-initial
 

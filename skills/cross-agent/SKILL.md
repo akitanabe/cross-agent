@@ -26,6 +26,18 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 
 対象や質問が特定できない場合は、adapter を呼ぶ前に通常会話で確認する。
 
+`target_root` はレビューセッション全体の作業 root として、adapter を呼ぶ前に決める。
+エージェント固有の実行方法や制約は adapter 側で扱う。
+
+優先順:
+
+1. `target_files` がある場合、そのファイル群に共通する git root
+2. git root が取れない場合、project marker を親方向に探索
+3. marker もない場合、指定ファイルの親ディレクトリ
+4. `target_files` がない場合、現在の cwd
+
+複数候補があり自動決定できない場合はユーザーへ確認する。
+
 機械的にできる初期化処理は `cross-agent-runner.mjs` に任せる。会話要約や設計案が必要な場合は
 `context_text` として整理し、構造化 input を stdin から渡して以下を実行する。
 
