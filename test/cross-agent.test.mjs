@@ -9,11 +9,13 @@ import { fileURLToPath } from "node:url";
 import {
   buildAdapterRequest,
   buildInitialPrompt,
+  buildNextRoundPrompt,
   completeRound,
   getRound,
   getRoundOutput,
   normalizeOptions,
   prepareInitialRound,
+  prepareNextRound,
   sessionPaths,
   startSession,
 } from "../scripts/cross-agent-runner.mjs";
@@ -68,6 +70,19 @@ test("buildInitialPrompt includes focus, context, target files, and review viewp
   assert.match(prompt, /C:\/data\/context\.md/);
   assert.match(prompt, /src\/a\.ts/);
   assert.match(prompt, /見落としているリスク/);
+});
+
+test("buildNextRoundPrompt includes previous output, focus, and follow-up directions", () => {
+  const prompt = buildNextRoundPrompt({
+    promptText: "根拠が弱い指摘を検証して",
+    previousOutputFile: "C:/data/round-1-output.md",
+    focusQuestion: "この設計でよいか",
+  });
+
+  assert.match(prompt, /同じレビューセッションを継続/);
+  assert.match(prompt, /C:\/data\/round-1-output\.md/);
+  assert.match(prompt, /根拠が弱い指摘を検証して/);
+  assert.match(prompt, /確信度が上がった点/);
 });
 
 test("buildAdapterRequest creates v1 envelope", () => {
@@ -189,6 +204,128 @@ test("prepareInitialRound creates prompt and adapter request", async () => {
     const prompt = await readFile(adapterRequest.prompt_file, "utf8");
     assert.match(prompt, /レビューして/);
     assert.match(prompt, /README\.md/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("prepareNextRound appends a deep dive round and adapter request", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      target_root: targetRoot,
+      options: { review_depth: "high", max_rounds: 2 },
+    });
+    await prepareInitialRound({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      agent: "codex",
+      focus_question: "設計判断を確認して",
+      context_text: "context",
+      target_files: ["src/a.ts"],
+    });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
+    await writeFile(outputFile, "round 1 output", "utf8");
+    await completeRound({
+      data_dir: dataDir,
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 1,
+      status: "completed",
+      output_file: outputFile,
+      artifacts: [],
+      error: null,
+    });
+
+    const result = await prepareNextRound({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      round_kind: "deep_dive",
+      prompt_text: "Round 1 の重要指摘を批判的に検証して",
+    });
+    const adapterRequest = result.content;
+
+    assert.equal(result.output_type, "json");
+    assert.equal(adapterRequest.round, 2);
+    assert.equal(adapterRequest.round_kind, "deep_dive");
+    assert.equal(adapterRequest.agent, "codex");
+    assert.equal(adapterRequest.context_file, join(paths.artifactDir, "context.md"));
+    assert.deepEqual(adapterRequest.target_files, ["src/a.ts"]);
+    assert.equal(adapterRequest.options.review_depth, "high");
+
+    const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
+    assert.equal(state.current_round, 2);
+    assert.equal(state.rounds.length, 2);
+    assert.equal(state.rounds[1].kind, "deep_dive");
+    assert.equal(state.rounds[1].agent_result, null);
+    assert.equal(state.artifacts.files.length, 5);
+
+    const prompt = await readFile(adapterRequest.prompt_file, "utf8");
+    assert.match(prompt, /Round 1 の重要指摘/);
+    assert.match(prompt, /round-1-codex-output\.md/);
+    assert.match(prompt, /設計判断を確認して/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("prepare-next-round command writes adapter request JSON", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      target_root: targetRoot,
+    });
+    await prepareInitialRound({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+    });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
+    await writeFile(outputFile, "round 1 output", "utf8");
+    await completeRound({
+      data_dir: dataDir,
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 1,
+      status: "completed",
+      output_file: outputFile,
+      artifacts: [],
+      error: null,
+    });
+
+    const result = await runRunner(
+      ["prepare-next-round"],
+      `${JSON.stringify(
+        {
+          data_dir: dataDir,
+          review_session_id: "session-1",
+          round_kind: "deep_dive",
+          prompt_text: "もう少し掘り下げて",
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const adapterRequest = JSON.parse(result.stdout);
+    assert.equal(adapterRequest.round, 2);
+    assert.equal(adapterRequest.round_kind, "deep_dive");
+    assert.match(adapterRequest.prompt_file, /round-2-prompt\.md$/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

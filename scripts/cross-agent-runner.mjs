@@ -115,6 +115,32 @@ export function buildInitialPrompt({ focusQuestion, contextFile, targetFiles = [
   return `${sections.join("\n\n")}\n`;
 }
 
+// 追加 round 用の prompt 本文を組み立てる。
+export function buildNextRoundPrompt({ promptText, previousOutputFile = null, focusQuestion = null }) {
+  if (!promptText) throw new Error("prompt_text is required.");
+
+  const sections = [
+    "あなたは同じレビューセッションを継続しています。以下の追加依頼にだけ答えてください。",
+  ];
+
+  if (previousOutputFile) {
+    sections.push(`## 前回 round の出力\n${previousOutputFile}`);
+  }
+
+  if (focusQuestion) {
+    sections.push(`## フォーカス質問\n${focusQuestion}`);
+  }
+
+  sections.push(`## 追加依頼\n${promptText}`);
+
+  sections.push(`## 出力方針
+- 前回 round の単なる繰り返しは避ける
+- 新しく確信度が上がった点、下がった点を明示する
+- 採用すべき対応、保留すべき対応、追加調査が必要な点を分ける`);
+
+  return `${sections.join("\n\n")}\n`;
+}
+
 // adapter に渡す request envelope v1 を組み立てる。
 export function buildAdapterRequest({
   reviewSessionId,
@@ -145,6 +171,88 @@ export function buildAdapterRequest({
       timeout_seconds: options.timeout_seconds ?? null,
     },
   };
+}
+
+// review_session_id から session state を読み込む。
+async function readSession(dataDir, reviewSessionId) {
+  if (!reviewSessionId) throw new Error("review_session_id is required.");
+
+  const paths = sessionPaths(dataDir, reviewSessionId);
+  const state = await readJson(paths.stateFile);
+  if (state.review_session_id !== reviewSessionId) {
+    throw new Error("state review_session_id does not match input review_session_id.");
+  }
+
+  return { paths, state };
+}
+
+// round の prompt、adapter request、state entry をまとめて作成する。
+async function prepareRound({
+  paths,
+  state,
+  reviewSessionId,
+  agent,
+  round,
+  roundKind,
+  promptText,
+  contextFile,
+  targetFiles,
+  focusQuestion,
+  resetRounds = false,
+  extraArtifacts = [],
+  updateState = null,
+}) {
+  const promptFile = resolve(paths.artifactDir, `round-${round}-prompt.md`);
+  await writeFile(promptFile, promptText, "utf8");
+
+  const adapterRequest = buildAdapterRequest({
+    reviewSessionId,
+    agent,
+    round,
+    roundKind,
+    targetRoot: state.target_root,
+    promptFile,
+    contextFile,
+    targetFiles,
+    focusQuestion,
+    options: state.options,
+  });
+
+  const adapterRequestFile = resolve(paths.artifactDir, `round-${round}-adapter-request.json`);
+  await writeJsonAtomic(adapterRequestFile, adapterRequest);
+
+  const now = nowIso();
+  state.updated_at = now;
+  state.current_round = round;
+  updateState?.({ promptFile, now });
+
+  const roundEntry = {
+    round,
+    kind: roundKind,
+    agent,
+    prompt_file: promptFile,
+    started_at: now,
+    completed_at: null,
+    agent_result: null,
+  };
+  if (resetRounds) {
+    state.rounds = [roundEntry];
+  } else {
+    state.rounds ??= [];
+    state.rounds.push(roundEntry);
+  }
+
+  state.artifacts ??= { files: [] };
+  state.artifacts.files ??= [];
+  state.artifacts.files.push(
+    ...extraArtifacts,
+    artifact(promptFile, "prompt", round, agent),
+    artifact(adapterRequestFile, "adapter_request", round, agent),
+  );
+
+  await writeJsonAtomic(paths.stateFile, state);
+
+  return commandOutput("json", adapterRequest);
 }
 
 // review session の空 state を作成する。
@@ -193,17 +301,9 @@ export async function startSession(input) {
 export async function prepareInitialRound(input) {
   const dataDir = resolveDataDir(input.data_dir);
   const reviewSessionId = input.review_session_id;
-  if (!reviewSessionId) throw new Error("review_session_id is required.");
-
-  const paths = sessionPaths(dataDir, reviewSessionId);
-  const state = await readJson(paths.stateFile);
-  if (state.review_session_id !== reviewSessionId) {
-    throw new Error("state review_session_id does not match input review_session_id.");
-  }
+  const { paths, state } = await readSession(dataDir, reviewSessionId);
 
   const agent = input.agent ?? "codex";
-  const targetRoot = state.target_root;
-  const options = state.options;
   const targetFiles = input.target_files ?? [];
   const focusQuestion = input.focus_question ?? null;
   const contextText = input.context_text ?? null;
@@ -218,56 +318,81 @@ export async function prepareInitialRound(input) {
     artifacts.push(artifact(contextFile, "context"));
   }
 
-  const promptFile = resolve(paths.artifactDir, "round-1-prompt.md");
   const promptText = buildInitialPrompt({ focusQuestion, contextFile, targetFiles });
-  await writeFile(promptFile, promptText, "utf8");
-  artifacts.push(artifact(promptFile, "prompt", 1, agent));
-
-  const adapterRequest = buildAdapterRequest({
+  return prepareRound({
+    paths,
+    state,
     reviewSessionId,
     agent,
     round: 1,
     roundKind: "initial_review",
-    targetRoot,
-    promptFile,
+    promptText,
     contextFile,
     targetFiles,
     focusQuestion,
-    options,
-  });
-
-  const adapterRequestFile = resolve(paths.artifactDir, "round-1-adapter-request.json");
-  await writeJsonAtomic(adapterRequestFile, adapterRequest);
-  artifacts.push(artifact(adapterRequestFile, "adapter_request", 1, agent));
-
-  const now = nowIso();
-  state.updated_at = now;
-  state.current_round = 1;
-  state.context = {
-    context_file: contextFile,
-    initial_prompt_file: promptFile,
-    focus_question: focusQuestion,
-    target_files: targetFiles,
-    source,
-  };
-  state.rounds = [
-    {
-      round: 1,
-      kind: "initial_review",
-      agent,
-      prompt_file: promptFile,
-      started_at: now,
-      completed_at: null,
-      agent_result: null,
+    resetRounds: true,
+    extraArtifacts: artifacts,
+    updateState: ({ promptFile }) => {
+      state.context = {
+        context_file: contextFile,
+        initial_prompt_file: promptFile,
+        focus_question: focusQuestion,
+        target_files: targetFiles,
+        source,
+      };
     },
-  ];
-  state.artifacts ??= { files: [] };
-  state.artifacts.files ??= [];
-  state.artifacts.files.push(...artifacts);
+  });
+}
 
-  await writeJsonAtomic(paths.stateFile, state);
+// 追加 round に必要な prompt と adapter request を作成する。
+export async function prepareNextRound(input) {
+  const dataDir = resolveDataDir(input.data_dir);
+  const reviewSessionId = input.review_session_id;
+  const { paths, state } = await readSession(dataDir, reviewSessionId);
+  if (state.status !== "active") {
+    throw new Error(`session is not active: ${state.status}`);
+  }
 
-  return commandOutput("json", adapterRequest);
+  const rounds = state.rounds ?? [];
+  const previousRound =
+    input.previous_round !== undefined
+      ? rounds.find((entry) => entry.round === input.previous_round)
+      : rounds.slice().reverse()[0];
+  if (!previousRound) throw new Error("previous round not found.");
+  if (!previousRound.agent_result) {
+    throw new Error(`previous round is not completed: ${previousRound.round}/${previousRound.agent}`);
+  }
+
+  const previousResult = previousRound.agent_result;
+  const agent = input.agent ?? previousRound.agent;
+  const roundKind = input.round_kind ?? "follow_up";
+  const focusQuestion = input.focus_question ?? state.context?.focus_question ?? null;
+  const targetFiles = input.target_files ?? state.context?.target_files ?? [];
+  const contextFile = state.context?.context_file ?? null;
+  const nextRound = Math.max(0, ...rounds.map((entry) => entry.round)) + 1;
+
+  const maxRounds = state.options?.max_rounds ?? DEFAULT_OPTIONS.max_rounds;
+  if (nextRound > maxRounds && roundKind !== "follow_up") {
+    throw new Error(`max_rounds exceeded: ${nextRound} > ${maxRounds}`);
+  }
+
+  const promptText = buildNextRoundPrompt({
+    promptText: input.prompt_text,
+    previousOutputFile: previousResult.output_file ?? null,
+    focusQuestion,
+  });
+  return prepareRound({
+    paths,
+    state,
+    reviewSessionId,
+    agent,
+    round: nextRound,
+    roundKind,
+    promptText,
+    contextFile,
+    targetFiles,
+    focusQuestion,
+  });
 }
 
 // adapter response を既存 state の rounds[].agent_result に反映し、round を完了させる。
@@ -371,6 +496,7 @@ function usage() {
   return `Usage:
   node scripts/cross-agent-runner.mjs start-session --input <input.json>
   node scripts/cross-agent-runner.mjs prepare-initial --input <input.json>
+  node scripts/cross-agent-runner.mjs prepare-next-round --input <input.json>
   node scripts/cross-agent-runner.mjs complete-round --input <input.json>
   node scripts/cross-agent-runner.mjs get-round-output --input <input.json>`;
 }
@@ -416,6 +542,8 @@ async function main() {
     result = await startSession(input);
   } else if (args.command === "prepare-initial") {
     result = await prepareInitialRound(input);
+  } else if (args.command === "prepare-next-round") {
+    result = await prepareNextRound(input);
   } else if (args.command === "complete-round") {
     result = commandOutput("json", await completeRound(input));
   } else if (args.command === "get-round-output") {

@@ -376,7 +376,7 @@ state machineに載せず、通常会話として処理する。
 
 ### Phase 2: セッション初期化
 
-`cross-agent` は以下を作成する。
+`cross-agent` は runner を通じて以下を作成する。
 
 - `review_session_id`
 - `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json`
@@ -413,8 +413,8 @@ cross-agent はその具体パスを request envelope や top-level state に含
 
 ### Phase 3: 共通コンテキストと初回プロンプト作成
 
-`cross-agent` は会話・プラン・設計案・ユーザー指定ファイルを整理し、artifact directoryに
-以下を作る。
+`cross-agent` は会話・プラン・設計案・ユーザー指定ファイルを整理し、runner を通じて
+artifact directory に以下を作る。
 
 - `context.md`: 会話や設計案の要約。ファイル指定だけで十分な場合は省略可
 - `round-1-prompt.md`: Round 1で選んだagentに渡す初回レビュー依頼
@@ -441,12 +441,12 @@ cross-agent はその具体パスを request envelope や top-level state に含
 
 ### Phase 4: Round 1 実行
 
-`cross-agent` は `rounds[]` に `kind: "initial_review"` と `agent` を持つroundを
-開始状態で追加し、そのagentに対応するadapterを実行する。
+`cross-agent` は runner で `rounds[]` に `kind: "initial_review"` と `agent` を持つ
+round を開始状態で追加し、その agent に対応する adapter を実行する。
 
 実行手順:
 
-1. request envelopeを組み立てる
+1. runner が request envelope を組み立てる
 2. 対象adapterへ委譲する
 3. response envelopeを受け取る
 4. `rounds[].agent_result` に結果を記録する
@@ -465,9 +465,16 @@ adapter 由来の `artifacts` / `errors` を重複 append しない。
 
 それ以外は `kind: "deep_dive"` のRound 2を実行する。
 
+Round 2を実行する代表例:
+
+- 重要指摘があるが具体性に欠ける
+- 指摘の根拠が弱い、または言い過ぎの可能性がある
+- 代替案、テスト観点、リスク評価のいずれかが薄い
+- Round 1の結論をそのまま採用するには不安が残る
+
 ### Phase 6: Round 2 プロンプト作成
 
-`cross-agent` はRound 1の成功した `output_file` を読み、1つの追加プロンプトを作る。
+`cross-agent` は Round 1 の成功した `output_file` を読み、1つの追加プロンプト本文を作る。
 
 - 深掘り: 重要だが具体性に欠ける指摘を詰める
 - 反論・批判的検証: 根拠が弱い指摘や言い過ぎに見える指摘を問い直す
@@ -475,7 +482,8 @@ adapter 由来の `artifacts` / `errors` を重複 append しない。
 
 ### Phase 7: Round 2 実行
 
-Round 1と同じagentに対応するadapterを実行する。
+`prepare-next-round` で prompt 保存、round 登録、adapter request 作成を行い、
+Round 1 と同じ agent に対応する adapter を実行する。
 `round_kind` は `deep_dive` とする。adapter側は `review_session_id` に紐づく自分の
 セッション状態を使い、Codexならresume、Claudeなら蓄積contextを再投入する。
 
@@ -495,14 +503,23 @@ Round 2を実行した場合は、冒頭で「2往復のやり取りを統合し
 統合表示後、sessionはフォローアップ可能なため `status: "active"` のまま維持する。
 ユーザーが終了を示した時点で `completed` にする。
 
+### Phase 8.5: Round 3 以降
+
+v1 では Round 3 以降を自動継続しない。ユーザーが明示的に深掘り継続を求め、かつ
+`max_rounds` に余裕がある場合だけ `kind: "deep_dive"` の round を追加する。
+
+統合表示後の追加質問は自動深掘りではなく `kind: "follow_up"` として扱う。
+`follow_up` は `max_rounds` の対象外とし、agent 指定がなければ直前 round と同じ
+agent を使う。
+
 ### Phase 9: フォローアップ
 
 ユーザーが追加質問をした場合、既存の `review_session_id` を継続して
 `kind: "follow_up"` のroundを追加する。
 
-フォローアップでは、追加質問を `round-N-prompt.md` に保存し、同じrequest envelope形式で
-adapterへ渡す。agent指定があればそのagentをroundに記録し、未指定なら直前roundと同じ
-agentを使う。
+フォローアップでは、`prepare-next-round` で追加質問を `round-N-prompt.md` に保存し、
+同じ request envelope 形式で adapter へ渡す。agent 指定があればその agent を round に記録し、
+未指定なら直前 round と同じ agent を使う。
 
 ### Phase 10: 終了とcleanup
 

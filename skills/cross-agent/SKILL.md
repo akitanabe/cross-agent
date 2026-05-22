@@ -136,8 +136,78 @@ ROUND_OUTPUT_REQUEST_JSON
 `max_rounds <= 1` の場合は深掘りしない。
 
 Round 1 の結果を読んで追加確認が必要な場合は、Round 2 の prompt を作り、同じ
-adapter request 形式で原則同じ agent に送る。現時点では Round 2 の prompt 作成と
-追加 round 登録は完全には runner 化されていないため、仕様に従って Skill 側で補助する。
+adapter request 形式で原則同じ agent に送る。
+
+Round 2 を実行しない条件:
+
+- `max_rounds <= 1`
+- Round 1 が失敗しており、深掘りより復旧やユーザー確認が必要
+- Round 1 が短く、明確に問題なしと結論している
+- ユーザー質問が単純で、Round 1 だけで十分に回答されている
+
+Round 2 を実行する条件:
+
+- 重要指摘があるが具体性に欠ける
+- 指摘の根拠が弱い、または言い過ぎの可能性がある
+- 代替案、テスト観点、リスク評価のいずれかが薄い
+- Round 1 の結論をそのまま採用するには不安が残る
+
+## 2回目以降
+
+追加 round の prompt 保存、state への round 登録、adapter request 作成は runner に任せる。
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-next-round <<'NEXT_ROUND_JSON'
+{
+  "review_session_id": "<review_session_id>",
+  "agent": "codex",
+  "round_kind": "deep_dive",
+  "prompt_text": "<round 2 prompt>"
+}
+NEXT_ROUND_JSON
+```
+
+runner は次に渡す adapter request envelope をそのまま返す。
+
+```json
+{
+  "contract_version": 1,
+  "review_session_id": "...",
+  "agent": "codex",
+  "round": 2,
+  "round_kind": "deep_dive",
+  "target_root": "...",
+  "prompt_file": "...",
+  "context_file": "...",
+  "target_files": [],
+  "focus_question": null,
+  "options": {
+    "review_depth": "medium",
+    "timeout_seconds": null
+  }
+}
+```
+
+`round_kind` は用途で使い分ける。
+
+| kind | 用途 |
+|---|---|
+| `deep_dive` | Round 1 の重要指摘を深掘り・反証・見落とし確認する自動深掘り |
+| `follow_up` | 統合表示後のユーザー追加質問。`max_rounds` の対象外 |
+| `recovery` | adapter 失敗後に、同じ session を使って復旧・再試行する round |
+
+Round 2 の自動深掘り prompt には、Round 1 の繰り返しではなく以下を含める。
+
+- 具体性に欠ける重要指摘の掘り下げ
+- 根拠が弱い指摘や言い過ぎに見える指摘の批判的検証
+- Round 1 で触れられていない重要観点の確認
+
+Round 3 以降は原則として自動継続しない。ユーザーの追加質問がある場合は
+`round_kind: "follow_up"` として扱い、明示的に深掘り継続を求められた場合だけ
+`max_rounds` の範囲内で `deep_dive` を追加する。
+
+Round 2 を実行した後は、Round 1 と同様に adapter response envelope を
+`complete-round` に渡し、`get-round-output` で出力本文を取得する。
 
 統合表示では以下を簡潔に示す。
 

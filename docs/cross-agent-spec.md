@@ -7,8 +7,8 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 選択した adapter に処理を委譲する。adapter response を受け取った後は top-level session
 state の round 結果を更新し、最終的な統合表示を行う。
 
-機械的な session 初期化、artifact 作成、初回 prompt 作成、adapter request 作成、
-round 完了反映は `scripts/cross-agent-runner.mjs` で行う。
+機械的な session 初期化、artifact 作成、初回 prompt 作成、追加 round の prompt 作成、
+adapter request 作成、round 完了反映は `scripts/cross-agent-runner.mjs` で行う。
 
 ## 入力
 
@@ -122,6 +122,76 @@ runner は以下を作成する。
 runner は既存の `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json` に
 context、round、artifact metadata を反映する。
 `context.md` は `context_text` がある場合だけ作成する。
+
+## Runner: prepare-next-round
+
+Round 2 以降の artifact、prompt、adapter request 作成は runner に任せる。
+対象 session は `review_session_id` から導出した既存 state file で特定する。
+
+```bash
+node scripts/cross-agent-runner.mjs prepare-next-round <<'NEXT_ROUND_JSON'
+{
+  "review_session_id": "...",
+  "agent": "codex",
+  "round_kind": "deep_dive",
+  "prompt_text": "Round 1 の重要指摘を批判的に検証してください。"
+}
+NEXT_ROUND_JSON
+```
+
+input:
+
+```json
+{
+  "data_dir": "...",
+  "review_session_id": "...",
+  "agent": "codex",
+  "previous_round": 1,
+  "round_kind": "deep_dive",
+  "focus_question": null,
+  "target_files": null,
+  "prompt_text": "..."
+}
+```
+
+`data_dir` を省略した場合は `CLAUDE_PLUGIN_DATA` を使う。
+`agent` を省略した場合は直前 round と同じ agent を使う。
+`previous_round` を省略した場合は最後の round を前回 round として扱う。
+`round_kind` を省略した場合は `follow_up` とする。
+`focus_question` と `target_files` を省略した場合は session context の値を引き継ぐ。
+同じ JSON は `--input <input.json>` でファイルから読ませることもできる。
+
+output:
+
+```json
+{
+  "contract_version": 1,
+  "review_session_id": "...",
+  "agent": "codex",
+  "round": 2,
+  "round_kind": "deep_dive",
+  "target_root": "...",
+  "prompt_file": "...",
+  "context_file": "...",
+  "target_files": [],
+  "focus_question": null,
+  "options": {
+    "review_depth": "medium",
+    "timeout_seconds": null
+  }
+}
+```
+
+stdout には次に adapter へ渡す request envelope だけを返す。
+runner は以下を作成する。
+
+- `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-N-prompt.md`
+- `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-N-adapter-request.json`
+
+runner は既存の `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json` に
+round、artifact metadata を append する。`deep_dive` や `recovery` など自動処理に
+属する round は `options.max_rounds` を超えて作成できない。ユーザーの追加質問である
+`follow_up` は `max_rounds` の対象外とする。
 
 ## Runner: complete-round
 
@@ -340,14 +410,50 @@ response envelope は要約フィールドを持たない。
 Round 1 の成功した出力本文を `get-round-output` で取得し、追加確認が必要な場合は `kind: "deep_dive"` の
 Round 2 を実行する。Round 2 は原則として Round 1 と同じ agent に送る。
 
+Round 2 を実行しない条件:
+
+- `max_rounds <= 1`
+- Round 1 の `agent_result.status` が `completed` ではない
+- Round 1 の成功結果が短く、かつ明確に「問題なし」と結論している
+- ユーザー質問が単純な Yes/No で、Round 1 で十分に回答された
+
+Round 2 を実行する条件:
+
+- 重要指摘があるが具体性に欠ける
+- 指摘の根拠が弱い、または言い過ぎの可能性がある
+- 代替案、テスト観点、リスク評価のいずれかが薄い
+- Round 1 の結論をそのまま採用するには不安が残る
+
 Round 2 prompt には以下を含める。
 
 - 具体性に欠ける重要指摘の掘り下げ
 - 根拠が弱い指摘や言い過ぎに見える指摘の批判的検証
 - Round 1 で触れられていない重要観点の確認
 
-現時点では Round 2 の prompt 作成と追加 round 登録は完全には runner 化されていない。
-実装が追加されるまでは Skill 側でこの仕様に従って補助する。
+Round 2 prompt の意味的な組み立ては Skill 側で行い、prompt 保存、追加 round 登録、
+adapter request 作成は `prepare-next-round` で runner に任せる。
+
+## Round 2 以降の扱い
+
+Round 2 以降も adapter request / response envelope は Round 1 と同じ契約を使う。
+cross-agent は `prepare-next-round` で追加 round を作成し、adapter response を
+`complete-round` で閉じ、必要な出力本文を `get-round-output` で読む。
+
+`round_kind` は以下の意味で使い分ける。
+
+| kind | 意味 | `max_rounds` |
+|---|---|---|
+| `deep_dive` | Round 1 の指摘を深掘り・反証・見落とし確認する自動深掘り | 対象 |
+| `follow_up` | 統合表示後のユーザー追加質問 | 対象外 |
+| `recovery` | adapter 失敗後の復旧・再試行 | 対象 |
+
+Round 3 以降は v1 では自動継続しない。ユーザーが追加質問をした場合は
+`follow_up` として扱う。ユーザーが明示的に深掘り継続を求め、かつ `max_rounds` に
+余裕がある場合だけ、追加の `deep_dive` round を作成してよい。
+
+`follow_up` で agent が未指定の場合は直前 round と同じ agent を使う。ユーザーが
+別 agent を指定した場合は、その agent を round に記録し、同じ envelope 形式で
+対応 adapter に渡す。
 
 ## 終了と cleanup
 
