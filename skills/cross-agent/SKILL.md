@@ -91,12 +91,13 @@ runner は次に渡す adapter request envelope をそのまま返す。
 }
 ```
 
-返ってきた JSON 全体を依頼本文に含め、対応する adapter Skill を呼ぶ。
+返ってきた JSON 全体を依頼本文に含め、対応する subagent に委譲する。
 
-| Agent | 委譲先 Skill |
+| Agent | 委譲先 |
 |---|---|
-| `codex` | `codex-adapter` |
-| `claude` | `claude-adapter` |
+| `codex` | `codex-agent` subagent（内部で `codex-adapter` skill を使用） |
+
+`claude-adapter` は未完成のため、v1 では `codex` のみを実行対象とする。
 
 adapter response envelope をそのまま渡して、round 完了処理を runner に任せる。
 

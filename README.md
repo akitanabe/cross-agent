@@ -11,6 +11,8 @@
 cross-agent/
 ├── .claude-plugin/
 │   └── plugin.json                  # プラグインマニフェスト
+├── agents/
+│   └── codex-agent.md               # Codex adapter を実行する subagent
 ├── skills/
 │   ├── cross-agent/SKILL.md         # オーケストレーター（/cross-agent）
 │   ├── codex-adapter/SKILL.md       # Codex CLI 固有の実装
@@ -32,6 +34,8 @@ cross-agent/
 
 - **オーケストレーター + アダプター**: `cross-agent` は中身を生成せず、コンテキストを
   組み立てて各エージェント adapter に委譲し、結果を統合する
+- **Codex subagent**: `codex-agent` は request envelope を受け取り、`codex-adapter`
+  skill の手順で Codex adapter runner を実行して response envelope だけを返す
 - **責務分離**: セッション管理（ID・マッピング・永続化）は各 adapter が自律的に持つ
 - **状態の永続化先**: `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json`
   （`${CLAUDE_PLUGIN_ROOT}` は更新時に変わる ephemeral なため使わない）
