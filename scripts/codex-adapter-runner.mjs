@@ -6,6 +6,8 @@ import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promis
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { normalizePath, normalizePathList } from "./path-utils.mjs";
+
 const OWNER = "codex-adapter";
 
 // cross-agent の抽象 review_depth を Codex CLI の reasoning effort に変換する。
@@ -344,7 +346,15 @@ export async function runAdapter(request, options = {}) {
   // rounds と全体 status は cross-agent の所有物。
   const codexBin = options.codexBin ?? "codex";
   const codexBinArgs = options.codexBinArgs ?? [];
-  const dataDir = options.dataDir ?? process.env.CLAUDE_PLUGIN_DATA;
+  const dataDir = normalizePath(options.dataDir ?? process.env.CLAUDE_PLUGIN_DATA);
+  // 環境差異（MSYS drive 表記・区切り文字）を入口で吸収し、以降は正規化済みパスで扱う。
+  request = {
+    ...request,
+    target_root: normalizePath(request.target_root),
+    prompt_file: normalizePath(request.prompt_file),
+    context_file: normalizePath(request.context_file),
+    target_files: normalizePathList(request.target_files),
+  };
   const requestWithDataDir = { ...request, data_dir: dataDir };
   const artifactDir = artifactDirFor(dataDir ?? ".", request.review_session_id ?? "unknown");
   const paths = artifactPaths(artifactDir, request.round ?? "unknown");

@@ -41,9 +41,8 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 機械的にできる session state の作成は `cross-agent-runner.mjs` に任せる。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session <<'SESSION_START_JSON'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session --target-root "<target_root>" <<'SESSION_START_JSON'
 {
-  "target_root": "<target_root>",
   "options": {
     "review_depth": "medium",
     "max_rounds": 2

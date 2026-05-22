@@ -5,6 +5,8 @@ import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { normalizePath, normalizePathList } from "./path-utils.mjs";
+
 const OWNER = "cross-agent";
 const DEFAULT_OPTIONS = {
   max_rounds: 2,
@@ -35,7 +37,7 @@ async function readJson(filePath) {
 function resolveDataDir(inputDataDir) {
   const dataDir = inputDataDir ?? process.env.CLAUDE_PLUGIN_DATA;
   if (!dataDir) throw new Error("data_dir or CLAUDE_PLUGIN_DATA is required.");
-  return dataDir;
+  return normalizePath(dataDir);
 }
 
 // 指定パスが存在し、ディレクトリであることを検証する。
@@ -258,7 +260,7 @@ async function prepareRound({
 // review session の空 state を作成する。
 export async function startSession(input) {
   const dataDir = resolveDataDir(input.data_dir);
-  const targetRoot = input.target_root;
+  const targetRoot = normalizePath(input.target_root);
   if (!targetRoot) throw new Error("target_root is required.");
   await ensureDirectory(targetRoot, "target_root");
 
@@ -304,7 +306,7 @@ export async function prepareInitialRound(input) {
   const { paths, state } = await readSession(dataDir, reviewSessionId);
 
   const agent = input.agent ?? "codex";
-  const targetFiles = input.target_files ?? [];
+  const targetFiles = normalizePathList(input.target_files ?? []);
   const focusQuestion = input.focus_question ?? null;
   const contextText = input.context_text ?? null;
   const source = input.source ?? (contextText && targetFiles.length ? "mixed" : contextText ? "conversation" : "files");
@@ -367,7 +369,7 @@ export async function prepareNextRound(input) {
   const agent = input.agent ?? previousRound.agent;
   const roundKind = input.round_kind ?? "follow_up";
   const focusQuestion = input.focus_question ?? state.context?.focus_question ?? null;
-  const targetFiles = input.target_files ?? state.context?.target_files ?? [];
+  const targetFiles = normalizePathList(input.target_files ?? state.context?.target_files ?? []);
   const contextFile = state.context?.context_file ?? null;
   const nextRound = Math.max(0, ...rounds.map((entry) => entry.round)) + 1;
 
@@ -477,11 +479,15 @@ export async function getRoundOutput(input) {
 
 // CLI 引数を、この runner が扱う command/input option に変換する。
 function parseArgs(argv) {
-  const args = { command: argv[0], inputFile: null };
+  const args = { command: argv[0], inputFile: null, targetRoot: null };
   for (let index = 1; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--input" || arg === "-i") {
       args.inputFile = argv[++index];
+    } else if (arg === "--target-root") {
+      // パスは JSON 本文に埋めると \U などで JSON.parse が落ちるため、argv で受ける。
+      // argv はシェルがリテラルに渡すので backslash パスもそのまま届き、startSession 側で正規化する。
+      args.targetRoot = argv[++index];
     } else if (arg === "--help" || arg === "-h") {
       args.help = true;
     } else {
@@ -494,7 +500,7 @@ function parseArgs(argv) {
 // CLI の使い方テキストを返す。
 function usage() {
   return `Usage:
-  node scripts/cross-agent-runner.mjs start-session --input <input.json>
+  node scripts/cross-agent-runner.mjs start-session --target-root <path> --input <input.json>
   node scripts/cross-agent-runner.mjs prepare-initial --input <input.json>
   node scripts/cross-agent-runner.mjs prepare-next-round --input <input.json>
   node scripts/cross-agent-runner.mjs complete-round --input <input.json>
@@ -539,6 +545,8 @@ async function main() {
   const input = await readInput(args.inputFile);
   let result = null;
   if (args.command === "start-session") {
+    // target_root は argv 優先。指定があれば JSON 本文の値より優先する。
+    if (args.targetRoot != null) input.target_root = args.targetRoot;
     result = await startSession(input);
   } else if (args.command === "prepare-initial") {
     result = await prepareInitialRound(input);
