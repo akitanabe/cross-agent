@@ -41,7 +41,7 @@ runner が stdout に出力した response envelope を cross-agent に返す。
 
 ## 守ること
 
-- Codex の出力統合や要約は行わず、`output_file` を返すだけにする
+- Codex の出力統合や要約は行わず、`output_file` を含む response envelope を返すだけにする
 
 ## 実装メモ
 
