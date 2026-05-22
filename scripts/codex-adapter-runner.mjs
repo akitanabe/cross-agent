@@ -231,7 +231,7 @@ async function validateRequest(request) {
 }
 
 // Codex CLI を initial/resume のどちらかの mode で実行し、event log を保存する。
-async function runCodex({ codexBin, mode, request, promptText, effort, outputFile, eventLog, threadId }) {
+async function runCodex({ codexBin, codexBinArgs = [], mode, request, promptText, effort, outputFile, eventLog, threadId }) {
   // prompt は shell 展開を通さず、argv の 1 要素として渡す。
   const args =
     mode === "initial"
@@ -264,7 +264,7 @@ async function runCodex({ codexBin, mode, request, promptText, effort, outputFil
   return await new Promise((resolvePromise) => {
     const eventStream = createWriteStream(eventLog, { flags: "w" });
     // CLI trace を 1 つの診断 artifact に残すため、stderr も stdout と同じ log に保存する。
-    const child = spawn(codexBin, args, {
+    const child = spawn(codexBin, [...codexBinArgs, ...args], {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -343,6 +343,7 @@ export async function runAdapter(request, options = {}) {
   // adapter は自分で導出する Codex agent state file だけを所有する。
   // rounds と全体 status は cross-agent の所有物。
   const codexBin = options.codexBin ?? "codex";
+  const codexBinArgs = options.codexBinArgs ?? [];
   const dataDir = options.dataDir ?? process.env.CLAUDE_PLUGIN_DATA;
   const requestWithDataDir = { ...request, data_dir: dataDir };
   const artifactDir = artifactDirFor(dataDir ?? ".", request.review_session_id ?? "unknown");
@@ -445,6 +446,7 @@ export async function runAdapter(request, options = {}) {
   const oldTargetRoot = existingAgentState.target_root ?? null;
   const commandResult = await runCodex({
     codexBin,
+    codexBinArgs,
     mode: decision.startNew ? "initial" : "resume",
     request,
     promptText,
