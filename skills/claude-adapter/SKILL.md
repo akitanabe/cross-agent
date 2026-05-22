@@ -5,8 +5,7 @@ user-invocable: false
 ---
 
 > **テンプレート段階**: このファイルは骨子です。
-> [docs/cross-agent-design.md](../../docs/cross-agent-design.md) の「今後の検討事項」に
-> 「claude-adapter のセッション継続の具体的な実装方法」が未確定とある。まずここを設計する。
+> claude-adapter のセッション継続の具体的な実装方法は未確定。まずここを設計する。
 
 ## 責務
 

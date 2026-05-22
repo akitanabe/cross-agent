@@ -219,7 +219,6 @@ Round 2 を実行した後は、Round 1 と同様に adapter response envelope �
 
 - 実装本体: `scripts/cross-agent-runner.mjs`
 - 仕様: `docs/cross-agent-spec.md`
-- 設計背景: `docs/cross-agent-design.md`
 - テスト: `test/cross-agent.test.mjs`
 - Node.js: 24+
 

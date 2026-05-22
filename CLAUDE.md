@@ -20,7 +20,7 @@ skills/
   codex-adapter/SKILL.md       # Codex CLI 固有の実装（user-invocable: false）
   claude-adapter/SKILL.md      # Claude 固有の実装（user-invocable: false）
 docs/
-  cross-agent-design.md        # 設計骨子（責務分離・セッション管理方針）
+  cross-agent-spec.md          # cross-agent 詳細仕様
   codex-adapter-spec.md        # codex-adapter 詳細仕様
   SKILL.md                     # 移植元の既存 advice スキル（Codex 実装の参照）
 scripts/
