@@ -16,8 +16,12 @@ Node.js runner を実行して response envelope を返す。
 
 request envelope を stdin から渡して以下を実行する。
 
+`--data-dir` は必須。plugin 文脈では `${CLAUDE_PLUGIN_DATA}` をそのまま渡す。Claude Code が
+skill content を読み込む時点で絶対パス (`~/.claude/plugins/data/<plugin-id>/`) に展開してから
+LLM に渡すため、argv 経由でも展開済みの絶対パスが届く。
+
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" [--launcher <shell>] <<'REQUEST_ENVELOPE_JSON'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" --data-dir "${CLAUDE_PLUGIN_DATA}" [--launcher <shell>] <<'REQUEST_ENVELOPE_JSON'
 {
   "contract_version": 1,
   "review_session_id": "...",

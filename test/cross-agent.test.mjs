@@ -107,6 +107,16 @@ test("buildAdapterRequest creates v1 envelope", () => {
   assert.equal(request.options.review_depth, "medium");
 });
 
+test("startSession throws when data_dir is missing (no env var fallback)", async () => {
+  // 公式仕様 (plugins-reference) では ${CLAUDE_PLUGIN_DATA} は skill content の
+  // substitution であり Bash tool には env var として export されない。よって SKILL から
+  // 来る data_dir を唯一のソースとし、env var フォールバックは持たない契約。
+  await assert.rejects(
+    startSession({ review_session_id: "no-data-dir", target_root: tmpdir() }),
+    /data_dir is required/,
+  );
+});
+
 test("startSession creates empty state", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {

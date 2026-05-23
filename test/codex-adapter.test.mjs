@@ -168,6 +168,22 @@ test("artifact path helpers use data directory layout", () => {
   assert.match(paths.responseFile.replaceAll("\\", "/"), /round-2-codex-response\.json$/);
 });
 
+test("runAdapter returns failed envelope when dataDir is missing (no env var fallback)", async () => {
+  // 公式仕様 (plugins-reference) では ${CLAUDE_PLUGIN_DATA} は skill/agent content 内の
+  // substitution であり Bash tool には env var として export されないため、--data-dir を
+  // 唯一のソースとする。未指定なら invalid_request_envelope で fail-loud。
+  const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
+  try {
+    const { request } = await createRequestFixture(temp);
+    const response = await runAdapter(request, { codexBin: process.execPath });
+    assert.equal(response.status, "failed");
+    assert.equal(response.error.code, "invalid_request_envelope");
+    assert.match(response.error.message, /--data-dir is required/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("runAdapter starts a Codex session and persists thread mapping", async () => {
   const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
   try {

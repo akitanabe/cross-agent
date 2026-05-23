@@ -35,9 +35,17 @@ async function readJson(filePath) {
 
 // input または環境変数から plugin data directory を解決する。
 function resolveDataDir(inputDataDir) {
-  const dataDir = inputDataDir ?? process.env.CLAUDE_PLUGIN_DATA;
-  if (!dataDir) throw new Error("data_dir or CLAUDE_PLUGIN_DATA is required.");
-  return normalizePath(dataDir);
+  // data_dir は JSON 本文での必須フィールド。plugin 文脈では SKILL.md の例の通り
+  // ${CLAUDE_PLUGIN_DATA} を埋め込む (skill content 内で Claude Code が絶対パスに展開する)。
+  // Bash tool に env var として export されないことが公式仕様なので、env var フォールバックは
+  // 直接 CLI から呼ぶケース以外では発火しないデッドコードになる。利用源を一本化する。
+  if (!inputDataDir) {
+    throw new Error(
+      "data_dir is required. In plugin context, embed `\"data_dir\": \"${CLAUDE_PLUGIN_DATA}\"` " +
+        "in the JSON body (Claude Code substitutes this in skill content).",
+    );
+  }
+  return normalizePath(inputDataDir);
 }
 
 // 指定パスが存在し、ディレクトリであることを検証する。

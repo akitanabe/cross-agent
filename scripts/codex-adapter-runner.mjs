@@ -372,7 +372,11 @@ export async function runAdapter(request, options = {}) {
   const codexBin = options.codexBin ?? "codex";
   const codexBinArgs = options.codexBinArgs ?? [];
   const launcher = options.launcher ?? null;
-  const dataDir = normalizePath(options.dataDir ?? process.env.CLAUDE_PLUGIN_DATA);
+  // data_dir は --data-dir フラグでの必須入力。plugin 文脈では SKILL.md の例の通り
+  // ${CLAUDE_PLUGIN_DATA} を渡す (skill content 内で Claude Code が絶対パスに展開する)。
+  // Bash tool に env var として export されないことが公式仕様なので、env var フォールバックは
+  // 直接 CLI から呼ぶケース以外では発火しないデッドコードになる。利用源を一本化する。
+  const dataDir = options.dataDir ? normalizePath(options.dataDir) : null;
   // 環境差異（MSYS drive 表記・区切り文字）を入口で吸収し、以降は正規化済みパスで扱う。
   request = {
     ...request,
@@ -393,7 +397,9 @@ export async function runAdapter(request, options = {}) {
       agentState: null,
       paths,
       code: "invalid_request_envelope",
-      message: "CLAUDE_PLUGIN_DATA or --data-dir is required.",
+      message:
+        "--data-dir is required. In plugin context, pass `--data-dir \"${CLAUDE_PLUGIN_DATA}\"` " +
+        "(Claude Code substitutes this in skill content).",
     });
   }
 

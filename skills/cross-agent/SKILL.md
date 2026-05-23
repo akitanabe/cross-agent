@@ -54,9 +54,16 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" normalize-path "<pat
 heredoc で stdin に渡す。クォート付きにすることで `$` などのシェル展開が抑止され、JSON 本文の
 他フィールド（後段の `context_text` 等）に含まれる記号で事故が起きない。
 
+`data_dir` は全 runner 呼び出しで必須。plugin 文脈では `${CLAUDE_PLUGIN_DATA}` を JSON に
+**リテラル**で書く。Claude Code が skill content を読み込む時点で絶対パス
+(`~/.claude/plugins/data/<plugin-id>/`) に展開してから LLM に渡すため、heredoc が `<<'…'`
+クォート付きでもシェル展開は不要 (展開済みの文字列が JSON に入る)。env var は Bash 経由では
+export されないので、runner 側のフォールバックは無い。
+
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session <<'SESSION_START_JSON'
 {
+  "data_dir": "${CLAUDE_PLUGIN_DATA}",
   "target_root": "C:/Users/tanabe/Source/Repos/cross-agent",
   "options": {
     "review_depth": "medium",
@@ -75,6 +82,7 @@ runner は `review_session_id` だけを stdout に返す。以降の runner / a
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-initial <<'INITIAL_ROUND_JSON'
 {
+  "data_dir": "${CLAUDE_PLUGIN_DATA}",
   "review_session_id": "<review_session_id>",
   "agent": "codex",
   "focus_question": "<focus_question>",
@@ -118,6 +126,7 @@ adapter response envelope をそのまま渡して、round 完了処理を runne
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-round <<'ADAPTER_RESPONSE_JSON'
 {
+  "data_dir": "${CLAUDE_PLUGIN_DATA}",
   "contract_version": 1,
   "review_session_id": "...",
   "agent": "codex",
@@ -135,6 +144,7 @@ ADAPTER_RESPONSE_JSON
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" get-round-output <<'ROUND_OUTPUT_REQUEST_JSON'
 {
+  "data_dir": "${CLAUDE_PLUGIN_DATA}",
   "review_session_id": "...",
   "round": 1
 }
@@ -174,6 +184,7 @@ Round 2 を実行する条件:
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-next-round <<'NEXT_ROUND_JSON'
 {
+  "data_dir": "${CLAUDE_PLUGIN_DATA}",
   "review_session_id": "<review_session_id>",
   "agent": "codex",
   "round_kind": "deep_dive",

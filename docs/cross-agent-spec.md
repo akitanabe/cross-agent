@@ -64,7 +64,9 @@ input:
 }
 ```
 
-`data_dir` を省略した場合は `CLAUDE_PLUGIN_DATA` を使う。
+`data_dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` を埋め込む
+(Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
+export されないため、runner にフォールバックは無い。
 `review_session_id` を省略した場合は runner が UUID を生成する。
 
 stdout には `review_session_id` だけを text で返す。
@@ -88,7 +90,9 @@ node scripts/cross-agent-runner.mjs prepare-initial <<'INITIAL_ROUND_JSON'
 INITIAL_ROUND_JSON
 ```
 
-`data_dir` を省略した場合は `CLAUDE_PLUGIN_DATA` を使う。
+`data_dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` を埋め込む
+(Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
+export されないため、runner にフォールバックは無い。
 同じ JSON は `--input <input.json>` でファイルから読ませることもできる。
 
 output:
@@ -154,7 +158,9 @@ input:
 }
 ```
 
-`data_dir` を省略した場合は `CLAUDE_PLUGIN_DATA` を使う。
+`data_dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` を埋め込む
+(Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
+export されないため、runner にフォールバックは無い。
 `agent` を省略した場合は直前 round と同じ agent を使う。
 `previous_round` を省略した場合は最後の round を前回 round として扱う。
 `round_kind` を省略した場合は `follow_up` とする。
@@ -196,7 +202,7 @@ round、artifact metadata を append する。`deep_dive` や `recovery` など�
 ## Runner: complete-round
 
 adapter response を top-level session state の `rounds[].agent_result` に反映する処理は
-runner に任せる。runner は `data_dir` または `CLAUDE_PLUGIN_DATA` と `review_session_id`
+runner に任せる。runner は必須の `data_dir` と `review_session_id`
 から session state file を導出する。
 
 ```bash
@@ -230,7 +236,9 @@ input:
 ```
 
 adapter response envelope をそのまま指定する。
-`data_dir` を省略した場合は `CLAUDE_PLUGIN_DATA` を使う。
+`data_dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` を埋め込む
+(Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
+export されないため、runner にフォールバックは無い。
 同じ JSON は `--input <input.json>` でファイルから読ませることもできる。
 
 runner は対象 round の `completed_at` と `agent_result` だけを更新する。
@@ -259,7 +267,9 @@ input:
 }
 ```
 
-`data_dir` を省略した場合は `CLAUDE_PLUGIN_DATA` を使う。
+`data_dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` を埋め込む
+(Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
+export されないため、runner にフォールバックは無い。
 `round` を省略した場合は、`output_file` を持つ最後の round を読む。
 
 stdout には output 本文だけを出力する。
