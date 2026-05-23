@@ -44,6 +44,9 @@ skill の手順に従って Codex adapter runner を実行します。
 - Codex のレビュー本文を直接まとめたり評価したりしない。
 - session state や artifact を手作業で編集しない。状態更新は runner に任せる。
 - runner が返した adapter response envelope を、そのまま最終回答として返す。
+- runner 起動前に `uname -s` で platform を観測し、`codex-adapter` skill の表に従って
+  必要なら `--launcher` を付ける (Git Bash on Windows なら `--launcher bash`)。
+  runner には platform 分岐がないため、この判定は agent の責任。
 
 ## 出力
 

@@ -124,6 +124,25 @@ Codex agent state file の形:
 11. agent state file の Codex state と artifacts/errors を更新する
 12. response envelope を `round-<N>-codex-response.json` に保存し、同じ JSON を stdout に返す
 
+### launcher
+
+runner には platform 分岐コードを置かない。Codex CLI を直接 `spawn` できない環境
+(Windows の `.cmd` shim 等) では、呼び出し側が `--launcher <shell>` を runner に渡す。
+
+`--launcher` が指定された場合、runner は spawn を次の形に書き換える。
+
+```bash
+<launcher> -c 'exec "$@"' <launcher> codex <args...> <prompt_text>
+```
+
+`exec "$@"` は POSIX shell の規約で、`-c '...' name args...` の `name` と `args` を
+positional parameter として受け取り、`exec` で当該プロセスに置き換える。これにより shell の
+word splitting / 変数展開を一切経由せず、`<prompt_text>` を含む各 argv が文字列のまま codex に
+届く。launcher は bash / sh / zsh など POSIX shell を想定する。
+
+agent (codex-agent) は起動前に `uname -s` で platform を判定し、Git Bash on Windows
+(`MINGW*` / `MSYS*` / `CYGWIN*`) なら `--launcher bash` を、それ以外は省略する。
+
 ### 初回起動
 
 agent state の `thread_id` が無い場合、または保存済み `target_root` と envelope の

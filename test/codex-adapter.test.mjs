@@ -1,8 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+// 環境に bash があるかをテスト実行時に観測する。Windows なら Git Bash の bash.exe を想定。
+function hasBashOnPath() {
+  const result = spawnSync("bash", ["-c", "exit 0"], { stdio: "ignore" });
+  return result.status === 0;
+}
 
 import {
   agentStateFileFor,
@@ -13,6 +20,7 @@ import {
   runAdapter,
   sessionStateFileFor,
   shouldStartNewSession,
+  wrapWithLauncher,
 } from "../scripts/codex-adapter-runner.mjs";
 
 async function writeFakeCodex(temp) {
@@ -31,7 +39,12 @@ if (outputIndex === -1) {
 const outputFile = args[outputIndex + 1];
 const mode = args[0] === "exec" && args[1] === "resume" ? "resume" : "initial";
 const threadId = mode === "resume" ? args[outputIndex + 2] : "thread-abc";
-await writeFile(outputFile, \`mode:\${mode}\\nthread:\${threadId}\\n\`, "utf8");
+const promptText = args[args.length - 1];
+await writeFile(
+  outputFile,
+  \`mode:\${mode}\\nthread:\${threadId}\\nprompt:\${promptText}\\n\`,
+  "utf8",
+);
 
 if (mode === "initial") {
   process.stdout.write(JSON.stringify({ type: "thread.started", thread_id: threadId }) + "\\n");
@@ -96,6 +109,25 @@ test("extractThreadIdFromJsonl ignores non-json lines and returns thread.started
 
 test("extractThreadIdFromJsonl returns null when no thread id exists", () => {
   assert.equal(extractThreadIdFromJsonl('{"type":"other.event"}\nnot json'), null);
+});
+
+test("wrapWithLauncher passes through when launcher is missing", () => {
+  assert.deepEqual(wrapWithLauncher(null, "codex", ["exec", "hi"]), {
+    command: "codex",
+    args: ["exec", "hi"],
+  });
+  assert.deepEqual(wrapWithLauncher("", "codex", ["exec", "hi"]), {
+    command: "codex",
+    args: ["exec", "hi"],
+  });
+});
+
+test("wrapWithLauncher routes spawn through `launcher -c 'exec \"$@\"' launcher codex ...`", () => {
+  // `-c 'exec "$@"' name ...` で shell の word splitting を bypass し、promptText を argv の
+  // 1 要素として codex まで届ける契約。launcher が bash / sh / zsh いずれでも成立する。
+  const wrapped = wrapWithLauncher("bash", "codex", ["exec", "prompt with $var"]);
+  assert.equal(wrapped.command, "bash");
+  assert.deepEqual(wrapped.args, ["-c", 'exec "$@"', "bash", "codex", "exec", "prompt with $var"]);
 });
 
 test("shouldStartNewSession starts when thread id is missing", () => {
@@ -165,6 +197,36 @@ test("runAdapter starts a Codex session and persists thread mapping", async () =
     await rm(temp, { recursive: true, force: true });
   }
 });
+
+test(
+  "runAdapter with launcher routes spawn through bash and preserves prompt with shell metacharacters",
+  { skip: hasBashOnPath() ? false : "bash not on PATH" },
+  async () => {
+    const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
+    try {
+      const fakeCodex = await writeFakeCodex(temp);
+      // promptText に $ や backtick が混ざっても word splitting されず argv で届くことを確認。
+      const tricky = 'prompt with $VAR `cmd` "quote"';
+      const { dataDir, request } = await createRequestFixture(temp, { prompt: tricky });
+
+      const response = await runAdapter(request, {
+        codexBin: process.execPath,
+        codexBinArgs: [fakeCodex],
+        dataDir,
+        launcher: "bash",
+      });
+
+      assert.equal(response.status, "completed");
+      const output = await readFile(response.output_file, "utf8");
+      assert.match(output, /mode:initial/);
+      assert.match(output, /thread:thread-abc/);
+      // promptText が bash の word splitting / 変数展開を一切経由せず argv で届いていることを確認。
+      assert.ok(output.includes(`prompt:${tricky}`), `expected prompt preserved, got: ${output}`);
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  },
+);
 
 test("runAdapter resumes an existing Codex session when target root matches", async () => {
   const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
