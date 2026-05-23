@@ -479,19 +479,17 @@ export async function getRoundOutput(input) {
 
 // CLI 引数を、この runner が扱う command/input option に変換する。
 function parseArgs(argv) {
-  const args = { command: argv[0], inputFile: null, targetRoot: null };
+  const args = { command: argv[0], inputFile: null, positional: [] };
   for (let index = 1; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--input" || arg === "-i") {
       args.inputFile = argv[++index];
-    } else if (arg === "--target-root") {
-      // パスは JSON 本文に埋めると \U などで JSON.parse が落ちるため、argv で受ける。
-      // argv はシェルがリテラルに渡すので backslash パスもそのまま届き、startSession 側で正規化する。
-      args.targetRoot = argv[++index];
     } else if (arg === "--help" || arg === "-h") {
       args.help = true;
-    } else {
+    } else if (arg.startsWith("-")) {
       throw new Error(`Unknown argument: ${arg}`);
+    } else {
+      args.positional.push(arg);
     }
   }
   return args;
@@ -500,7 +498,8 @@ function parseArgs(argv) {
 // CLI の使い方テキストを返す。
 function usage() {
   return `Usage:
-  node scripts/cross-agent-runner.mjs start-session --target-root <path> --input <input.json>
+  node scripts/cross-agent-runner.mjs normalize-path <path>
+  node scripts/cross-agent-runner.mjs start-session --input <input.json>
   node scripts/cross-agent-runner.mjs prepare-initial --input <input.json>
   node scripts/cross-agent-runner.mjs prepare-next-round --input <input.json>
   node scripts/cross-agent-runner.mjs complete-round --input <input.json>
@@ -542,11 +541,19 @@ async function main() {
     return;
   }
 
+  // normalize-path はパスを argv で受け、正規化結果を stdout へ返す独立コマンド。
+  // パスを JSON に埋めると \U などで JSON.parse が落ちるため、呼び出し側はこれで先に
+  // 正規化してから他コマンドの JSON 本文に埋める。stdin/JSON 入力は不要。
+  if (args.command === "normalize-path") {
+    const target = args.positional[0];
+    if (target == null) throw new Error("normalize-path requires a path argument.");
+    process.stdout.write(`${normalizePath(target)}\n`);
+    return;
+  }
+
   const input = await readInput(args.inputFile);
   let result = null;
   if (args.command === "start-session") {
-    // target_root は argv 優先。指定があれば JSON 本文の値より優先する。
-    if (args.targetRoot != null) input.target_root = args.targetRoot;
     result = await startSession(input);
   } else if (args.command === "prepare-initial") {
     result = await prepareInitialRound(input);

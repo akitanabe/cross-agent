@@ -164,54 +164,12 @@ test("start-session command writes review session id as text", async () => {
   }
 });
 
-test("start-session command takes target_root from --target-root and normalizes it", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
-  try {
-    const targetRoot = join(temp, "repo");
-    const dataDir = join(temp, "data");
-    await mkdir(targetRoot, { recursive: true });
-
-    // target_root は JSON 本文に入れず argv で渡す。本文に backslash パスがないので
-    // JSON.parse は落ちず、runner は argv の値を正規化して state に保存する。
-    const result = await runRunner(
-      ["start-session", "--target-root", targetRoot],
-      `${JSON.stringify({ data_dir: dataDir, review_session_id: "session-flag" }, null, 2)}\n`,
-    );
-
-    assert.equal(result.stdout, "session-flag\n");
-    const paths = sessionPaths(dataDir, "session-flag");
-    const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
-    assert.equal(state.target_root, normalizePath(targetRoot));
-  } finally {
-    await rm(temp, { recursive: true, force: true });
-  }
-});
-
-test("start-session command prefers --target-root over the JSON body value", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
-  try {
-    const flagRoot = join(temp, "from-flag");
-    const bodyRoot = join(temp, "from-body");
-    const dataDir = join(temp, "data");
-    await mkdir(flagRoot, { recursive: true });
-    await mkdir(bodyRoot, { recursive: true });
-
-    const result = await runRunner(
-      ["start-session", "--target-root", flagRoot],
-      `${JSON.stringify(
-        { data_dir: dataDir, review_session_id: "session-pref", target_root: bodyRoot },
-        null,
-        2,
-      )}\n`,
-    );
-
-    assert.equal(result.stdout, "session-pref\n");
-    const paths = sessionPaths(dataDir, "session-pref");
-    const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
-    assert.equal(state.target_root, normalizePath(flagRoot));
-  } finally {
-    await rm(temp, { recursive: true, force: true });
-  }
+test("normalize-path command prints the normalized path", async () => {
+  // 呼び出し側はこれで先に正規化してから JSON 本文に埋め込む想定。argv 経由なので
+  // backslash パスもシェルがリテラルに渡し、runner が forward slash に変換して返す。
+  const raw = "C:\\Users\\tanabe\\Source\\Repos\\cross-agent";
+  const result = await runRunner(["normalize-path", raw], "");
+  assert.equal(result.stdout, `${normalizePath(raw)}\n`);
 });
 
 test("prepareInitialRound creates prompt and adapter request", async () => {

@@ -40,9 +40,23 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 
 機械的にできる session state の作成は `cross-agent-runner.mjs` に任せる。
 
+パスを JSON 本文に埋める前に `normalize-path` で正規化する。Windows のバックスラッシュ
+（`C:\Users\...`）を素で JSON に埋めると `\U` などの不正エスケープで `JSON.parse` が落ちるため、
+**正規化済みのフォワードスラッシュ表記をリテラルとして** JSON に書く。
+
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session --target-root "<target_root>" <<'SESSION_START_JSON'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" normalize-path "<target_root>"
+# → 例: C:/Users/tanabe/Source/Repos/cross-agent
+```
+
+得られた正規化済みパスを `target_root` にリテラル値として埋め込み、`<<'…'` のクォート付き
+heredoc で stdin に渡す。クォート付きにすることで `$` などのシェル展開が抑止され、JSON 本文の
+他フィールド（後段の `context_text` 等）に含まれる記号で事故が起きない。
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session <<'SESSION_START_JSON'
 {
+  "target_root": "C:/Users/tanabe/Source/Repos/cross-agent",
   "options": {
     "review_depth": "medium",
     "max_rounds": 2
