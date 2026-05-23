@@ -164,12 +164,37 @@ test("start-session command writes review session id as text", async () => {
   }
 });
 
-test("normalize-path command prints the normalized path", async () => {
+test("normalize-path command converts paths according to host platform", async () => {
   // 呼び出し側はこれで先に正規化してから JSON 本文に埋め込む想定。argv 経由なので
   // backslash パスもシェルがリテラルに渡し、runner が forward slash に変換して返す。
+  // 期待値は host platform で確定させる: win32 なら backslash → forward slash、posix なら no-op。
   const raw = "C:\\Users\\tanabe\\Source\\Repos\\cross-agent";
   const result = await runRunner(["normalize-path", raw], "");
-  assert.equal(result.stdout, `${normalizePath(raw)}\n`);
+  if (process.platform === "win32") {
+    assert.equal(result.stdout, "C:/Users/tanabe/Source/Repos/cross-agent\n");
+  } else {
+    assert.equal(result.stdout, `${raw}\n`);
+  }
+});
+
+test("normalize-path command rejects multiple positional args to catch quote omissions", async () => {
+  // `normalize-path C:\Program Files\...` のように quote 忘れで空白分解された場合に、
+  // サイレントに先頭片を採用すると壊れたパスが下流に伝播する。fail-loud で止める。
+  await assert.rejects(
+    runRunner(["normalize-path", "C:\\Program", "Files\\App"], ""),
+    /normalize-path expects exactly one path/,
+  );
+});
+
+test("start-session command fails loud on raw Windows path embedded in JSON", async () => {
+  // SKILL の契約: パスは事前に normalize-path で正規化したリテラルを JSON に書く。
+  // 契約違反 (生の backslash パス) は JSON.parse で派手に落ちる、という設計意図の回帰テスト。
+  const dataDir = "/tmp/should-not-be-used";
+  const rawJson = `{"data_dir":"${dataDir}","review_session_id":"s","target_root":"C:\\Users\\tanabe"}`;
+  await assert.rejects(
+    runRunner(["start-session"], `${rawJson}\n`),
+    /JSON|escape|parse/i,
+  );
 });
 
 test("prepareInitialRound creates prompt and adapter request", async () => {

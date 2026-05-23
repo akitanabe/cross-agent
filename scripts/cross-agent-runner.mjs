@@ -545,9 +545,17 @@ async function main() {
   // パスを JSON に埋めると \U などで JSON.parse が落ちるため、呼び出し側はこれで先に
   // 正規化してから他コマンドの JSON 本文に埋める。stdin/JSON 入力は不要。
   if (args.command === "normalize-path") {
-    const target = args.positional[0];
-    if (target == null) throw new Error("normalize-path requires a path argument.");
-    process.stdout.write(`${normalizePath(target)}\n`);
+    // 引数が 2 個以上なら quote 忘れの可能性が高い (例: `normalize-path C:\Program Files\...` が
+    // 空白で分解されている)。サイレントに先頭だけ採用するとパス断片だけ正規化して返してしまい
+    // 事故るので、ここで fail-loud にする。
+    if (args.positional.length === 0) throw new Error("normalize-path requires a path argument.");
+    if (args.positional.length > 1) {
+      throw new Error(
+        `normalize-path expects exactly one path; received ${args.positional.length}. ` +
+          `Quote the path if it contains spaces.`,
+      );
+    }
+    process.stdout.write(`${normalizePath(args.positional[0])}\n`);
     return;
   }
 
