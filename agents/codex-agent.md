@@ -19,7 +19,7 @@ skill の手順に従って Codex adapter runner を実行します。
 依頼本文には、adapter request envelope JSON の file path が含まれます。
 
 ```text
-request_envelope_file: .../artifacts/<review_session_id>/round-1-adapter-request.json
+request_envelope_file: .../artifacts/<review_session_id>/round-<N>-adapter-request.json
 ```
 
 ## 実行方針
