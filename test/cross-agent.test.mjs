@@ -177,10 +177,10 @@ test("normalize-path command converts paths according to host platform", async (
   // 呼び出し側はこれで先に正規化してから JSON 本文に埋め込む想定。argv 経由なので
   // backslash パスもシェルがリテラルに渡し、runner が forward slash に変換して返す。
   // 期待値は host platform で確定させる: win32 なら backslash → forward slash、posix なら no-op。
-  const raw = "C:\\Users\\tanabe\\Source\\Repos\\cross-agent";
+  const raw = "C:\\Users\\example\\Projects\\sample-repo";
   const result = await runRunner(["normalize-path", raw], "");
   if (process.platform === "win32") {
-    assert.equal(result.stdout, "C:/Users/tanabe/Source/Repos/cross-agent\n");
+    assert.equal(result.stdout, "C:/Users/example/Projects/sample-repo\n");
   } else {
     assert.equal(result.stdout, `${raw}\n`);
   }
@@ -199,7 +199,7 @@ test("start-session command fails loud on raw Windows path embedded in JSON", as
   // SKILL の契約: パスは事前に normalize-path で正規化したリテラルを JSON に書く。
   // 契約違反 (生の backslash パス) は JSON.parse で派手に落ちる、という設計意図の回帰テスト。
   const dataDir = "/tmp/should-not-be-used";
-  const rawJson = `{"review_session_id":"s","target_root":"C:\\Users\\tanabe"}`;
+  const rawJson = `{"review_session_id":"s","target_root":"C:\\Users\\example"}`;
   await assert.rejects(
     runRunner(["start-session", "--data-dir", dataDir], `${rawJson}\n`),
     /JSON|escape|parse/i,

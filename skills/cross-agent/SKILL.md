@@ -47,7 +47,7 @@ Windows のバックスラッシュ (`C:\Users\...`) を素で JSON に書くと
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" normalize-path "<path>"
-# → 例: C:/Users/tanabe/Source/Repos/cross-agent
+# → 例: C:/path/to/project
 ```
 
 得られた正規化済みパスを各フィールドにリテラル値として埋め込み、`<<'…'` のクォート付き
@@ -63,7 +63,7 @@ heredoc で stdin に渡す。クォート付きにすることで `$` などの
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session --data-dir "${CLAUDE_PLUGIN_DATA}" <<'SESSION_START_JSON'
 {
-  "target_root": "C:/Users/tanabe/Source/Repos/cross-agent",
+  "target_root": "C:/path/to/project",
   "options": {
     "review_depth": "medium",
     "max_rounds": 2
