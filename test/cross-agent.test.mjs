@@ -153,10 +153,9 @@ test("start-session command writes review session id as text", async () => {
     await mkdir(targetRoot, { recursive: true });
 
     const result = await runRunner(
-      ["start-session"],
+      ["start-session", "--data-dir", dataDir],
       `${JSON.stringify(
         {
-          data_dir: dataDir,
           review_session_id: "session-1",
           target_root: targetRoot,
         },
@@ -200,9 +199,9 @@ test("start-session command fails loud on raw Windows path embedded in JSON", as
   // SKILL の契約: パスは事前に normalize-path で正規化したリテラルを JSON に書く。
   // 契約違反 (生の backslash パス) は JSON.parse で派手に落ちる、という設計意図の回帰テスト。
   const dataDir = "/tmp/should-not-be-used";
-  const rawJson = `{"data_dir":"${dataDir}","review_session_id":"s","target_root":"C:\\Users\\tanabe"}`;
+  const rawJson = `{"review_session_id":"s","target_root":"C:\\Users\\tanabe"}`;
   await assert.rejects(
-    runRunner(["start-session"], `${rawJson}\n`),
+    runRunner(["start-session", "--data-dir", dataDir], `${rawJson}\n`),
     /JSON|escape|parse/i,
   );
 });
@@ -353,10 +352,9 @@ test("prepare-next-round command writes adapter request JSON", async () => {
     });
 
     const result = await runRunner(
-      ["prepare-next-round"],
+      ["prepare-next-round", "--data-dir", dataDir],
       `${JSON.stringify(
         {
-          data_dir: dataDir,
           review_session_id: "session-1",
           round_kind: "deep_dive",
           prompt_text: "もう少し掘り下げて",
@@ -542,8 +540,8 @@ test("get-round-output command writes text by default", async () => {
     });
 
     const result = await runRunner(
-      ["get-round-output"],
-      `${JSON.stringify({ data_dir: dataDir, review_session_id: "session-1", round: 1 }, null, 2)}\n`,
+      ["get-round-output", "--data-dir", dataDir],
+      `${JSON.stringify({ review_session_id: "session-1", round: 1 }, null, 2)}\n`,
     );
 
     assert.equal(result.stdout, "plain review output\n");

@@ -39,7 +39,7 @@ runner は受け取った `target_root` が存在する directory であるこ�
 review session の空 state 作成と `review_session_id` 生成は runner に任せる。
 
 ```bash
-node scripts/cross-agent-runner.mjs start-session <<'SESSION_START_JSON'
+node scripts/cross-agent-runner.mjs start-session --data-dir "${CLAUDE_PLUGIN_DATA}" <<'SESSION_START_JSON'
 {
   "target_root": "...",
   "options": {
@@ -54,7 +54,6 @@ input:
 
 ```json
 {
-  "data_dir": "...",
   "review_session_id": null,
   "target_root": "...",
   "options": {
@@ -64,7 +63,7 @@ input:
 }
 ```
 
-`data_dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` を埋め込む
+`--data-dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` をそのまま渡す
 (Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
 export されないため、runner にフォールバックは無い。
 `review_session_id` を省略した場合は runner が UUID を生成する。
@@ -79,7 +78,7 @@ runner は `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json` に空の s
 対象 session は `review_session_id` から導出した既存 state file で特定する。
 
 ```bash
-node scripts/cross-agent-runner.mjs prepare-initial <<'INITIAL_ROUND_JSON'
+node scripts/cross-agent-runner.mjs prepare-initial --data-dir "${CLAUDE_PLUGIN_DATA}" <<'INITIAL_ROUND_JSON'
 {
   "review_session_id": "...",
   "agent": "codex",
@@ -90,7 +89,7 @@ node scripts/cross-agent-runner.mjs prepare-initial <<'INITIAL_ROUND_JSON'
 INITIAL_ROUND_JSON
 ```
 
-`data_dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` を埋め込む
+`--data-dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` をそのまま渡す
 (Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
 export されないため、runner にフォールバックは無い。
 同じ JSON は `--input <input.json>` でファイルから読ませることもできる。
@@ -133,7 +132,7 @@ Round 2 以降の artifact、prompt、adapter request 作成は runner に任せ
 対象 session は `review_session_id` から導出した既存 state file で特定する。
 
 ```bash
-node scripts/cross-agent-runner.mjs prepare-next-round <<'NEXT_ROUND_JSON'
+node scripts/cross-agent-runner.mjs prepare-next-round --data-dir "${CLAUDE_PLUGIN_DATA}" <<'NEXT_ROUND_JSON'
 {
   "review_session_id": "...",
   "agent": "codex",
@@ -147,7 +146,6 @@ input:
 
 ```json
 {
-  "data_dir": "...",
   "review_session_id": "...",
   "agent": "codex",
   "previous_round": 1,
@@ -158,7 +156,7 @@ input:
 }
 ```
 
-`data_dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` を埋め込む
+`--data-dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` をそのまま渡す
 (Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
 export されないため、runner にフォールバックは無い。
 `agent` を省略した場合は直前 round と同じ agent を使う。
@@ -202,11 +200,11 @@ round、artifact metadata を append する。`deep_dive` や `recovery` など�
 ## Runner: complete-round
 
 adapter response を top-level session state の `rounds[].agent_result` に反映する処理は
-runner に任せる。runner は必須の `data_dir` と `review_session_id`
+runner に任せる。runner は必須の `--data-dir` と `review_session_id`
 から session state file を導出する。
 
 ```bash
-node scripts/cross-agent-runner.mjs complete-round <<'ADAPTER_RESPONSE_JSON'
+node scripts/cross-agent-runner.mjs complete-round --data-dir "${CLAUDE_PLUGIN_DATA}" <<'ADAPTER_RESPONSE_JSON'
 {
   "contract_version": 1,
   "review_session_id": "...",
@@ -236,7 +234,7 @@ input:
 ```
 
 adapter response envelope をそのまま指定する。
-`data_dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` を埋め込む
+`--data-dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` をそのまま渡す
 (Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
 export されないため、runner にフォールバックは無い。
 同じ JSON は `--input <input.json>` でファイルから読ませることもできる。
@@ -250,7 +248,7 @@ top-level session state へ重複 append しない。
 完了済み round の agent output を読み、統合表示に必要な本文を返す処理は runner に任せる。
 
 ```bash
-node scripts/cross-agent-runner.mjs get-round-output <<'ROUND_OUTPUT_REQUEST_JSON'
+node scripts/cross-agent-runner.mjs get-round-output --data-dir "${CLAUDE_PLUGIN_DATA}" <<'ROUND_OUTPUT_REQUEST_JSON'
 {
   "review_session_id": "...",
   "round": 1
@@ -267,7 +265,7 @@ input:
 }
 ```
 
-`data_dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` を埋め込む
+`--data-dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` をそのまま渡す
 (Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
 export されないため、runner にフォールバックは無い。
 `round` を省略した場合は、`output_file` を持つ最後の round を読む。

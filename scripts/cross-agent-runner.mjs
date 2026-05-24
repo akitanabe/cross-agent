@@ -33,16 +33,17 @@ async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
 
-// input または環境変数から plugin data directory を解決する。
+// input から plugin data directory を解決する。
 function resolveDataDir(inputDataDir) {
-  // data_dir は JSON 本文での必須フィールド。plugin 文脈では SKILL.md の例の通り
-  // ${CLAUDE_PLUGIN_DATA} を埋め込む (skill content 内で Claude Code が絶対パスに展開する)。
-  // Bash tool に env var として export されないことが公式仕様なので、env var フォールバックは
-  // 直接 CLI から呼ぶケース以外では発火しないデッドコードになる。利用源を一本化する。
+  // data_dir は CLI から `--data-dir` argv で必須入力 (main 側で input.data_dir に注入する)。
+  // 直接 JS API を叩く呼び出し (テストなど) では input.data_dir に同等の値を渡す。
+  // plugin 文脈では SKILL.md の例の通り `${CLAUDE_PLUGIN_DATA}` を渡す
+  // (Claude Code が skill content 内で絶対パスに展開する)。Bash tool に env var として export
+  // されないことが公式仕様なので、env var フォールバックは持たない。
   if (!inputDataDir) {
     throw new Error(
-      "data_dir is required. In plugin context, embed `\"data_dir\": \"${CLAUDE_PLUGIN_DATA}\"` " +
-        "in the JSON body (Claude Code substitutes this in skill content).",
+      "data_dir is required. In plugin context, pass `--data-dir \"${CLAUDE_PLUGIN_DATA}\"` " +
+        "(Claude Code substitutes this in skill content).",
     );
   }
   return normalizePath(inputDataDir);
@@ -487,11 +488,13 @@ export async function getRoundOutput(input) {
 
 // CLI 引数を、この runner が扱う command/input option に変換する。
 function parseArgs(argv) {
-  const args = { command: argv[0], inputFile: null, positional: [] };
+  const args = { command: argv[0], inputFile: null, dataDir: null, positional: [] };
   for (let index = 1; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--input" || arg === "-i") {
       args.inputFile = argv[++index];
+    } else if (arg === "--data-dir") {
+      args.dataDir = argv[++index];
     } else if (arg === "--help" || arg === "-h") {
       args.help = true;
     } else if (arg.startsWith("-")) {
@@ -507,11 +510,11 @@ function parseArgs(argv) {
 function usage() {
   return `Usage:
   node scripts/cross-agent-runner.mjs normalize-path <path>
-  node scripts/cross-agent-runner.mjs start-session --input <input.json>
-  node scripts/cross-agent-runner.mjs prepare-initial --input <input.json>
-  node scripts/cross-agent-runner.mjs prepare-next-round --input <input.json>
-  node scripts/cross-agent-runner.mjs complete-round --input <input.json>
-  node scripts/cross-agent-runner.mjs get-round-output --input <input.json>`;
+  node scripts/cross-agent-runner.mjs start-session       --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
+  node scripts/cross-agent-runner.mjs prepare-initial     --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
+  node scripts/cross-agent-runner.mjs prepare-next-round  --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
+  node scripts/cross-agent-runner.mjs complete-round      --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
+  node scripts/cross-agent-runner.mjs get-round-output    --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]`;
 }
 
 // command result を stdout へ出す形式へそろえる。
@@ -568,6 +571,15 @@ async function main() {
   }
 
   const input = await readInput(args.inputFile);
+  // data_dir は CLI では --data-dir argv 経由が契約。JSON 本文に書かれている場合でも
+  // argv が優先する (codex-adapter と同じ呼び出し形に揃える)。
+  // TODO: 各関数のシグネチャを `fn(input, { dataDir })` に変えて、ここでの input 注入を
+  // やめる。codex-adapter の `runAdapter(request, { dataDir })` と同じ形にすると、
+  // domain payload と runtime plumbing の責務が型として分離できる。次に runner を
+  // 触るタイミングで test の直呼び (~15 箇所) と一緒に整理する。
+  if (args.dataDir) {
+    input.data_dir = args.dataDir;
+  }
   let result = null;
   if (args.command === "start-session") {
     result = await startSession(input);
