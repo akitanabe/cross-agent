@@ -13,6 +13,7 @@ import {
   completeRound,
   getRound,
   getRoundOutput,
+  normalizeReviewPaths,
   normalizeOptions,
   prepareInitialRound,
   prepareNextRound,
@@ -195,13 +196,60 @@ test("utils-runner normalize-path command converts paths according to host platf
   }
 });
 
-test("utils-runner normalize-path command rejects multiple positional args to catch quote omissions", async () => {
-  // `normalize-path C:\Program Files\...` のように quote 忘れで空白分解された場合に、
-  // サイレントに先頭片を採用すると壊れたパスが下流に伝播する。fail-loud で止める。
-  await assert.rejects(
-    runUtilsRunner(["normalize-path", "C:\\Program", "Files\\App"]),
-    /normalize-path expects exactly one path/,
-  );
+test("utils-runner normalize-path command supports multiple path arguments", async () => {
+  const result = await runUtilsRunner(["normalize-path", "C:\\repo", "src\\a.ts", "src\\b.ts"]);
+  if (process.platform === "win32") {
+    assert.equal(result.stdout, "C:/repo\nsrc/a.ts\nsrc/b.ts\n");
+  } else {
+    assert.equal(result.stdout, "C:\\repo\nsrc\\a.ts\nsrc\\b.ts\n");
+  }
+});
+
+test("utils-runner normalize-path command requires at least one path", async () => {
+  await assert.rejects(runUtilsRunner(["normalize-path"]), /normalize-path requires at least one path/);
+});
+
+test("normalizeReviewPaths creates cross-agent path input fragment", () => {
+  const result = normalizeReviewPaths({
+    targetRoot: "C:\\repo",
+    targetFiles: ["src\\a.ts", "src\\b.ts"],
+  });
+
+  if (process.platform === "win32") {
+    assert.deepEqual(result, {
+      target_root: "C:/repo",
+      target_files: ["src/a.ts", "src/b.ts"],
+    });
+  } else {
+    assert.deepEqual(result, {
+      target_root: "C:\\repo",
+      target_files: ["src\\a.ts", "src\\b.ts"],
+    });
+  }
+});
+
+test("normalize-review-paths command writes target_root and target_files JSON", async () => {
+  const result = await runRunner([
+    "normalize-review-paths",
+    "--target-root",
+    "C:\\repo",
+    "--target-files",
+    "src\\a.ts",
+    "src\\b.ts",
+  ], "");
+  const output = JSON.parse(result.stdout);
+
+  if (process.platform === "win32") {
+    assert.deepEqual(output, {
+      target_root: "C:/repo",
+      target_files: ["src/a.ts", "src/b.ts"],
+    });
+  } else {
+    assert.deepEqual(output, {
+      target_root: "C:\\repo",
+      target_files: ["src\\a.ts", "src\\b.ts"],
+    });
+  }
 });
 
 test("start-session command fails loud on raw Windows path embedded in JSON", async () => {

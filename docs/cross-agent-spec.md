@@ -34,6 +34,20 @@ Skill はレビューセッション全体の作業 root を adapter 呼び出�
 runner は受け取った `target_root` が存在する directory であることだけを検証する。
 エージェント固有の実行方法や制約は adapter 側で扱う。
 
+## パス正規化
+
+Skill は runner input の JSON 本文に入れる前に、`target_root` と `target_files` の各要素を
+`scripts/cross-agent-runner.mjs normalize-review-paths` で正規化する。
+Windows の `\` を JSON に素で埋め込むと `\U` などが不正 escape になりうるため、
+JSON へ貼る値は forward slash 表記にそろえる。
+
+```bash
+node scripts/cross-agent-runner.mjs normalize-review-paths --target-root "<target_root>" --target-files "<target_file_1>" "<target_file_2>"
+```
+
+stdout は `target_root` と `target_files` を持つ JSON fragment を返す。
+空白を含む path は path ごとに quote する。
+
 ## Runner: start-session
 
 review session の空 state 作成と `review_session_id` 生成は runner に任せる。

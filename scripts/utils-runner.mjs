@@ -11,18 +11,12 @@ function parseArgs(argv) {
 
 function usage() {
   return `Usage:
-  node scripts/utils-runner.mjs normalize-path <path>`;
+  node scripts/utils-runner.mjs normalize-path <path...>`;
 }
 
 export function runNormalizePathCommand(positional) {
-  if (positional.length === 0) throw new Error("normalize-path requires a path argument.");
-  if (positional.length > 1) {
-    throw new Error(
-      `normalize-path expects exactly one path; received ${positional.length}. ` +
-        `Quote the path if it contains spaces.`,
-    );
-  }
-  return normalizePath(positional[0]);
+  if (positional.length === 0) throw new Error("normalize-path requires at least one path argument.");
+  return positional.map((value) => normalizePath(value));
 }
 
 async function main() {
@@ -33,7 +27,7 @@ async function main() {
   }
 
   if (args.command === "normalize-path") {
-    process.stdout.write(`${runNormalizePathCommand(args.positional)}\n`);
+    process.stdout.write(`${runNormalizePathCommand(args.positional).join("\n")}\n`);
     return;
   }
 

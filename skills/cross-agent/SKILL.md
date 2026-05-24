@@ -41,13 +41,21 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 機械的にできる session state の作成は `cross-agent-runner.mjs` に任せる。
 
 **JSON 本文に入れる全パス** (`target_root` だけでなく `target_files` の各要素も含む) は、
-事前に `normalize-path` で正規化したフォワードスラッシュ表記をリテラルとして埋め込む。
+事前に `normalize-review-paths` で正規化したフォワードスラッシュ表記をリテラルとして埋め込む。
 Windows のバックスラッシュ (`C:\Users\...`) を素で JSON に書くと `\U` などの不正エスケープで
-`JSON.parse` が落ちる。1 件ずつ `normalize-path` に通し、結果を JSON にリテラルで貼る。
+`JSON.parse` が落ちる。`target_root` と `target_files` をまとめて正規化し、stdout の JSON
+fragment を後続の runner input に貼る。空白を含むパスは、パスごとに quote する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/utils-runner.mjs" normalize-path "<path>"
-# → 例: C:/path/to/project
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" normalize-review-paths --target-root "<target_root>" --target-files "<target_file_1>" "<target_file_2>"
+# → 例:
+# {
+#   "target_root": "C:/path/to/project",
+#   "target_files": [
+#     "C:/path/to/project/src/a.ts",
+#     "C:/path/to/project/src/b.ts"
+#   ]
+# }
 ```
 
 得られた正規化済みパスを各フィールドにリテラル値として埋め込み、`<<'…'` のクォート付き

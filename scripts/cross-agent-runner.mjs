@@ -488,13 +488,19 @@ export async function getRoundOutput(input) {
 
 // CLI 引数を、この runner が扱う command/input option に変換する。
 function parseArgs(argv) {
-  const args = { command: argv[0], inputFile: null, dataDir: null, positional: [] };
+  const args = { command: argv[0], inputFile: null, dataDir: null, targetRoot: null, targetFiles: [], positional: [] };
   for (let index = 1; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--input" || arg === "-i") {
       args.inputFile = argv[++index];
     } else if (arg === "--data-dir") {
       args.dataDir = argv[++index];
+    } else if (arg === "--target-root") {
+      args.targetRoot = argv[++index];
+    } else if (arg === "--target-files") {
+      while (index + 1 < argv.length && !argv[index + 1].startsWith("--")) {
+        args.targetFiles.push(argv[++index]);
+      }
     } else if (arg === "--help" || arg === "-h") {
       args.help = true;
     } else if (arg.startsWith("-")) {
@@ -509,7 +515,8 @@ function parseArgs(argv) {
 // CLI の使い方テキストを返す。
 function usage() {
   return `Usage:
-  node scripts/utils-runner.mjs normalize-path <path>
+  node scripts/utils-runner.mjs normalize-path <path...>
+  node scripts/cross-agent-runner.mjs normalize-review-paths --target-root <root> [--target-files <file...>]
   node scripts/cross-agent-runner.mjs start-session       --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
   node scripts/cross-agent-runner.mjs prepare-initial     --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
   node scripts/cross-agent-runner.mjs prepare-next-round  --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
@@ -531,6 +538,14 @@ function writeCommandOutput(result) {
   process.stdout.write(`${JSON.stringify(result.content, null, 2)}\n`);
 }
 
+export function normalizeReviewPaths({ targetRoot, targetFiles = [] }) {
+  if (!targetRoot) throw new Error("target_root is required.");
+  return {
+    target_root: normalizePath(targetRoot),
+    target_files: normalizePathList(targetFiles ?? []),
+  };
+}
+
 // runner input を stdin から読み取る。
 async function readStdin() {
   const chunks = [];
@@ -549,6 +564,14 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.command) {
     process.stdout.write(`${usage()}\n`);
+    return;
+  }
+
+  if (args.command === "normalize-review-paths") {
+    writeCommandOutput(commandOutput("json", normalizeReviewPaths({
+      targetRoot: args.targetRoot,
+      targetFiles: args.targetFiles,
+    })));
     return;
   }
 
