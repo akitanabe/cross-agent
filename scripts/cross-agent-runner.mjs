@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { normalizePath, normalizePathList } from "./path-utils.mjs";
@@ -14,6 +14,17 @@ const DEFAULT_OPTIONS = {
   review_depth: "medium",
   keep_artifacts: false,
 };
+const SUPPORTED_CONTRACT_VERSION = 1;
+const ADAPTER_RESPONSE_STATUSES = new Set(["completed", "failed", "skipped"]);
+
+// 親パス配下に子パスがあるかを判定する。drive 違いでも誤判定しない。
+function isPathInside(parent, child) {
+  const parentPath = resolve(parent);
+  const childPath = resolve(child);
+  if (parentPath === childPath) return true;
+  const rel = relative(parentPath, childPath);
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+}
 
 // state や artifact に記録する現在時刻を ISO 文字列で返す。
 function nowIso() {
@@ -406,6 +417,41 @@ export async function prepareNextRound(input) {
   });
 }
 
+// adapter response envelope の必須フィールドと output_file の path containment を検証する。
+// adapter runner 自体は信頼できるが、LLM/CLI 境界では契約ドリフトや subagent の
+// 転記事故、prompt injection で envelope が偽造される可能性がある。安価な検証で防げる。
+async function validateAdapterResponse(response, paths) {
+  if (response.contract_version !== SUPPORTED_CONTRACT_VERSION) {
+    throw new Error(`invalid adapter response: unsupported contract_version ${response.contract_version}`);
+  }
+  if (!ADAPTER_RESPONSE_STATUSES.has(response.status)) {
+    throw new Error(`invalid adapter response: unknown status ${response.status}`);
+  }
+
+  if (response.status === "completed") {
+    if (typeof response.output_file !== "string" || response.output_file.length === 0) {
+      throw new Error("invalid adapter response: completed requires output_file");
+    }
+    if (!isPathInside(paths.artifactDir, response.output_file)) {
+      throw new Error(`invalid adapter response: output_file is outside artifact dir: ${response.output_file}`);
+    }
+    let entry;
+    try {
+      entry = await stat(response.output_file);
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        throw new Error(`invalid adapter response: output_file does not exist: ${response.output_file}`);
+      }
+      throw error;
+    }
+    if (!entry.isFile()) {
+      throw new Error(`invalid adapter response: output_file is not a file: ${response.output_file}`);
+    }
+  } else if (response.output_file != null) {
+    throw new Error(`invalid adapter response: ${response.status} must not include output_file`);
+  }
+}
+
 // adapter response を既存 state の rounds[].agent_result に反映し、round を完了させる。
 export async function completeRound(input) {
   // adapter は artifacts/errors を自分で append する。ここでは round 結果だけを閉じる。
@@ -414,9 +460,10 @@ export async function completeRound(input) {
   const reviewSessionId = agentResponse.review_session_id;
   if (!reviewSessionId) throw new Error("review_session_id is required.");
 
-  const stateFile = sessionPaths(dataDir, reviewSessionId).stateFile;
+  const paths = sessionPaths(dataDir, reviewSessionId);
+  await validateAdapterResponse(agentResponse, paths);
 
-  const state = await readJson(stateFile);
+  const state = await readJson(paths.stateFile);
   if (state.review_session_id !== reviewSessionId) {
     throw new Error("state review_session_id does not match input review_session_id.");
   }
@@ -435,10 +482,10 @@ export async function completeRound(input) {
 
   state.updated_at = nowIso();
 
-  await writeJsonAtomic(stateFile, state);
+  await writeJsonAtomic(paths.stateFile, state);
   return {
     review_session_id: state.review_session_id,
-    state_file: stateFile,
+    state_file: paths.stateFile,
     round: agentResponse.round,
     agent: agentResponse.agent,
     status: agentResponse.status,

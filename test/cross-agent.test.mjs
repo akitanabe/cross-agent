@@ -475,6 +475,174 @@ test("completeRound records adapter response into state", async () => {
   }
 });
 
+test("completeRound rejects unsupported contract_version", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({ data_dir: dataDir, review_session_id: "session-1", target_root: targetRoot });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
+    await writeFile(outputFile, "ok", "utf8");
+
+    await assert.rejects(
+      completeRound({
+        data_dir: dataDir,
+        contract_version: 2,
+        review_session_id: "session-1",
+        agent: "codex",
+        round: 1,
+        status: "completed",
+        output_file: outputFile,
+      }),
+      /contract_version/,
+    );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("completeRound rejects unknown status", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({ data_dir: dataDir, review_session_id: "session-1", target_root: targetRoot });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    await assert.rejects(
+      completeRound({
+        data_dir: dataDir,
+        contract_version: 1,
+        review_session_id: "session-1",
+        agent: "codex",
+        round: 1,
+        status: "succeeded",
+      }),
+      /unknown status/,
+    );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("completeRound rejects output_file outside artifact dir", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({ data_dir: dataDir, review_session_id: "session-1", target_root: targetRoot });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    const strayFile = join(temp, "outside.md");
+    await writeFile(strayFile, "outside artifact dir", "utf8");
+
+    await assert.rejects(
+      completeRound({
+        data_dir: dataDir,
+        contract_version: 1,
+        review_session_id: "session-1",
+        agent: "codex",
+        round: 1,
+        status: "completed",
+        output_file: strayFile,
+      }),
+      /outside artifact dir/,
+    );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("completeRound rejects completed status without output_file", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({ data_dir: dataDir, review_session_id: "session-1", target_root: targetRoot });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    await assert.rejects(
+      completeRound({
+        data_dir: dataDir,
+        contract_version: 1,
+        review_session_id: "session-1",
+        agent: "codex",
+        round: 1,
+        status: "completed",
+      }),
+      /completed requires output_file/,
+    );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("completeRound rejects failed status carrying output_file", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({ data_dir: dataDir, review_session_id: "session-1", target_root: targetRoot });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
+    await writeFile(outputFile, "ok", "utf8");
+
+    await assert.rejects(
+      completeRound({
+        data_dir: dataDir,
+        contract_version: 1,
+        review_session_id: "session-1",
+        agent: "codex",
+        round: 1,
+        status: "failed",
+        output_file: outputFile,
+      }),
+      /must not include output_file/,
+    );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("completeRound rejects missing output_file", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({ data_dir: dataDir, review_session_id: "session-1", target_root: targetRoot });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    const missingFile = join(paths.artifactDir, "round-1-codex-output.md");
+
+    await assert.rejects(
+      completeRound({
+        data_dir: dataDir,
+        contract_version: 1,
+        review_session_id: "session-1",
+        agent: "codex",
+        round: 1,
+        status: "completed",
+        output_file: missingFile,
+      }),
+      /output_file does not exist/,
+    );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("getRound returns round state", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
