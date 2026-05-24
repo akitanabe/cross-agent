@@ -2,9 +2,7 @@
 name: codex-adapter
 description: cross-agent から委譲される Codex CLI（codex exec）固有のアダプター。review_session_id を Codex の thread_id にマッピングしてセッションを継続し、レビューを実行する。通常はユーザーが直接呼ばず、cross-agent オーケストレーターから呼び出される。
 user-invocable: false
-allowed-tools:
-  - Bash(uname -s)
-  - Bash(node **/scripts/codex-adapter-runner.mjs*)
+allowed-tools: Bash(uname -s) Bash(node **/scripts/codex-adapter-runner.mjs*)
 ---
 
 ## 役割
