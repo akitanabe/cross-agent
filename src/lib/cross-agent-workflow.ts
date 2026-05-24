@@ -403,7 +403,7 @@ export async function completeRound(input: CompleteRoundInput): Promise<Record<s
   round.completed_at = nowIso();
   round.agent_result = {
     agent: agentResponse.agent,
-    round: agentResponse.round,
+    round: agentResponse.round as number,
     status: agentResponse.status,
     output_file: normalizePath(agentResponse.output_file ?? null) as string | null,
     error: agentResponse.error,
@@ -415,7 +415,7 @@ export async function completeRound(input: CompleteRoundInput): Promise<Record<s
   return {
     review_session_id: state.review_session_id,
     state_file: paths.stateFile,
-    round: agentResponse.round,
+    round: agentResponse.round as number,
     agent: agentResponse.agent,
     status: agentResponse.status,
     response_file: responseFile,

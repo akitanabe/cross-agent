@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck
 
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
@@ -8,12 +7,91 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseOptionArgs } from "../lib/cli-args.ts";
+import type {
+  AdapterRequestEnvelope,
+  AdapterResponseArtifact,
+  AdapterResponseEnvelope,
+  AdapterResponseError,
+  AdapterResponseStatus,
+  ReviewDepth,
+} from "../lib/adapter-envelope.ts";
 import { normalizePath, normalizePathList } from "../lib/path-utils.ts";
+
+type CodexEffort = "medium" | "high" | "xhigh";
+type EffortDecision = { effort: CodexEffort; warning: string | null };
+
+type ArtifactPathSet = {
+  outputFile: string;
+  eventLog: string;
+  diagnosticFile: string;
+  responseFile: string;
+};
+
+type SessionDecision = {
+  startNew: boolean;
+  reason: "missing_thread_id" | "target_root_changed" | "resume";
+};
+
+type CodexAgentState = {
+  schema_version?: number;
+  review_session_id: string;
+  agent: "codex";
+  status: string;
+  thread_id: string | null;
+  target_root: string | null;
+  last_output_file: string | null;
+  last_event_log: string | null;
+  last_error: AdapterResponseError;
+  artifacts: AdapterResponseArtifact[];
+  errors: Array<Record<string, unknown>>;
+  updated_at?: string;
+};
+
+type CodexRunOptions = {
+  codexBin?: string;
+  codexBinArgs?: string[];
+  dataDir?: string | null;
+  launcher?: string | null;
+};
+
+type ParsedArgs = {
+  requestFile: string | null;
+  codexBin: string;
+  dataDir: string | null;
+  launcher: string | null;
+  help?: boolean;
+};
+
+type RecoverableError = NonNullable<AdapterResponseError> & {
+  code: string;
+  message: string;
+  recoverable: true;
+  details_file: string | null;
+};
+
+type LaunchTarget = {
+  command: string;
+  args: string[];
+};
+
+type CodexCommandResult = {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  error: Error | null;
+  args: string[];
+};
+
+type AdapterRequestInput = AdapterRequestEnvelope & Record<string, any>;
+type AdapterRequestWithDataDir = AdapterRequestInput & { data_dir?: string | null };
+type SessionState = {
+  review_session_id?: string;
+  [key: string]: any;
+};
 
 const OWNER = "codex-adapter";
 
 // cross-agent の抽象 review_depth を Codex CLI の reasoning effort に変換する。
-export function effortForReviewDepth(reviewDepth) {
+export function effortForReviewDepth(reviewDepth: ReviewDepth | null | undefined): EffortDecision {
   if (reviewDepth === "low") return { effort: "medium", warning: null };
   if (reviewDepth === "medium") return { effort: "high", warning: null };
   if (reviewDepth === "high") return { effort: "xhigh", warning: null };
@@ -24,23 +102,23 @@ export function effortForReviewDepth(reviewDepth) {
 }
 
 // data directory から、この review session 用の artifact directory を導出する。
-export function artifactDirFor(dataDir, reviewSessionId) {
+export function artifactDirFor(dataDir: string, reviewSessionId: string): string {
   // plugin root へ書かないように、artifact は state store の隣に置く。
   return resolve(dataDir, "artifacts", reviewSessionId);
 }
 
 // data directory から、session state file を導出する。
-export function sessionStateFileFor(dataDir, reviewSessionId) {
+export function sessionStateFileFor(dataDir: string, reviewSessionId: string): string {
   return resolve(dataDir, "sessions", `${reviewSessionId}.json`);
 }
 
 // data directory から、Codex 用の個別 agent state file を導出する。
-export function agentStateFileFor(dataDir, reviewSessionId) {
+export function agentStateFileFor(dataDir: string, reviewSessionId: string): string {
   return resolve(dataDir, "sessions", reviewSessionId, "agents", "codex.json");
 }
 
 // round 番号から Codex adapter が生成する artifact 群のパスを組み立てる。
-export function artifactPaths(artifactDir, round) {
+export function artifactPaths(artifactDir: string, round: number | string): ArtifactPathSet {
   return {
     outputFile: resolve(artifactDir, `round-${round}-codex-output.md`),
     eventLog: resolve(artifactDir, `round-${round}-codex-events.jsonl`),
@@ -50,7 +128,7 @@ export function artifactPaths(artifactDir, round) {
 }
 
 // Codex の JSONL event stream から、新規 session の thread_id を抽出する。
-export function extractThreadIdFromJsonl(text) {
+export function extractThreadIdFromJsonl(text: string): string | null {
   // Codex は人間向け診断を混ぜることがあるため、構造化 event だけを採用する。
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue;
@@ -67,7 +145,7 @@ export function extractThreadIdFromJsonl(text) {
 }
 
 // 保存済み Codex state と今回の target_root から、新規 session が必要か判定する。
-export function shouldStartNewSession(agentState, targetRoot) {
+export function shouldStartNewSession(agentState: Partial<CodexAgentState> | null | undefined, targetRoot: string): SessionDecision {
   // Codex session は初回 cwd に固定されるため、target_root 変更時は新しい thread が必要。
   if (!agentState?.thread_id) {
     return { startNew: true, reason: "missing_thread_id" };
@@ -86,12 +164,12 @@ const optionArgs = {
   "--launcher": {
     field: "launcher",
     // codex 起動を POSIX shell 経由で wrap する。空文字なら未指定扱い (直接 spawn) にする。
-    parse: (value) => (value === "" ? null : value),
+    parse: (value: string) => (value === "" ? null : value),
   },
 };
 
 // CLI 引数を、この runner が扱う option に変換する。
-export function parseArgs(argv) {
+export function parseArgs(argv: string[]): ParsedArgs {
   return parseOptionArgs(argv, optionArgs, {
     initialArgs: {
       requestFile: null,
@@ -99,11 +177,11 @@ export function parseArgs(argv) {
       dataDir: null,
       launcher: null,
     },
-  });
+  }) as ParsedArgs;
 }
 
 // CLI の使い方テキストを返す。
-function usage() {
+function usage(): string {
   return `Usage:
   node scripts/codex-adapter-runner.mjs --request <request-envelope.json> [--codex-bin codex] [--data-dir <CLAUDE_PLUGIN_DATA>] [--launcher <shell>]
 
@@ -118,7 +196,7 @@ to pass --launcher; the runner has no platform branch.`;
 }
 
 // 指定パスが存在するかを boolean で返す。
-async function pathExists(filePath) {
+async function pathExists(filePath: string): Promise<boolean> {
   try {
     await access(filePath);
     return true;
@@ -128,17 +206,17 @@ async function pathExists(filePath) {
 }
 
 // JSON ファイルを読み込み、オブジェクトとして返す。
-async function readJson(filePath) {
-  return JSON.parse(await readFile(filePath, "utf8"));
+async function readJson<T = unknown>(filePath: string): Promise<T> {
+  return JSON.parse(await readFile(filePath, "utf8")) as T;
 }
 
 // JSON ファイルがあれば読み込み、なければ null を返す。
-async function readJsonIfExists(filePath) {
+async function readJsonIfExists<T = unknown>(filePath: string): Promise<T | null> {
   return (await pathExists(filePath)) ? await readJson(filePath) : null;
 }
 
 // JSON を一時ファイルへ書いてから rename し、対象ファイルを atomic に更新する。
-async function writeJsonAtomic(filePath, value) {
+async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {
   // 書き込み途中で落ちても state file が半端に壊れないようにする。
   const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
   await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
@@ -146,12 +224,12 @@ async function writeJsonAtomic(filePath, value) {
 }
 
 // state や artifact に記録する現在時刻を ISO 文字列で返す。
-function nowIso() {
+function nowIso(): string {
   return new Date().toISOString();
 }
 
 // state に append する artifact metadata を作る。
-function artifact(path, kind, round, agent = "codex") {
+function artifact(path: string, kind: string, round: number, agent = "codex"): AdapterResponseArtifact {
   return {
     path,
     kind,
@@ -164,7 +242,7 @@ function artifact(path, kind, round, agent = "codex") {
 }
 
 // response envelope と state に記録する recoverable error を作る。
-function makeError(code, message, detailsFile = null) {
+function makeError(code: string, message: string, detailsFile: string | null = null): RecoverableError {
   return {
     code,
     message,
@@ -176,7 +254,13 @@ function makeError(code, message, detailsFile = null) {
 // cross-agent へ返す adapter response envelope を作る。
 // adapter 境界の契約として、path フィールドは forward slash に統一する。
 // Windows の `\` をそのまま JSON に乗せると、後段の `JSON.parse` が `\U` 等で落ちる。
-function makeResponse(request, status, outputFile, artifacts, error) {
+function makeResponse(
+  request: AdapterRequestWithDataDir | null | undefined,
+  status: AdapterResponseStatus,
+  outputFile: string | null,
+  artifacts: AdapterResponseArtifact[],
+  error: AdapterResponseError,
+): AdapterResponseEnvelope {
   const normalizedArtifacts = (artifacts ?? []).map((entry) =>
     entry?.path ? { ...entry, path: normalizePath(entry.path) } : entry,
   );
@@ -195,13 +279,13 @@ function makeResponse(request, status, outputFile, artifacts, error) {
 }
 
 // 診断情報を Markdown ファイルとして保存する。
-async function writeDiagnostic(filePath, lines) {
+async function writeDiagnostic(filePath: string, lines: Array<string | null | undefined>): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, `${lines.filter(Boolean).join("\n")}\n`, "utf8");
 }
 
 // request envelope と参照先ファイル/ディレクトリが実行可能な状態か検証する。
-async function validateRequest(request) {
+async function validateRequest(request: AdapterRequestInput): Promise<RecoverableError | null> {
   // ここでは adapter 境界だけを検証する。レビュー判断の意味解釈は cross-agent の責務。
   const required = [
     "contract_version",
@@ -242,7 +326,7 @@ async function validateRequest(request) {
 // splitting / 変数展開を完全に bypass する。これにより promptText に `$` などが含まれても
 // argv の 1 要素として codex まで届く。launcher は bash / sh / zsh など POSIX shell を想定し、
 // 環境差異 (Windows の .cmd shim 等) は agent が --launcher で渡したシェルが解決する。
-export function wrapWithLauncher(launcher, command, extraArgs) {
+export function wrapWithLauncher(launcher: string | null | undefined, command: string, extraArgs: string[]): LaunchTarget {
   if (!launcher) return { command, args: extraArgs };
   const launcherCommand = normalizePath(command);
   return {
@@ -252,9 +336,31 @@ export function wrapWithLauncher(launcher, command, extraArgs) {
 }
 
 // Codex CLI を initial/resume のどちらかの mode で実行し、event log を保存する。
-async function runCodex({ codexBin, codexBinArgs = [], launcher, mode, request, promptText, effort, outputFile, eventLog, threadId }) {
+async function runCodex({
+  codexBin,
+  codexBinArgs = [],
+  launcher,
+  mode,
+  request,
+  promptText,
+  effort,
+  outputFile,
+  eventLog,
+  threadId,
+}: {
+  codexBin: string;
+  codexBinArgs?: string[];
+  launcher: string | null;
+  mode: "initial" | "resume";
+  request: AdapterRequestInput;
+  promptText: string;
+  effort: CodexEffort;
+  outputFile: string;
+  eventLog: string;
+  threadId: string | null;
+}): Promise<CodexCommandResult> {
   // prompt は shell 展開を通さず、argv の 1 要素として渡す。
-  const args =
+  const args: string[] =
     mode === "initial"
       ? [
           "exec",
@@ -276,7 +382,7 @@ async function runCodex({ codexBin, codexBinArgs = [], launcher, mode, request, 
           `model_reasoning_effort=${effort}`,
           "-o",
           outputFile,
-          threadId,
+          threadId ?? "",
           promptText,
         ];
 
@@ -284,7 +390,7 @@ async function runCodex({ codexBin, codexBinArgs = [], launcher, mode, request, 
 
   const target = wrapWithLauncher(launcher, codexBin, [...codexBinArgs, ...args]);
 
-  return await new Promise((resolvePromise) => {
+  return await new Promise<CodexCommandResult>((resolvePromise) => {
     const eventStream = createWriteStream(eventLog, { flags: "w" });
     // CLI trace を 1 つの診断 artifact に残すため、stderr も stdout と同じ log に保存する。
     const child = spawn(target.command, target.args, {
@@ -310,13 +416,29 @@ async function runCodex({ codexBin, codexBinArgs = [], launcher, mode, request, 
 }
 
 // agent state の artifacts に adapter 生成 artifact を追記する。
-async function appendAgentArtifacts(agentState, artifacts) {
+async function appendAgentArtifacts(agentState: CodexAgentState, artifacts: AdapterResponseArtifact[]): Promise<void> {
   agentState.artifacts ??= [];
   agentState.artifacts.push(...artifacts);
 }
 
 // 失敗時の diagnostic、response envelope、可能なら agent state 更新をまとめて行う。
-async function handleFailure({ request, agentState, paths, code, message, commandResult = null, extraDiagnostics = [] }) {
+async function handleFailure({
+  request,
+  agentState,
+  paths,
+  code,
+  message,
+  commandResult = null,
+  extraDiagnostics = [],
+}: {
+  request: AdapterRequestWithDataDir;
+  agentState: CodexAgentState | null;
+  paths: ArtifactPathSet;
+  code: string;
+  message: string;
+  commandResult?: CodexCommandResult | null;
+  extraDiagnostics?: Array<string | null | undefined>;
+}): Promise<AdapterResponseEnvelope> {
   // 失敗時も response envelope を返し、agent state が有効なら復旧可能な診断を追記する。
   const diagnosticArtifact = artifact(paths.diagnosticFile, "diagnostic", request.round);
   const error = makeError(code, message, paths.diagnosticFile);
@@ -337,7 +459,7 @@ async function handleFailure({ request, agentState, paths, code, message, comman
   ]);
 
   if (agentState) {
-    const agentStateFile = agentStateFileFor(request.data_dir, request.review_session_id);
+    const agentStateFile = agentStateFileFor(request.data_dir ?? ".", request.review_session_id);
     agentState.updated_at = nowIso();
     Object.assign(agentState, {
       schema_version: agentState.schema_version ?? 1,
@@ -362,7 +484,7 @@ async function handleFailure({ request, agentState, paths, code, message, comman
 }
 
 // codex-adapter の主処理。request を受け、Codex 実行、state 更新、response 生成まで行う。
-export async function runAdapter(request, options = {}) {
+export async function runAdapter(request: AdapterRequestInput, options: CodexRunOptions = {}): Promise<AdapterResponseEnvelope> {
   // adapter は自分で導出する Codex agent state file だけを所有する。
   // rounds と全体 status は cross-agent の所有物。
   const codexBin = options.codexBin ?? "codex";
@@ -415,19 +537,20 @@ export async function runAdapter(request, options = {}) {
     return response;
   }
 
-  let sessionState;
+  let sessionState: SessionState;
   try {
-    sessionState = await readJson(sessionStateFile);
+    sessionState = await readJson<SessionState>(sessionStateFile);
   } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
     return await handleFailure({
       request: requestWithDataDir,
       agentState: null,
       paths,
-      code: error.code === "ENOENT" ? "state_file_missing" : "state_file_invalid",
+      code: nodeError.code === "ENOENT" ? "state_file_missing" : "state_file_invalid",
       message:
-        error.code === "ENOENT"
+        nodeError.code === "ENOENT"
           ? "session state file does not exist."
-          : `session state file is not valid JSON: ${error.message}`,
+          : `session state file is not valid JSON: ${nodeError.message}`,
     });
   }
 
@@ -441,10 +564,10 @@ export async function runAdapter(request, options = {}) {
     });
   }
 
-  let agentState;
+  let agentState: CodexAgentState;
   try {
     agentState =
-      (await readJsonIfExists(agentStateFile)) ?? {
+      (await readJsonIfExists<CodexAgentState>(agentStateFile)) ?? {
         schema_version: 1,
         review_session_id: request.review_session_id,
         agent: "codex",
@@ -458,12 +581,13 @@ export async function runAdapter(request, options = {}) {
         errors: [],
       };
   } catch (error) {
+    const caught = error as Error;
     return await handleFailure({
       request: requestWithDataDir,
       agentState: null,
       paths,
       code: "state_file_invalid",
-      message: `Codex agent state file is not valid JSON: ${error.message}`,
+      message: `Codex agent state file is not valid JSON: ${caught.message}`,
     });
   }
 

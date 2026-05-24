@@ -56,7 +56,7 @@ export type AdapterResponseEnvelope = {
   contract_version: number;
   review_session_id: string | null;
   agent: string;
-  round: number;
+  round: number | null;
   status: AdapterResponseStatus | string;
   output_file?: string | null;
   artifacts?: AdapterResponseArtifact[];
