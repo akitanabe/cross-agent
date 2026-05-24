@@ -2,8 +2,8 @@
   "name": "local-cross-agent-marketplace",
   "description": "Cross-agent review plugin marketplace for local development and private distribution.",
   "owner": {
-    "name": "Example Owner",
-    "email": "owner@example.com"
+    "name": "akitanabe",
+    "email": "tanabe@determaind.biz"
   },
   "plugins": [
     {
@@ -12,8 +12,8 @@
       "description": "複数の外部エージェントにセカンドオピニオン・批判的レビューを依頼する Claude Code プラグイン。",
       "version": "0.1.0",
       "author": {
-        "name": "Example Author",
-        "email": "author@example.com"
+        "name": "akitanabe",
+        "email": "tanabe@determaind.biz"
       }
     }
   ]
