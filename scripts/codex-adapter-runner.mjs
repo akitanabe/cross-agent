@@ -104,23 +104,16 @@ export function parseArgs(argv) {
 // CLI の使い方テキストを返す。
 function usage() {
   return `Usage:
-  node scripts/codex-adapter-runner.mjs [--codex-bin codex] [--data-dir <CLAUDE_PLUGIN_DATA>] [--launcher <shell>]
   node scripts/codex-adapter-runner.mjs --request <request-envelope.json> [--codex-bin codex] [--data-dir <CLAUDE_PLUGIN_DATA>] [--launcher <shell>]
 
 Reads a cross-agent adapter request envelope, executes Codex CLI, updates state JSON,
-and writes the adapter response envelope to stdout and the artifact directory.
+and writes the adapter response envelope to the artifact directory. stdout contains only
+the response envelope file path.
 
 --launcher wraps codex via a POSIX shell (e.g. \`--launcher bash\`). Use this when the
 codex binary on the current platform is a shell shim that cannot be spawned directly,
 e.g. on Windows where codex is a Git Bash script. The agent decides per-platform whether
 to pass --launcher; the runner has no platform branch.`;
-}
-
-// request envelope を stdin から読み取る。
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) chunks.push(chunk);
-  return Buffer.concat(chunks).toString("utf8");
 }
 
 // 指定パスが存在するかを boolean で返す。
@@ -598,7 +591,7 @@ export async function runAdapter(request, options = {}) {
   return response;
 }
 
-// CLI entrypoint。request を読み込み runner を実行して response を stdout に出す。
+// CLI entrypoint。request file を読み込み runner を実行して response file path を stdout に出す。
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -606,14 +599,21 @@ async function main() {
     return;
   }
 
-  const input = args.requestFile ? await readFile(args.requestFile, "utf8") : await readStdin();
+  if (!args.requestFile) throw new Error("--request is required.");
+  if (!args.dataDir) throw new Error("--data-dir is required.");
+
+  const input = await readFile(args.requestFile, "utf8");
   const request = JSON.parse(input);
   const response = await runAdapter(request, {
     codexBin: args.codexBin,
     dataDir: args.dataDir,
     launcher: args.launcher,
   });
-  process.stdout.write(`${JSON.stringify(response, null, 2)}\n`);
+  const responseFile = normalizePath(
+    artifactPaths(artifactDirFor(args.dataDir, request.review_session_id ?? "unknown"), request.round ?? "unknown")
+      .responseFile,
+  );
+  process.stdout.write(`${responseFile}\n`);
   process.exitCode = response.status === "completed" ? 0 : 1;
 }
 

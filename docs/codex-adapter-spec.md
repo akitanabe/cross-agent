@@ -2,9 +2,9 @@
 
 ## 概要
 
-codex-adapter は Codex CLI 実行境界を担当する。cross-agent から request envelope を受け取り、
+codex-adapter は Codex CLI 実行境界を担当する。cross-agent から request envelope file path を受け取り、
 `scripts/codex-adapter-runner.mjs` で `codex exec` / `codex exec resume` を実行し、Codex 固有 state を
-更新して response envelope を返す。
+更新して response envelope file path を返す。
 
 cross-agent は Codex の agent state file の中身を直接変更しない。`review_session_id` から
 Codex の `thread_id` へのマッピング、resume の成否判定、Codex CLI の event log 保存、
@@ -12,7 +12,7 @@ Codex 由来の artifacts/errors はこの adapter に閉じる。
 
 ## 入力
 
-cross-agent から request envelope を受け取る。
+cross-agent から request envelope file path を受け取る。runner は `--request` で指定された JSON file を読む。
 
 ```json
 {
@@ -111,7 +111,7 @@ Codex agent state file の形:
 
 ## 実行仕様
 
-1. request envelope を読み取り、入力検証する
+1. request envelope file を読み取り、入力検証する
 2. session state file を導出して読み、session と request の `review_session_id` 一致を確認する
 3. Codex agent state file を導出して読み、存在しなければ Codex agent state を新規作成する
 4. artifact directory を作成する
@@ -122,7 +122,7 @@ Codex agent state file の形:
 9. `thread_id` があり、かつ `target_root` が一致する場合は resume 実行に分岐する
 10. Codex CLI の終了コード、出力ファイル、event log を確認する
 11. agent state file の Codex state と artifacts/errors を更新する
-12. response envelope を `round-<N>-codex-response.json` に保存し、同じ JSON を stdout に返す
+12. response envelope を `round-<N>-codex-response.json` に保存し、その file path を stdout に返す
 
 ### launcher
 
@@ -193,7 +193,7 @@ resume 実行そのものに失敗した場合は `codex_resume_failed` とし�
 ## Response envelope
 
 `output_file`, `artifacts[].path`, `error.details_file` などの path フィールドは
-forward slash 表記 (`C:/Users/...`) で返す。受信側 (cross-agent runner) は envelope を
+forward slash 表記 (`C:/Users/...`) で保存する。受信側 (cross-agent runner) は envelope file を
 `JSON.parse` するため、Windows の `\` をそのまま埋めると `\U` 等で parse 失敗になる。
 内部 state (Codex agent state file 等) は OS ネイティブの区切りで保持してよい。
 

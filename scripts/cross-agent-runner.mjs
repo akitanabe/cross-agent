@@ -301,7 +301,11 @@ async function prepareRound({
 
   await writeJsonAtomic(paths.stateFile, state);
 
-  return commandOutput("json", adapterRequest);
+  return {
+    ...commandOutput("text", normalizedAdapterRequestFile),
+    request_file: normalizedAdapterRequestFile,
+    envelope: adapterRequest,
+  };
 }
 
 // review session の空 state を作成する。
@@ -465,7 +469,7 @@ export async function prepareNextRound(input) {
 // adapter response envelope の必須フィールドと output_file の path containment を検証する。
 // adapter runner 自体は信頼できるが、LLM/CLI 境界では契約ドリフトや subagent の
 // 転記事故、prompt injection で envelope が偽造される可能性がある。安価な検証で防げる。
-async function validateAdapterResponse(response, paths) {
+async function validateAdapterResponse(response, paths, responseFile = null) {
   if (response.contract_version !== SUPPORTED_CONTRACT_VERSION) {
     throw new Error(`invalid adapter response: unsupported contract_version ${response.contract_version}`);
   }
@@ -473,6 +477,24 @@ async function validateAdapterResponse(response, paths) {
     throw new Error(`invalid adapter response: unknown status ${response.status}`);
   }
   validateRoundNumber(response.round);
+
+  if (responseFile) {
+    if (!isPathInside(paths.artifactDir, responseFile)) {
+      throw new Error(`invalid adapter response: response_file is outside artifact dir: ${responseFile}`);
+    }
+    let responseEntry;
+    try {
+      responseEntry = await stat(responseFile);
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        throw new Error(`invalid adapter response: response_file does not exist: ${responseFile}`);
+      }
+      throw error;
+    }
+    if (!responseEntry.isFile()) {
+      throw new Error(`invalid adapter response: response_file is not a file: ${responseFile}`);
+    }
+  }
 
   if (response.status === "completed") {
     if (typeof response.output_file !== "string" || response.output_file.length === 0) {
@@ -498,16 +520,27 @@ async function validateAdapterResponse(response, paths) {
   }
 }
 
+async function resolveAdapterResponseInput(input, dataDir) {
+  if (!input.response_file) throw new Error("response_file is required.");
+  const responseFile = normalizePath(input.response_file);
+  const artifactRoot = resolve(dataDir, "artifacts");
+  if (!isPathInside(artifactRoot, responseFile)) {
+    throw new Error(`invalid adapter response: response_file is outside artifact root: ${responseFile}`);
+  }
+  const response = await readJson(responseFile);
+  return { response, responseFile };
+}
+
 // adapter response を既存 state の rounds[].agent_result に反映し、round を完了させる。
 export async function completeRound(input) {
   // adapter は artifacts/errors を自分で append する。ここでは round 結果だけを閉じる。
   const dataDir = resolveDataDir(input.data_dir);
-  const agentResponse = input;
+  const { response: agentResponse, responseFile } = await resolveAdapterResponseInput(input, dataDir);
   const reviewSessionId = agentResponse.review_session_id;
   if (!reviewSessionId) throw new Error("review_session_id is required.");
 
   const paths = sessionPaths(dataDir, reviewSessionId);
-  await validateAdapterResponse(agentResponse, paths);
+  await validateAdapterResponse(agentResponse, paths, responseFile);
 
   const state = await readJson(paths.stateFile);
   if (state.review_session_id !== reviewSessionId) {
@@ -535,6 +568,7 @@ export async function completeRound(input) {
     round: agentResponse.round,
     agent: agentResponse.agent,
     status: agentResponse.status,
+    response_file: responseFile,
   };
 }
 
@@ -681,26 +715,13 @@ const commandArgs = {
     run: prepareNextRound,
   },
   "complete-round": {
-    usage:
-      "complete-round --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> --agent <agent> --round <n> --status <status> [--output-file <path>] [--error <message>]",
+    usage: "complete-round --data-dir <CLAUDE_PLUGIN_DATA> --response-file <response-envelope.json>",
     options: {
-      "--review-session-id": { field: "reviewSessionId" },
-      "--agent": { field: "agent" },
-      "--round": { field: "round", parse: parseIntegerOption },
-      "--status": { field: "status" },
-      "--output-file": { field: "outputFile" },
-      "--error": { field: "error" },
+      "--response-file": { field: "responseFile" },
     },
     buildInput: async (args) => ({
       ...commonInput(args),
-      contract_version: SUPPORTED_CONTRACT_VERSION,
-      review_session_id: requireOption(args, "reviewSessionId", "--review-session-id"),
-      agent: requireOption(args, "agent", "--agent"),
-      round: requireOption(args, "round", "--round"),
-      status: requireOption(args, "status", "--status"),
-      output_file: args.outputFile,
-      artifacts: [],
-      error: args.error ? { message: args.error } : null,
+      response_file: requireOption(args, "responseFile", "--response-file"),
     }),
     run: async (input) => commandOutput("json", await completeRound(input)),
   },

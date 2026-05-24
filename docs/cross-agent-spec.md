@@ -97,26 +97,12 @@ export されないため、runner にフォールバックは無い。
 
 output:
 
-```json
-{
-  "contract_version": 1,
-  "review_session_id": "...",
-  "agent": "codex",
-  "round": 1,
-  "round_kind": "initial_review",
-  "target_root": "...",
-  "prompt_file": "...",
-  "context_file": "...",
-  "target_files": [],
-  "focus_question": null,
-  "options": {
-    "review_depth": "medium",
-    "timeout_seconds": null
-  }
-}
+```text
+${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-1-adapter-request.json
 ```
 
-stdout には次に adapter へ渡す request envelope だけを返す。
+stdout には次に adapter へ渡す request envelope file path だけを返す。
+request envelope JSON 本体は file に保存する。
 runner は以下を作成する。
 
 - `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/context.md`
@@ -162,26 +148,12 @@ export されないため、runner にフォールバックは無い。
 
 output:
 
-```json
-{
-  "contract_version": 1,
-  "review_session_id": "...",
-  "agent": "codex",
-  "round": 2,
-  "round_kind": "deep_dive",
-  "target_root": "...",
-  "prompt_file": "...",
-  "context_file": "...",
-  "target_files": [],
-  "focus_question": null,
-  "options": {
-    "review_depth": "medium",
-    "timeout_seconds": null
-  }
-}
+```text
+${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-N-adapter-request.json
 ```
 
-stdout には次に adapter へ渡す request envelope だけを返す。
+stdout には次に adapter へ渡す request envelope file path だけを返す。
+request envelope JSON 本体は file に保存する。
 runner は以下を作成する。
 
 - `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-N-prompt.md`
@@ -195,31 +167,22 @@ round、artifact metadata を append する。`deep_dive` や `recovery` など�
 ## Runner: complete-round
 
 adapter response を top-level session state の `rounds[].agent_result` に反映する処理は
-runner に任せる。runner は必須の `--data-dir` と `review_session_id`
-から session state file を導出する。
+runner に任せる。runner は必須の `--data-dir` と response envelope 内の
+`review_session_id` から session state file を導出する。
 
 ```bash
 node scripts/cross-agent-runner.mjs complete-round \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
-  --review-session-id "<review_session_id>" \
-  --agent "codex" \
-  --round "1" \
-  --status "completed" \
-  --output-file "<output_file>"
+  --response-file "<response-envelope.json>"
 ```
 
 CLI input:
 
 - `--data-dir`: 必須
-- `--review-session-id`: 必須
-- `--agent`: 必須
-- `--round`: 必須
-- `--status`: 必須。`completed` / `failed` / `skipped`
-- `--output-file`: `status=completed` の場合は必須、`failed` / `skipped` では禁止
-- `--error`: 任意。指定時は runner が `{ "message": value }` に変換する
+- `--response-file`: 必須。adapter が保存した response envelope JSON file
 
-runner は CLI option から adapter response envelope 相当の構造を組み立てる。
-`contract_version` は runner が `1` を固定投入する。
+runner は response envelope file を読み、schema と path containment を検証してから
+top-level session state に反映する。
 `--data-dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` をそのまま渡す
 (Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
 export されないため、runner にフォールバックは無い。

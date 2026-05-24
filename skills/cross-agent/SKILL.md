@@ -71,28 +71,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-initial \
   --target-files "<target_file_1>" "<target_file_2>"
 ```
 
-runner は次に渡す adapter request envelope をそのまま返す。
+runner が返した adapter request envelope file path を使う。
 
-```json
-{
-  "contract_version": 1,
-  "review_session_id": "...",
-  "agent": "codex",
-  "round": 1,
-  "round_kind": "initial_review",
-  "target_root": "...",
-  "prompt_file": "...",
-  "context_file": "...",
-  "target_files": [],
-  "focus_question": null,
-  "options": {
-    "review_depth": "medium",
-    "timeout_seconds": null
-  }
-}
-```
-
-返ってきた JSON 全体を依頼本文に含め、対応する subagent に委譲する。
+返ってきた request envelope file path を依頼本文に含め、対応する subagent に委譲する。
 
 | Agent   | 委譲先                                                        |
 | ------- | ------------------------------------------------------------- |
@@ -100,18 +81,13 @@ runner は次に渡す adapter request envelope をそのまま返す。
 
 `claude-adapter` は未完成のため、v1 では `codex` のみを実行対象とする。
 
-adapter response envelope の各フィールドを CLI option にして渡し、round 完了処理を runner に任せる。
-`status=completed` の場合は `--output-file` を必ず渡す。`failed` / `skipped` の場合は
-`--output-file` を渡さず、必要に応じて短い `--error "<message>"` を渡す。
+subagent は adapter response envelope file path だけを返す。
+返ってきた response envelope file path を `--response-file` で渡し、round 完了処理を runner に任せる。
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-round \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
-  --review-session-id "<review_session_id>" \
-  --agent "codex" \
-  --round "1" \
-  --status "completed" \
-  --output-file "<adapter_output_file>"
+  --response-file "<adapter_response_envelope.json>"
 ```
 
 その後、`get-round-output` で adapter の出力本文を取得し、ユーザーへ統合結果を提示する。
@@ -167,26 +143,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-next-round \
   --prompt-file "${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-2-prompt.md"
 ```
 
-runner は次に渡す adapter request envelope をそのまま返す。
-
-```json
-{
-  "contract_version": 1,
-  "review_session_id": "...",
-  "agent": "codex",
-  "round": 2,
-  "round_kind": "deep_dive",
-  "target_root": "...",
-  "prompt_file": "...",
-  "context_file": "...",
-  "target_files": [],
-  "focus_question": null,
-  "options": {
-    "review_depth": "medium",
-    "timeout_seconds": null
-  }
-}
-```
+runner が返した adapter request envelope file path を使う。
 
 `round_kind` は用途で使い分ける。
 
@@ -206,7 +163,7 @@ Round 3 以降は原則として自動継続しない。ユーザーの追加質
 `round_kind: "follow_up"` として扱い、明示的に深掘り継続を求められた場合だけ
 `max_rounds` の範囲内で `deep_dive` を追加する。
 
-Round 2 を実行した後は、Round 1 と同様に adapter response envelope を
+Round 2 を実行した後は、Round 1 と同様に adapter response envelope file path を
 `complete-round` に渡し、`get-round-output` で出力本文を取得する。
 
 統合表示では以下を簡潔に示す。

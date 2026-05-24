@@ -7,42 +7,28 @@ allowed-tools: Bash(uname -s) Bash(node **/scripts/codex-adapter-runner.mjs*)
 
 ## 役割
 
-codex-adapter は Codex CLI 実行境界を担当する。cross-agent から request envelope を受け取り、
-Node.js runner を実行して response envelope を返す。
+codex-adapter は Codex CLI 実行境界を担当する。cross-agent から request envelope file path を受け取り、
+Node.js runner を実行して response envelope file path を返す。
 
 詳細な入出力契約、state 更新範囲、artifact、エラーコード、Codex CLI の分岐条件は
 [docs/codex-adapter-spec.md](../../docs/codex-adapter-spec.md) を正とする。
 
 ## 実行
 
-request envelope を stdin から渡して以下を実行する。
+request envelope file path を `--request` で渡して以下を実行する。
 
 `--data-dir` は必須。plugin 文脈では `${CLAUDE_PLUGIN_DATA}` をそのまま渡す。Claude Code が
 skill content を読み込む時点で絶対パス (`~/.claude/plugins/data/<plugin-id>/`) に展開してから
 LLM に渡すため、argv 経由でも展開済みの絶対パスが届く。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" --data-dir "${CLAUDE_PLUGIN_DATA}" [--launcher <shell>] <<'REQUEST_ENVELOPE_JSON'
-{
-  "contract_version": 1,
-  "review_session_id": "...",
-  "agent": "codex",
-  "round": 1,
-  "round_kind": "initial_review",
-  "target_root": "...",
-  "prompt_file": "...",
-  "context_file": "...",
-  "target_files": [],
-  "focus_question": null,
-  "options": {
-    "review_depth": "medium",
-    "timeout_seconds": null
-  }
-}
-REQUEST_ENVELOPE_JSON
+node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --request "<request-envelope.json>" \
+  [--launcher <shell>]
 ```
 
-runner が stdout に出力した response envelope を cross-agent に返す。
+runner が返した response envelope file path を、そのまま cross-agent に返す。
 
 ## --launcher の選択
 
@@ -70,7 +56,7 @@ runner は `--launcher` 指定時、`<launcher> -c 'exec "$@"' <launcher> codex 
 
 ## 守ること
 
-- Codex の出力統合や要約は行わず、`output_file` を含む response envelope を返すだけにする
+- Codex の出力統合や要約は行わず、response envelope file path だけを返す
 - launcher 判定をスキップせず、起動前に必ず `uname -s` で観測する
 
 ## 実装メモ

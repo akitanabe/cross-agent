@@ -56,6 +56,17 @@ function runRunner(args, input = "") {
   return runNodeScript(runnerPath, args, input);
 }
 
+async function writeAdapterResponse(filePath, response) {
+  await writeFile(filePath, `${JSON.stringify(response, null, 2)}\n`, "utf8");
+}
+
+async function completeRoundFromEnvelope(dataDir, response) {
+  const paths = sessionPaths(dataDir, response.review_session_id);
+  const responseFile = join(paths.artifactDir, `round-${response.round}-${response.agent}-response.json`);
+  await writeAdapterResponse(responseFile, response);
+  return completeRound({ data_dir: dataDir, response_file: responseFile });
+}
+
 function runUtilsRunner(args, input = "") {
   return runNodeScript(utilsRunnerPath, args, input);
 }
@@ -258,10 +269,11 @@ test("prepareInitialRound creates prompt and adapter request", async () => {
       context_text: "# Context\nhello",
       target_files: ["README.md"],
     });
-    const adapterRequest = result.content;
+    const adapterRequest = result.envelope;
 
     const paths = sessionPaths(dataDir, "session-1");
-    assert.equal(result.output_type, "json");
+    assert.equal(result.output_type, "text");
+    assert.equal(result.content, normalizePath(join(paths.artifactDir, "round-1-adapter-request.json")));
     assert.equal(adapterRequest.review_session_id, "session-1");
     assert.equal(adapterRequest.agent, "codex");
     assert.equal(adapterRequest.state_file, undefined);
@@ -316,8 +328,7 @@ test("prepareNextRound appends a deep dive round and adapter request", async () 
     const paths = sessionPaths(dataDir, "session-1");
     const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(outputFile, "round 1 output", "utf8");
-    await completeRound({
-      data_dir: dataDir,
+    await completeRoundFromEnvelope(dataDir, {
       contract_version: 1,
       review_session_id: "session-1",
       agent: "codex",
@@ -334,9 +345,9 @@ test("prepareNextRound appends a deep dive round and adapter request", async () 
       round_kind: "deep_dive",
       prompt_text: "Round 1 の重要指摘を批判的に検証して",
     });
-    const adapterRequest = result.content;
+    const adapterRequest = result.envelope;
 
-    assert.equal(result.output_type, "json");
+    assert.equal(result.output_type, "text");
     assert.equal(adapterRequest.round, 2);
     assert.equal(adapterRequest.round_kind, "deep_dive");
     assert.equal(adapterRequest.agent, "codex");
@@ -382,8 +393,7 @@ test("prepare-next-round command writes adapter request JSON", async () => {
     const paths = sessionPaths(dataDir, "session-1");
     const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(outputFile, "round 1 output", "utf8");
-    await completeRound({
-      data_dir: dataDir,
+    await completeRoundFromEnvelope(dataDir, {
       contract_version: 1,
       review_session_id: "session-1",
       agent: "codex",
@@ -408,7 +418,7 @@ test("prepare-next-round command writes adapter request JSON", async () => {
       promptFile,
     ]);
 
-    const adapterRequest = JSON.parse(result.stdout);
+    const adapterRequest = JSON.parse(await readFile(result.stdout.trim(), "utf8"));
     assert.equal(adapterRequest.round, 2);
     assert.equal(adapterRequest.round_kind, "deep_dive");
     assert.match(adapterRequest.prompt_file, /round-2-prompt\.md$/);
@@ -447,7 +457,7 @@ test("prepare-initial command reads context file and target files from argv", as
       "src\\a.ts",
     ]);
 
-    const adapterRequest = JSON.parse(result.stdout);
+    const adapterRequest = JSON.parse(await readFile(result.stdout.trim(), "utf8"));
     assert.equal(adapterRequest.round, 1);
     assert.equal(adapterRequest.agent, "codex");
     assert.equal(adapterRequest.focus_question, "レビューして");
@@ -487,7 +497,7 @@ test("prepare-initial command auto reads session context file", async () => {
       "codex",
     ]);
 
-    const adapterRequest = JSON.parse(result.stdout);
+    const adapterRequest = JSON.parse(await readFile(result.stdout.trim(), "utf8"));
     assert.equal(adapterRequest.context_file, normalizePath(contextFile));
     const copiedContext = await readFile(contextFile, "utf8");
     assert.equal(copiedContext, "# Auto Context\nhello\n");
@@ -512,14 +522,13 @@ test("completeRound records adapter response into state", async () => {
       review_session_id: "session-1",
       context_text: "context",
     });
-    const adapterRequest = prepareResult.content;
+    const adapterRequest = prepareResult.envelope;
 
     const paths = sessionPaths(dataDir, "session-1");
     const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(outputFile, "ok", "utf8");
 
-    const result = await completeRound({
-      data_dir: dataDir,
+    const result = await completeRoundFromEnvelope(dataDir, {
       contract_version: 1,
       review_session_id: "session-1",
       agent: "codex",
@@ -541,7 +550,7 @@ test("completeRound records adapter response into state", async () => {
   }
 });
 
-test("complete-round command records adapter response from argv", async () => {
+test("complete-round command records adapter response from response file", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
     const targetRoot = join(temp, "repo");
@@ -558,26 +567,64 @@ test("complete-round command records adapter response from argv", async () => {
     const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(outputFile, "ok", "utf8");
 
+    const responseFile = join(paths.artifactDir, "round-1-codex-response.json");
+    await writeAdapterResponse(responseFile, {
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 1,
+      status: "completed",
+      output_file: outputFile,
+      artifacts: [],
+      error: null,
+    });
+
     const result = await runRunner([
       "complete-round",
       "--data-dir",
       dataDir,
-      "--review-session-id",
-      "session-1",
-      "--agent",
-      "codex",
-      "--round",
-      "1",
-      "--status",
-      "completed",
-      "--output-file",
-      outputFile,
+      "--response-file",
+      responseFile,
     ]);
 
     const output = JSON.parse(result.stdout);
     assert.equal(output.status, "completed");
     const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
     assert.equal(state.rounds[0].agent_result.output_file, normalizePath(outputFile));
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("completeRound rejects response_file outside artifact root", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      target_root: targetRoot,
+    });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    const responseFile = join(temp, "outside-response.json");
+    await writeAdapterResponse(responseFile, {
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 1,
+      status: "failed",
+      output_file: null,
+      artifacts: [],
+      error: { message: "outside" },
+    });
+
+    await assert.rejects(
+      completeRound({ data_dir: dataDir, response_file: responseFile }),
+      /outside artifact root/,
+    );
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -596,8 +643,7 @@ test("prepareNextRound rejects deep_dive when previous round failed", async () =
       options: { max_rounds: 2 },
     });
     await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
-    await completeRound({
-      data_dir: dataDir,
+    await completeRoundFromEnvelope(dataDir, {
       contract_version: 1,
       review_session_id: "session-1",
       agent: "codex",
@@ -637,8 +683,7 @@ test("prepareNextRound rejects recovery when previous round completed", async ()
     const paths = sessionPaths(dataDir, "session-1");
     const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(outputFile, "ok", "utf8");
-    await completeRound({
-      data_dir: dataDir,
+    await completeRoundFromEnvelope(dataDir, {
       contract_version: 1,
       review_session_id: "session-1",
       agent: "codex",
@@ -678,8 +723,7 @@ test("prepareNextRound max_rounds does not count follow_up rounds", async () => 
     const paths = sessionPaths(dataDir, "session-1");
     const round1Output = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(round1Output, "round 1", "utf8");
-    await completeRound({
-      data_dir: dataDir,
+    await completeRoundFromEnvelope(dataDir, {
       contract_version: 1,
       review_session_id: "session-1",
       agent: "codex",
@@ -696,8 +740,7 @@ test("prepareNextRound max_rounds does not count follow_up rounds", async () => 
     });
     const round2Output = join(paths.artifactDir, "round-2-codex-output.md");
     await writeFile(round2Output, "round 2", "utf8");
-    await completeRound({
-      data_dir: dataDir,
+    await completeRoundFromEnvelope(dataDir, {
       contract_version: 1,
       review_session_id: "session-1",
       agent: "codex",
@@ -712,8 +755,8 @@ test("prepareNextRound max_rounds does not count follow_up rounds", async () => 
       round_kind: "deep_dive",
       prompt_text: "follow_up 後の deep_dive は通る (consumed=1, max=2)",
     });
-    assert.equal(result.content.round, 3);
-    assert.equal(result.content.round_kind, "deep_dive");
+    assert.equal(result.envelope.round, 3);
+    assert.equal(result.envelope.round_kind, "deep_dive");
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -736,8 +779,7 @@ test("prepareNextRound max_rounds blocks deep_dive when budget exhausted", async
     const paths = sessionPaths(dataDir, "session-1");
     const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(outputFile, "ok", "utf8");
-    await completeRound({
-      data_dir: dataDir,
+    await completeRoundFromEnvelope(dataDir, {
       contract_version: 1,
       review_session_id: "session-1",
       agent: "codex",
@@ -801,8 +843,7 @@ test("completeRound rejects non-integer round number", async () => {
 
     for (const bad of ["1", 0, -1, 1.5, Number.NaN]) {
       await assert.rejects(
-        completeRound({
-          data_dir: dataDir,
+        completeRoundFromEnvelope(dataDir, {
           contract_version: 1,
           review_session_id: "session-1",
           agent: "codex",
@@ -850,8 +891,7 @@ test("completeRound rejects unsupported contract_version", async () => {
     await writeFile(outputFile, "ok", "utf8");
 
     await assert.rejects(
-      completeRound({
-        data_dir: dataDir,
+      completeRoundFromEnvelope(dataDir, {
         contract_version: 2,
         review_session_id: "session-1",
         agent: "codex",
@@ -876,8 +916,7 @@ test("completeRound rejects unknown status", async () => {
     await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
 
     await assert.rejects(
-      completeRound({
-        data_dir: dataDir,
+      completeRoundFromEnvelope(dataDir, {
         contract_version: 1,
         review_session_id: "session-1",
         agent: "codex",
@@ -904,8 +943,7 @@ test("completeRound rejects output_file outside artifact dir", async () => {
     await writeFile(strayFile, "outside artifact dir", "utf8");
 
     await assert.rejects(
-      completeRound({
-        data_dir: dataDir,
+      completeRoundFromEnvelope(dataDir, {
         contract_version: 1,
         review_session_id: "session-1",
         agent: "codex",
@@ -930,8 +968,7 @@ test("completeRound rejects completed status without output_file", async () => {
     await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
 
     await assert.rejects(
-      completeRound({
-        data_dir: dataDir,
+      completeRoundFromEnvelope(dataDir, {
         contract_version: 1,
         review_session_id: "session-1",
         agent: "codex",
@@ -959,8 +996,7 @@ test("completeRound rejects failed status carrying output_file", async () => {
     await writeFile(outputFile, "ok", "utf8");
 
     await assert.rejects(
-      completeRound({
-        data_dir: dataDir,
+      completeRoundFromEnvelope(dataDir, {
         contract_version: 1,
         review_session_id: "session-1",
         agent: "codex",
@@ -988,8 +1024,7 @@ test("completeRound rejects missing output_file", async () => {
     const missingFile = join(paths.artifactDir, "round-1-codex-output.md");
 
     await assert.rejects(
-      completeRound({
-        data_dir: dataDir,
+      completeRoundFromEnvelope(dataDir, {
         contract_version: 1,
         review_session_id: "session-1",
         agent: "codex",
@@ -1024,8 +1059,7 @@ test("getRound returns round state", async () => {
     const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(outputFile, "review output", "utf8");
 
-    await completeRound({
-      data_dir: dataDir,
+    await completeRoundFromEnvelope(dataDir, {
       contract_version: 1,
       review_session_id: "session-1",
       agent: "codex",
@@ -1069,8 +1103,7 @@ test("getRoundOutput returns text command output by default", async () => {
     const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(outputFile, "review output", "utf8");
 
-    await completeRound({
-      data_dir: dataDir,
+    await completeRoundFromEnvelope(dataDir, {
       contract_version: 1,
       review_session_id: "session-1",
       agent: "codex",
@@ -1113,8 +1146,7 @@ test("get-round-output command writes text by default", async () => {
     const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(outputFile, "plain review output", "utf8");
 
-    await completeRound({
-      data_dir: dataDir,
+    await completeRoundFromEnvelope(dataDir, {
       contract_version: 1,
       review_session_id: "session-1",
       agent: "codex",
