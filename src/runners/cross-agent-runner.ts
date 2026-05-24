@@ -1,160 +1,47 @@
 #!/usr/bin/env node
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseCommandArgs, parseIntegerOption, requireOption } from "../lib/cli-args.ts";
+import {
+  ADAPTER_RESPONSE_STATUSES,
+  DEFAULT_OPTIONS,
+  SUPPORTED_CONTRACT_VERSION,
+  artifact,
+  ensureDirectory,
+  isPathInside,
+  normalizeOptions,
+  nowIso,
+  readJson,
+  resolveDataDir,
+  sessionPaths,
+  validateRoundNumber,
+  writeJsonAtomic,
+} from "../lib/cross-agent-state.ts";
+import { buildAdapterRequest } from "../lib/cross-agent-envelope.ts";
+import { buildInitialPrompt, buildNextRoundPrompt } from "../lib/cross-agent-prompts.ts";
+import type {
+  AdapterResponseEnvelope,
+  AdapterResponseStatus,
+  ArtifactRecord,
+  CommandOutput,
+  CompleteRoundInput,
+  CrossAgentOptions,
+  GetRoundInput,
+  OutputType,
+  PrepareInitialRoundInput,
+  PrepareNextRoundInput,
+  PrepareRoundResult,
+  ReviewDepth,
+  RoundKind,
+  SessionPathSet,
+  SessionState,
+  StartSessionInput,
+} from "../lib/cross-agent-types.ts";
 import { normalizePath, normalizePathList } from "../lib/path-utils.ts";
-
-type ReviewDepth = "low" | "medium" | "high" | string;
-type RoundKind = "initial_review" | "deep_dive" | "recovery" | "follow_up" | string;
-type AdapterResponseStatus = "completed" | "failed" | "skipped";
-type OutputType = "text" | "json";
-
-type CrossAgentOptions = {
-  max_rounds: number;
-  auto_deep_dive: boolean;
-  review_depth: ReviewDepth;
-  keep_artifacts: boolean;
-  timeout_seconds?: number | null;
-};
-
-type ArtifactRecord = {
-  path: string;
-  kind: string;
-  owner: string;
-  round: number | null;
-  agent: string | null;
-  created_at: string;
-  temporary: boolean;
-};
-
-type AgentResult = {
-  agent: string;
-  round: number;
-  status: AdapterResponseStatus | string;
-  output_file: string | null;
-  error: unknown;
-};
-
-type RoundEntry = {
-  round: number;
-  kind: RoundKind;
-  agent: string;
-  prompt_file: string;
-  started_at: string;
-  completed_at: string | null;
-  agent_result: AgentResult | null;
-};
-
-type SessionState = {
-  schema_version?: number;
-  review_session_id: string;
-  created_at?: string;
-  updated_at: string;
-  status: string;
-  target_root: string;
-  current_round: number;
-  options: CrossAgentOptions;
-  context?: {
-    context_file: string | null;
-    initial_prompt_file: string | null;
-    focus_question: string | null;
-    target_files: string[];
-    source: string;
-  };
-  rounds: RoundEntry[];
-  artifacts: {
-    files: ArtifactRecord[];
-  };
-  errors?: unknown[];
-};
-
-type SessionPathSet = {
-  sessionsDir: string;
-  sessionDir: string;
-  artifactDir: string;
-  stateFile: string;
-};
-
-type AdapterRequest = {
-  contract_version: 1;
-  review_session_id: string;
-  agent: string;
-  round: number;
-  round_kind: RoundKind;
-  target_root: string;
-  prompt_file: string;
-  context_file: string | null;
-  target_files: string[];
-  focus_question: string | null;
-  options: {
-    review_depth: ReviewDepth;
-    timeout_seconds: number | null;
-  };
-};
-
-type AdapterResponse = {
-  contract_version: number;
-  review_session_id: string | null;
-  agent: string;
-  round: number;
-  status: AdapterResponseStatus | string;
-  output_file?: string | null;
-  artifacts?: unknown[];
-  error?: unknown;
-};
-
-type CommandOutput<T = unknown> = {
-  output_type: OutputType;
-  content: T;
-};
-
-type PrepareRoundResult = CommandOutput<string> & {
-  request_file: string;
-  envelope: AdapterRequest;
-};
-
-type StartSessionInput = {
-  data_dir?: string | null;
-  review_session_id?: string | null;
-  target_root?: string | null;
-  options?: Partial<CrossAgentOptions>;
-};
-
-type PrepareInitialRoundInput = {
-  data_dir?: string | null;
-  review_session_id?: string | null;
-  agent?: string | null;
-  focus_question?: string | null;
-  context_text?: string | null;
-  target_files?: string[];
-  source?: string | null;
-};
-
-type PrepareNextRoundInput = {
-  data_dir?: string | null;
-  review_session_id?: string | null;
-  agent?: string | null;
-  round_kind?: RoundKind | null;
-  prompt_text?: string | null;
-  previous_round?: number;
-  focus_question?: string | null;
-  target_files?: string[];
-};
-
-type CompleteRoundInput = {
-  data_dir?: string | null;
-  response_file?: string | null;
-};
-
-type GetRoundInput = {
-  data_dir?: string | null;
-  review_session_id?: string | null;
-  round?: number;
-};
 
 type CliArgs = Record<string, unknown> & {
   command?: string | null;
@@ -182,244 +69,9 @@ type CommandDefinition = {
   run: (input: unknown) => Promise<CommandOutput>;
 };
 
-const OWNER = "cross-agent";
-const DEFAULT_OPTIONS: CrossAgentOptions = {
-  max_rounds: 2,
-  auto_deep_dive: true,
-  review_depth: "medium",
-  keep_artifacts: false,
-};
-const SUPPORTED_CONTRACT_VERSION = 1;
-const ADAPTER_RESPONSE_STATUSES = new Set<AdapterResponseStatus>(["completed", "failed", "skipped"]);
-// review_session_id は state/artifact のパス要素になる。`..` や slash で data dir 外に
-// 出られないよう、ASCII の英数 + `.` `_` `-` のみ許可する。UUID はこの集合に含まれる。
-const REVIEW_SESSION_ID_RE = /^[A-Za-z0-9._-]+$/;
-
-// review_session_id が path traversal に使えない安全な文字列であることを検証する。
-function validateReviewSessionId(reviewSessionId: unknown): asserts reviewSessionId is string {
-  if (typeof reviewSessionId !== "string" || reviewSessionId.length === 0) {
-    throw new Error("review_session_id must be a non-empty string.");
-  }
-  if (!REVIEW_SESSION_ID_RE.test(reviewSessionId) || reviewSessionId.includes("..")) {
-    throw new Error(`invalid review_session_id: ${reviewSessionId}`);
-  }
-}
-
-// round 番号が positive safe integer であることを検証する。文字列や負数、小数で
-// artifact filename が壊れたり、state lookup が暗黙に失敗するのを防ぐ。
-function validateRoundNumber(round: unknown): asserts round is number {
-  if (typeof round !== "number" || !Number.isSafeInteger(round) || round < 1) {
-    throw new Error(`invalid round: ${round}`);
-  }
-}
-
-// 親パス配下に子パスがあるかを判定する。drive 違いでも誤判定しない。
-function isPathInside(parent: string, child: string) {
-  const parentPath = resolve(parent);
-  const childPath = resolve(child);
-  if (parentPath === childPath) return true;
-  const rel = relative(parentPath, childPath);
-  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
-}
-
-// state や artifact に記録する現在時刻を ISO 文字列で返す。
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
-// JSON を一時ファイルへ書いてから rename し、対象ファイルを atomic に更新する。
-async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {
-  // state 更新中に落ちても JSON が半端に壊れないようにする。
-  const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-  await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(tmp, filePath);
-}
-
-// JSON ファイルを読み込み、オブジェクトとして返す。
-async function readJson<T = unknown>(filePath: string): Promise<T> {
-  return JSON.parse(await readFile(filePath, "utf8")) as T;
-}
-
-// input から plugin data directory を解決する。
-function resolveDataDir(inputDataDir: string | null | undefined): string {
-  // data_dir は CLI から `--data-dir` argv で必須入力 (main 側で input.data_dir に注入する)。
-  // 直接 JS API を叩く呼び出し (テストなど) では input.data_dir に同等の値を渡す。
-  // plugin 文脈では SKILL.md の例の通り `${CLAUDE_PLUGIN_DATA}` を渡す
-  // (Claude Code が skill content 内で絶対パスに展開する)。Bash tool に env var として export
-  // されないことが公式仕様なので、env var フォールバックは持たない。
-  if (!inputDataDir) {
-    throw new Error(
-      "data_dir is required. In plugin context, pass `--data-dir \"${CLAUDE_PLUGIN_DATA}\"` " +
-        "(Claude Code substitutes this in skill content).",
-    );
-  }
-  return normalizePath(inputDataDir);
-}
-
-// 指定パスが存在し、ディレクトリであることを検証する。
-async function ensureDirectory(path: string, label: string): Promise<void> {
-  try {
-    const entry = await stat(path);
-    if (!entry.isDirectory()) throw new Error(`${label} is not a directory: ${path}`);
-  } catch (error) {
-    const nodeError = error as NodeJS.ErrnoException;
-    if (nodeError.code === "ENOENT") throw new Error(`${label} does not exist: ${path}`);
-    throw error;
-  }
-}
-
-// data directory と review_session_id から session/state/artifact のパスを組み立てる。
-export function sessionPaths(dataDir: string, reviewSessionId: string): SessionPathSet {
-  // すべての session/artifact パス組み立てがここを通るため、ID 検証もここに置く。
-  validateReviewSessionId(reviewSessionId);
-  // plugin root ではなく、永続 data store 配下に session と artifact をまとめる。
-  const sessionsDir = resolve(dataDir, "sessions");
-  const sessionDir = resolve(sessionsDir, reviewSessionId);
-  const artifactDir = resolve(dataDir, "artifacts", reviewSessionId);
-  return {
-    sessionsDir,
-    sessionDir,
-    artifactDir,
-    stateFile: resolve(sessionsDir, `${reviewSessionId}.json`),
-  };
-}
-
-// state に append する cross-agent 生成 artifact metadata を作る。
-function artifact(path: string, kind: string, round: number | null = null, agent: string | null = null): ArtifactRecord {
-  // cross-agent が作った artifact だけ owner=cross-agent として記録する。
-  return {
-    path,
-    kind,
-    owner: OWNER,
-    round,
-    agent,
-    created_at: nowIso(),
-    temporary: false,
-  };
-}
-
-// 省略された cross-agent option を既定値で補完する。
-export function normalizeOptions(options: Partial<CrossAgentOptions> = {}): CrossAgentOptions {
-  // Skill 側が省略した値を、state に残る安定した既定値へそろえる。
-  return {
-    ...DEFAULT_OPTIONS,
-    ...options,
-  };
-}
-
-// 初回レビュー用の定型 prompt 本文を組み立てる。
-export function buildInitialPrompt({
-  focusQuestion,
-  contextFile,
-  targetFiles = [],
-}: {
-  focusQuestion?: string | null;
-  contextFile?: string | null;
-  targetFiles?: string[];
-}): string {
-  // 会話要約そのものは Skill 側で作り、この関数は定型レビュー依頼だけを組み立てる。
-  const sections = [
-    "あなたは独立したシニアエンジニアです。以下の情報を読み、批判的・建設的なセカンドオピニオンを提供してください。",
-  ];
-
-  if (focusQuestion) {
-    sections.push(`## フォーカス質問\n${focusQuestion}`);
-  }
-
-  if (contextFile) {
-    sections.push(`## コンテキストファイル\n${contextFile}`);
-  }
-
-  if (targetFiles.length) {
-    sections.push(`## レビュー対象ファイル\n${targetFiles.join("\n")}\n\n必要に応じて関連ファイルも参照してください。`);
-  }
-
-  sections.push(`## レビュー観点
-- 見落としているリスクや問題点
-- より良いアプローチや代替案
-- 全体的な設計・判断の妥当性
-- 実装上の注意点
-- テスト観点`);
-
-  return `${sections.join("\n\n")}\n`;
-}
-
-// 追加 round 用の prompt 本文を組み立てる。
-export function buildNextRoundPrompt({
-  promptText,
-  previousOutputFile = null,
-  focusQuestion = null,
-}: {
-  promptText?: string | null;
-  previousOutputFile?: string | null;
-  focusQuestion?: string | null;
-}): string {
-  if (!promptText) throw new Error("prompt_text is required.");
-
-  const sections = [
-    "あなたは同じレビューセッションを継続しています。以下の追加依頼にだけ答えてください。",
-  ];
-
-  if (previousOutputFile) {
-    sections.push(`## 前回 round の出力\n${previousOutputFile}`);
-  }
-
-  if (focusQuestion) {
-    sections.push(`## フォーカス質問\n${focusQuestion}`);
-  }
-
-  sections.push(`## 追加依頼\n${promptText}`);
-
-  sections.push(`## 出力方針
-- 前回 round の単なる繰り返しは避ける
-- 新しく確信度が上がった点、下がった点を明示する
-- 採用すべき対応、保留すべき対応、追加調査が必要な点を分ける`);
-
-  return `${sections.join("\n\n")}\n`;
-}
-
-// adapter に渡す request envelope v1 を組み立てる。
-export function buildAdapterRequest({
-  reviewSessionId,
-  agent,
-  round,
-  roundKind,
-  targetRoot,
-  promptFile,
-  contextFile = null,
-  targetFiles = [],
-  focusQuestion = null,
-  options,
-}: {
-  reviewSessionId: string;
-  agent: string;
-  round: number;
-  roundKind: RoundKind;
-  targetRoot: string;
-  promptFile: string;
-  contextFile?: string | null;
-  targetFiles?: string[];
-  focusQuestion?: string | null;
-  options: CrossAgentOptions;
-}): AdapterRequest {
-  // adapter 境界は v1 envelope に固定し、agent 固有の解釈は adapter 側へ任せる。
-  return {
-    contract_version: 1,
-    review_session_id: reviewSessionId,
-    agent,
-    round,
-    round_kind: roundKind,
-    target_root: normalizePath(targetRoot),
-    prompt_file: normalizePath(promptFile),
-    context_file: normalizePath(contextFile),
-    target_files: normalizePathList(targetFiles),
-    focus_question: focusQuestion,
-    options: {
-      review_depth: options.review_depth,
-      timeout_seconds: options.timeout_seconds ?? null,
-    },
-  };
-}
+export { buildAdapterRequest } from "../lib/cross-agent-envelope.ts";
+export { buildInitialPrompt, buildNextRoundPrompt } from "../lib/cross-agent-prompts.ts";
+export { normalizeOptions, sessionPaths } from "../lib/cross-agent-state.ts";
 
 // review_session_id から session state を読み込む。
 async function readSession(
@@ -691,7 +343,7 @@ export async function prepareNextRound(input: PrepareNextRoundInput): Promise<Pr
 // adapter runner 自体は信頼できるが、LLM/CLI 境界では契約ドリフトや subagent の
 // 転記事故、prompt injection で envelope が偽造される可能性がある。安価な検証で防げる。
 async function validateAdapterResponse(
-  response: AdapterResponse,
+  response: AdapterResponseEnvelope,
   paths: SessionPathSet,
   responseFile: string | null = null,
 ): Promise<void> {
@@ -750,14 +402,14 @@ async function validateAdapterResponse(
 async function resolveAdapterResponseInput(
   input: CompleteRoundInput,
   dataDir: string,
-): Promise<{ response: AdapterResponse; responseFile: string }> {
+): Promise<{ response: AdapterResponseEnvelope; responseFile: string }> {
   if (!input.response_file) throw new Error("response_file is required.");
   const responseFile = normalizePath(input.response_file);
   const artifactRoot = resolve(dataDir, "artifacts");
   if (!isPathInside(artifactRoot, responseFile)) {
     throw new Error(`invalid adapter response: response_file is outside artifact root: ${responseFile}`);
   }
-  const response = await readJson<AdapterResponse>(responseFile);
+  const response = await readJson<AdapterResponseEnvelope>(responseFile);
   return { response, responseFile };
 }
 
