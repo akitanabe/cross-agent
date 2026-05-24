@@ -36,56 +36,38 @@ runner は受け取った `target_root` が存在する directory であるこ�
 
 ## パス正規化
 
-Skill は runner input の JSON 本文に入れる前に、`target_root` と `target_files` の各要素を
-`scripts/cross-agent-runner.mjs normalize-review-paths` で正規化する。
-Windows の `\` を JSON に素で埋め込むと `\U` などが不正 escape になりうるため、
-JSON へ貼る値は forward slash 表記にそろえる。
+Skill は `target_root` と `target_files` の各要素を CLI option として runner に渡す。
+パスは値ごとに quote する。Windows の `\` は argv として受け取り、runner 側で
+forward slash 表記へ正規化する。
 
 runner が生成する `prompt_file`, `context_file`, `target_root`, `target_files` と
 artifact metadata の path も、adapter request envelope や session state に記録する境界では
 forward slash 表記に正規化する。ファイル操作には同じパス文字列を使えるため、Windows でも
 `C:/...` の形を契約上の安定表現とする。
 
-```bash
-node scripts/cross-agent-runner.mjs normalize-review-paths --target-root "<target_root>" --target-files "<target_file_1>" "<target_file_2>"
-```
-
-stdout は `target_root` と `target_files` を持つ JSON fragment を返す。
-空白を含む path は path ごとに quote する。
-
 ## Runner: start-session
 
 review session の空 state 作成と `review_session_id` 生成は runner に任せる。
 
 ```bash
-node scripts/cross-agent-runner.mjs start-session --data-dir "${CLAUDE_PLUGIN_DATA}" <<'SESSION_START_JSON'
-{
-  "target_root": "...",
-  "options": {
-    "review_depth": "medium",
-    "max_rounds": 2
-  }
-}
-SESSION_START_JSON
+node scripts/cross-agent-runner.mjs start-session \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --target-root "<target_root>" \
+  --review-depth "medium" \
+  --max-rounds "2"
 ```
 
-input:
+CLI input:
 
-```json
-{
-  "review_session_id": null,
-  "target_root": "...",
-  "options": {
-    "review_depth": "medium",
-    "max_rounds": 2
-  }
-}
-```
+- `--data-dir`: 必須
+- `--target-root`: 必須
+- `--review-session-id`: 任意。省略時は runner が UUID を生成する
+- `--review-depth`: 任意。省略時は `medium`
+- `--max-rounds`: 任意。省略時は `2`
 
 `--data-dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` をそのまま渡す
 (Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
 export されないため、runner にフォールバックは無い。
-`review_session_id` を省略した場合は runner が UUID を生成する。
 
 stdout には `review_session_id` だけを text で返す。
 
@@ -97,21 +79,21 @@ runner は `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json` に空の s
 対象 session は `review_session_id` から導出した既存 state file で特定する。
 
 ```bash
-node scripts/cross-agent-runner.mjs prepare-initial --data-dir "${CLAUDE_PLUGIN_DATA}" <<'INITIAL_ROUND_JSON'
-{
-  "review_session_id": "...",
-  "agent": "codex",
-  "focus_question": "...",
-  "context_text": "...",
-  "target_files": []
-}
-INITIAL_ROUND_JSON
+node scripts/cross-agent-runner.mjs prepare-initial \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --review-session-id "<review_session_id>" \
+  --agent "codex" \
+  --focus-question "<focus_question>" \
+  --target-files "<target_file_1>" "<target_file_2>"
 ```
 
 `--data-dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` をそのまま渡す
 (Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
 export されないため、runner にフォールバックは無い。
-同じ JSON は `--input <input.json>` でファイルから読ませることもできる。
+`${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/context.md` が存在する場合、runner が
+自動で本文を読み込み session artifact の `context.md` として扱う。
+`--context-file` は明示 override 用の任意 option として残す。
+改行を含む本文を CLI 引数に直接渡してはならない。
 
 output:
 
@@ -151,29 +133,24 @@ Round 2 以降の artifact、prompt、adapter request 作成は runner に任せ
 対象 session は `review_session_id` から導出した既存 state file で特定する。
 
 ```bash
-node scripts/cross-agent-runner.mjs prepare-next-round --data-dir "${CLAUDE_PLUGIN_DATA}" <<'NEXT_ROUND_JSON'
-{
-  "review_session_id": "...",
-  "agent": "codex",
-  "round_kind": "deep_dive",
-  "prompt_text": "Round 1 の重要指摘を批判的に検証してください。"
-}
-NEXT_ROUND_JSON
+node scripts/cross-agent-runner.mjs prepare-next-round \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --review-session-id "<review_session_id>" \
+  --agent "codex" \
+  --round-kind "deep_dive" \
+  --prompt-file "<prompt_file>"
 ```
 
-input:
+CLI input:
 
-```json
-{
-  "review_session_id": "...",
-  "agent": "codex",
-  "previous_round": 1,
-  "round_kind": "deep_dive",
-  "focus_question": null,
-  "target_files": null,
-  "prompt_text": "..."
-}
-```
+- `--data-dir`: 必須
+- `--review-session-id`: 必須
+- `--prompt-file`: 必須。runner が本文を読み込む
+- `--agent`: 任意。省略時は直前 round と同じ agent
+- `--previous-round`: 任意。省略時は最後の round
+- `--round-kind`: 任意。省略時は `follow_up`
+- `--focus-question`: 任意。省略時は session context の値
+- `--target-files`: 任意。省略時は session context の値
 
 `--data-dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` をそのまま渡す
 (Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
@@ -182,7 +159,6 @@ export されないため、runner にフォールバックは無い。
 `previous_round` を省略した場合は最後の round を前回 round として扱う。
 `round_kind` を省略した場合は `follow_up` とする。
 `focus_question` と `target_files` を省略した場合は session context の値を引き継ぐ。
-同じ JSON は `--input <input.json>` でファイルから読ませることもできる。
 
 output:
 
@@ -223,40 +199,30 @@ runner に任せる。runner は必須の `--data-dir` と `review_session_id`
 から session state file を導出する。
 
 ```bash
-node scripts/cross-agent-runner.mjs complete-round --data-dir "${CLAUDE_PLUGIN_DATA}" <<'ADAPTER_RESPONSE_JSON'
-{
-  "contract_version": 1,
-  "review_session_id": "...",
-  "agent": "codex",
-  "round": 1,
-  "status": "completed",
-  "output_file": "...",
-  "artifacts": [],
-  "error": null
-}
-ADAPTER_RESPONSE_JSON
+node scripts/cross-agent-runner.mjs complete-round \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --review-session-id "<review_session_id>" \
+  --agent "codex" \
+  --round "1" \
+  --status "completed" \
+  --output-file "<output_file>"
 ```
 
-input:
+CLI input:
 
-```json
-{
-  "contract_version": 1,
-  "review_session_id": "...",
-  "agent": "codex",
-  "round": 1,
-  "status": "completed",
-  "output_file": "...",
-  "artifacts": [],
-  "error": null
-}
-```
+- `--data-dir`: 必須
+- `--review-session-id`: 必須
+- `--agent`: 必須
+- `--round`: 必須
+- `--status`: 必須。`completed` / `failed` / `skipped`
+- `--output-file`: `status=completed` の場合は必須、`failed` / `skipped` では禁止
+- `--error`: 任意。指定時は runner が `{ "message": value }` に変換する
 
-adapter response envelope をそのまま指定する。
+runner は CLI option から adapter response envelope 相当の構造を組み立てる。
+`contract_version` は runner が `1` を固定投入する。
 `--data-dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` をそのまま渡す
 (Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
 export されないため、runner にフォールバックは無い。
-同じ JSON は `--input <input.json>` でファイルから読ませることもできる。
 
 runner は対象 round の `completed_at` と `agent_result` だけを更新する。
 adapter 由来の artifacts/errors は各 adapter の agent state file に閉じるため、
@@ -267,22 +233,17 @@ top-level session state へ重複 append しない。
 完了済み round の agent output を読み、統合表示に必要な本文を返す処理は runner に任せる。
 
 ```bash
-node scripts/cross-agent-runner.mjs get-round-output --data-dir "${CLAUDE_PLUGIN_DATA}" <<'ROUND_OUTPUT_REQUEST_JSON'
-{
-  "review_session_id": "...",
-  "round": 1
-}
-ROUND_OUTPUT_REQUEST_JSON
+node scripts/cross-agent-runner.mjs get-round-output \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --review-session-id "<review_session_id>" \
+  --round "1"
 ```
 
-input:
+CLI input:
 
-```json
-{
-  "review_session_id": "...",
-  "round": 1
-}
-```
+- `--data-dir`: 必須
+- `--review-session-id`: 必須
+- `--round`: 任意
 
 `--data-dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` をそのまま渡す
 (Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では

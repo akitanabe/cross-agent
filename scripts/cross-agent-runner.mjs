@@ -5,6 +5,7 @@ import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parseCommandArgs, parseIntegerOption, requireOption } from "./cli-args.mjs";
 import { normalizePath, normalizePathList } from "./path-utils.mjs";
 
 const OWNER = "cross-agent";
@@ -579,42 +580,155 @@ export async function getRoundOutput(input) {
   return commandOutput("text", await readFile(round.output_file, "utf8"));
 }
 
-// CLI 引数を、この runner が扱う command/input option に変換する。
-function parseArgs(argv) {
-  const args = { command: argv[0], inputFile: null, dataDir: null, targetRoot: null, targetFiles: [], positional: [] };
-  for (let index = 1; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "--input" || arg === "-i") {
-      args.inputFile = argv[++index];
-    } else if (arg === "--data-dir") {
-      args.dataDir = argv[++index];
-    } else if (arg === "--target-root") {
-      args.targetRoot = argv[++index];
-    } else if (arg === "--target-files") {
-      while (index + 1 < argv.length && !argv[index + 1].startsWith("--")) {
-        args.targetFiles.push(argv[++index]);
-      }
-    } else if (arg === "--help" || arg === "-h") {
-      args.help = true;
-    } else if (arg.startsWith("-")) {
-      throw new Error(`Unknown argument: ${arg}`);
-    } else {
-      args.positional.push(arg);
-    }
+function optionInput(args) {
+  const options = {};
+  if (args.reviewDepth != null) options.review_depth = args.reviewDepth;
+  if (args.maxRounds != null) options.max_rounds = args.maxRounds;
+  return Object.keys(options).length ? options : undefined;
+}
+
+async function readOptionalTextFile(filePath) {
+  if (!filePath) return null;
+  return readFile(filePath, "utf8");
+}
+
+async function readTextFileIfExists(filePath) {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
   }
-  return args;
+}
+
+function commonInput(args) {
+  return { data_dir: requireOption(args, "dataDir", "--data-dir") };
+}
+
+async function readPrepareInitialContext(args) {
+  if (args.contextFile) return readOptionalTextFile(args.contextFile);
+  const dataDir = requireOption(args, "dataDir", "--data-dir");
+  const reviewSessionId = requireOption(args, "reviewSessionId", "--review-session-id");
+  const defaultContextFile = resolve(sessionPaths(dataDir, reviewSessionId).artifactDir, "context.md");
+  return readTextFileIfExists(defaultContextFile);
+}
+
+const commonOptions = {
+  "--data-dir": { field: "dataDir" },
+};
+
+// command ごとの CLI surface をここに集約する。新しい option は対象 command だけへ足す。
+const commandArgs = {
+  "start-session": {
+    usage:
+      "start-session --data-dir <CLAUDE_PLUGIN_DATA> --target-root <root> [--review-session-id <id>] [--review-depth <level>] [--max-rounds <n>]",
+    options: {
+      "--target-root": { field: "targetRoot" },
+      "--review-session-id": { field: "reviewSessionId" },
+      "--review-depth": { field: "reviewDepth" },
+      "--max-rounds": { field: "maxRounds", parse: parseIntegerOption },
+    },
+    buildInput: async (args) => ({
+      ...commonInput(args),
+      review_session_id: args.reviewSessionId,
+      target_root: requireOption(args, "targetRoot", "--target-root"),
+      options: optionInput(args),
+    }),
+    run: startSession,
+  },
+  "prepare-initial": {
+    usage:
+      "prepare-initial --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> [--agent <agent>] [--focus-question <text>] [--context-file <path>] [--target-files <file...>]",
+    options: {
+      "--review-session-id": { field: "reviewSessionId" },
+      "--agent": { field: "agent" },
+      "--focus-question": { field: "focusQuestion" },
+      "--context-file": { field: "contextFile" },
+      "--target-files": { field: "targetFiles", multiple: true },
+    },
+    buildInput: async (args) => ({
+      ...commonInput(args),
+      review_session_id: requireOption(args, "reviewSessionId", "--review-session-id"),
+      agent: args.agent,
+      focus_question: args.focusQuestion,
+      context_text: await readPrepareInitialContext(args),
+      target_files: args.targetFiles ?? [],
+    }),
+    run: prepareInitialRound,
+  },
+  "prepare-next-round": {
+    usage:
+      "prepare-next-round --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> --prompt-file <path> [--agent <agent>] [--round-kind <kind>] [--previous-round <n>] [--focus-question <text>] [--target-files <file...>]",
+    options: {
+      "--review-session-id": { field: "reviewSessionId" },
+      "--agent": { field: "agent" },
+      "--round-kind": { field: "roundKind" },
+      "--prompt-file": { field: "promptFile" },
+      "--previous-round": { field: "previousRound", parse: parseIntegerOption },
+      "--focus-question": { field: "focusQuestion" },
+      "--target-files": { field: "targetFiles", multiple: true },
+    },
+    buildInput: async (args) => ({
+      ...commonInput(args),
+      review_session_id: requireOption(args, "reviewSessionId", "--review-session-id"),
+      agent: args.agent,
+      round_kind: args.roundKind,
+      prompt_text: await readOptionalTextFile(requireOption(args, "promptFile", "--prompt-file")),
+      previous_round: args.previousRound,
+      focus_question: args.focusQuestion,
+      target_files: args.targetFiles,
+    }),
+    run: prepareNextRound,
+  },
+  "complete-round": {
+    usage:
+      "complete-round --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> --agent <agent> --round <n> --status <status> [--output-file <path>] [--error <message>]",
+    options: {
+      "--review-session-id": { field: "reviewSessionId" },
+      "--agent": { field: "agent" },
+      "--round": { field: "round", parse: parseIntegerOption },
+      "--status": { field: "status" },
+      "--output-file": { field: "outputFile" },
+      "--error": { field: "error" },
+    },
+    buildInput: async (args) => ({
+      ...commonInput(args),
+      contract_version: SUPPORTED_CONTRACT_VERSION,
+      review_session_id: requireOption(args, "reviewSessionId", "--review-session-id"),
+      agent: requireOption(args, "agent", "--agent"),
+      round: requireOption(args, "round", "--round"),
+      status: requireOption(args, "status", "--status"),
+      output_file: args.outputFile,
+      artifacts: [],
+      error: args.error ? { message: args.error } : null,
+    }),
+    run: async (input) => commandOutput("json", await completeRound(input)),
+  },
+  "get-round-output": {
+    usage: "get-round-output --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> [--round <n>]",
+    options: {
+      "--review-session-id": { field: "reviewSessionId" },
+      "--round": { field: "round", parse: parseIntegerOption },
+    },
+    buildInput: async (args) => ({
+      ...commonInput(args),
+      review_session_id: requireOption(args, "reviewSessionId", "--review-session-id"),
+      round: args.round,
+    }),
+    run: getRoundOutput,
+  },
+};
+
+// CLI 引数を、この runner が扱う command option に変換する。
+function parseArgs(argv) {
+  return parseCommandArgs(argv, { commands: commandArgs, commonOptions });
 }
 
 // CLI の使い方テキストを返す。
 function usage() {
   return `Usage:
   node scripts/utils-runner.mjs normalize-path <path...>
-  node scripts/cross-agent-runner.mjs normalize-review-paths --target-root <root> [--target-files <file...>]
-  node scripts/cross-agent-runner.mjs start-session       --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
-  node scripts/cross-agent-runner.mjs prepare-initial     --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
-  node scripts/cross-agent-runner.mjs prepare-next-round  --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
-  node scripts/cross-agent-runner.mjs complete-round      --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
-  node scripts/cross-agent-runner.mjs get-round-output    --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]`;
+${Object.values(commandArgs).map((command) => `  node scripts/cross-agent-runner.mjs ${command.usage}`).join("\n")}`;
 }
 
 // command result を stdout へ出す形式へそろえる。
@@ -631,27 +745,6 @@ function writeCommandOutput(result) {
   process.stdout.write(`${JSON.stringify(result.content, null, 2)}\n`);
 }
 
-export function normalizeReviewPaths({ targetRoot, targetFiles = [] }) {
-  if (!targetRoot) throw new Error("target_root is required.");
-  return {
-    target_root: normalizePath(targetRoot),
-    target_files: normalizePathList(targetFiles ?? []),
-  };
-}
-
-// runner input を stdin から読み取る。
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) chunks.push(chunk);
-  return Buffer.concat(chunks).toString("utf8");
-}
-
-// runner input をファイルまたは stdin から読み込み、JSON として返す。
-async function readInput(inputFile) {
-  const text = inputFile ? await readFile(inputFile, "utf8") : await readStdin();
-  return JSON.parse(text);
-}
-
 // CLI entrypoint。command に応じて prepare-initial または complete-round を実行する。
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -660,38 +753,9 @@ async function main() {
     return;
   }
 
-  if (args.command === "normalize-review-paths") {
-    writeCommandOutput(commandOutput("json", normalizeReviewPaths({
-      targetRoot: args.targetRoot,
-      targetFiles: args.targetFiles,
-    })));
-    return;
-  }
-
-  const input = await readInput(args.inputFile);
-  // data_dir は CLI では --data-dir argv 経由が契約。JSON 本文に書かれている場合でも
-  // argv が優先する (codex-adapter と同じ呼び出し形に揃える)。
-  // TODO: 各関数のシグネチャを `fn(input, { dataDir })` に変えて、ここでの input 注入を
-  // やめる。codex-adapter の `runAdapter(request, { dataDir })` と同じ形にすると、
-  // domain payload と runtime plumbing の責務が型として分離できる。次に runner を
-  // 触るタイミングで test の直呼び (~15 箇所) と一緒に整理する。
-  if (args.dataDir) {
-    input.data_dir = args.dataDir;
-  }
-  let result = null;
-  if (args.command === "start-session") {
-    result = await startSession(input);
-  } else if (args.command === "prepare-initial") {
-    result = await prepareInitialRound(input);
-  } else if (args.command === "prepare-next-round") {
-    result = await prepareNextRound(input);
-  } else if (args.command === "complete-round") {
-    result = commandOutput("json", await completeRound(input));
-  } else if (args.command === "get-round-output") {
-    result = await getRoundOutput(input);
-  }
-
-  if (!result) throw new Error(`Unknown command: ${args.command}`);
+  const command = commandArgs[args.command];
+  const input = await command.buildInput(args);
+  const result = await command.run(input);
   writeCommandOutput(result);
 }
 

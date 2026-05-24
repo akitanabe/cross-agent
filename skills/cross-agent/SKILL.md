@@ -41,69 +41,38 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 
 機械的にできる session state の作成は `cross-agent-runner.mjs` に任せる。
 
-**JSON 本文に入れる全パス** (`target_root` だけでなく `target_files` の各要素も含む) は、
-事前に `normalize-review-paths` で正規化したフォワードスラッシュ表記をリテラルとして埋め込む。
-Windows のバックスラッシュ (`C:\Users\...`) を素で JSON に書くと `\U` などの不正エスケープで
-`JSON.parse` が落ちる。`target_root` と `target_files` をまとめて正規化し、stdout の JSON
-fragment を後続の runner input に貼る。空白を含むパスは、パスごとに quote する。
-
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" normalize-review-paths --target-root "<target_root>" --target-files "<target_file_1>" "<target_file_2>"
-# → 例:
-# {
-#   "target_root": "C:/path/to/project",
-#   "target_files": [
-#     "C:/path/to/project/src/a.ts",
-#     "C:/path/to/project/src/b.ts"
-#   ]
-# }
-```
-
-得られた正規化済みパスを各フィールドにリテラル値として埋め込む。
-JSON は Write ツールで `${CLAUDE_PLUGIN_DATA}/tmp-<step>.json` に書き出し、
-`--input <path>` でパスを渡す。heredoc は `allowed-tools` のグロブマッチと
-相性が悪いため使わない。
-
 `--data-dir` は全 runner 呼び出しで必須。plugin 文脈では `${CLAUDE_PLUGIN_DATA}` をそのまま
 渡す。Claude Code が skill content を読み込む時点で絶対パス
 (`~/.claude/plugins/data/<plugin-id>/`) に展開してから LLM に渡すため、argv 経由でも
 展開済みの絶対パスが届く。env var は Bash 経由では export されないので、runner 側の
 フォールバックは無い。
 
-**Write** `${CLAUDE_PLUGIN_DATA}/tmp-start-session.json`:
-```json
-{
-  "target_root": "C:/path/to/project",
-  "options": {
-    "review_depth": "medium",
-    "max_rounds": 2
-  }
-}
-```
-
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session --data-dir "${CLAUDE_PLUGIN_DATA}" --input "${CLAUDE_PLUGIN_DATA}/tmp-start-session.json"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --target-root "<target_root>" \
+  --review-depth "medium" \
+  --max-rounds "2"
 ```
 
 runner は `review_session_id` だけを stdout に返す。以降の runner / adapter 呼び出しにはこの
 `review_session_id` を渡す。
 
-会話要約や設計案が必要な場合は `context_text` として整理し、構造化 input を渡して
-初回 round を準備する。
+会話要約や設計案が必要な場合は本文を整理し、初回 round の前に context file として保存する。
+runner は `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/context.md` が存在する場合、自動で読み込む。
 
-**Write** `${CLAUDE_PLUGIN_DATA}/tmp-prepare-initial.json`:
-```json
-{
-  "review_session_id": "<review_session_id>",
-  "agent": "codex",
-  "focus_question": "<focus_question>",
-  "context_text": "<context_text>",
-  "target_files": []
-}
+**Write** `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/context.md`:
+```md
+<context_text>
 ```
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-initial --data-dir "${CLAUDE_PLUGIN_DATA}" --input "${CLAUDE_PLUGIN_DATA}/tmp-prepare-initial.json"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-initial \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --review-session-id "<review_session_id>" \
+  --agent "codex" \
+  --focus-question "<focus_question>" \
+  --target-files "<target_file_1>" "<target_file_2>"
 ```
 
 runner は次に渡す adapter request envelope をそのまま返す。
@@ -135,38 +104,27 @@ runner は次に渡す adapter request envelope をそのまま返す。
 
 `claude-adapter` は未完成のため、v1 では `codex` のみを実行対象とする。
 
-adapter response envelope をそのまま渡して、round 完了処理を runner に任せる。
-
-**Write** `${CLAUDE_PLUGIN_DATA}/tmp-complete-round.json`:
-```json
-{
-  "contract_version": 1,
-  "review_session_id": "...",
-  "agent": "codex",
-  "round": 1,
-  "status": "completed",
-  "output_file": "...",
-  "artifacts": [],
-  "error": null
-}
-```
+adapter response envelope の各フィールドを CLI option にして渡し、round 完了処理を runner に任せる。
+`status=completed` の場合は `--output-file` を必ず渡す。`failed` / `skipped` の場合は
+`--output-file` を渡さず、必要に応じて短い `--error "<message>"` を渡す。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-round --data-dir "${CLAUDE_PLUGIN_DATA}" --input "${CLAUDE_PLUGIN_DATA}/tmp-complete-round.json"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-round \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --review-session-id "<review_session_id>" \
+  --agent "codex" \
+  --round "1" \
+  --status "completed" \
+  --output-file "<adapter_output_file>"
 ```
 
 その後、`get-round-output` で adapter の出力本文を取得し、ユーザーへ統合結果を提示する。
 
-**Write** `${CLAUDE_PLUGIN_DATA}/tmp-get-round-output.json`:
-```json
-{
-  "review_session_id": "...",
-  "round": 1
-}
-```
-
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" get-round-output --data-dir "${CLAUDE_PLUGIN_DATA}" --input "${CLAUDE_PLUGIN_DATA}/tmp-get-round-output.json"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" get-round-output \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --review-session-id "<review_session_id>" \
+  --round "1"
 ```
 
 ## 守ること
@@ -199,18 +157,18 @@ Round 2 を実行する条件:
 
 追加 round の prompt 保存、state への round 登録、adapter request 作成は runner に任せる。
 
-**Write** `${CLAUDE_PLUGIN_DATA}/tmp-prepare-next-round.json`:
-```json
-{
-  "review_session_id": "<review_session_id>",
-  "agent": "codex",
-  "round_kind": "deep_dive",
-  "prompt_text": "<round 2 prompt>"
-}
+**Write** `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-2-prompt.md`:
+```md
+<round 2 prompt>
 ```
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-next-round --data-dir "${CLAUDE_PLUGIN_DATA}" --input "${CLAUDE_PLUGIN_DATA}/tmp-prepare-next-round.json"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-next-round \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --review-session-id "<review_session_id>" \
+  --agent "codex" \
+  --round-kind "deep_dive" \
+  --prompt-file "${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-2-prompt.md"
 ```
 
 runner は次に渡す adapter request envelope をそのまま返す。
