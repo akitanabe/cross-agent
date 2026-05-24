@@ -475,6 +475,82 @@ test("completeRound records adapter response into state", async () => {
   }
 });
 
+test("sessionPaths rejects review_session_id with path traversal", () => {
+  assert.throws(() => sessionPaths("/tmp/data", "../escape"), /invalid review_session_id/);
+  assert.throws(() => sessionPaths("/tmp/data", "foo/bar"), /invalid review_session_id/);
+  assert.throws(() => sessionPaths("/tmp/data", "foo\\bar"), /invalid review_session_id/);
+  assert.throws(() => sessionPaths("/tmp/data", ".."), /invalid review_session_id/);
+  assert.throws(() => sessionPaths("/tmp/data", ""), /non-empty string/);
+});
+
+test("sessionPaths accepts UUID and other safe ids", () => {
+  assert.doesNotThrow(() => sessionPaths("/tmp/data", "829c6ad2-d23e-4bd3-9b81-44dfce08e9a8"));
+  assert.doesNotThrow(() => sessionPaths("/tmp/data", "session-1"));
+  assert.doesNotThrow(() => sessionPaths("/tmp/data", "v1.2_test"));
+});
+
+test("startSession rejects unsafe review_session_id input", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+
+    await assert.rejects(
+      startSession({ data_dir: dataDir, review_session_id: "../escape", target_root: targetRoot }),
+      /invalid review_session_id/,
+    );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("completeRound rejects non-integer round number", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({ data_dir: dataDir, review_session_id: "session-1", target_root: targetRoot });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    for (const bad of ["1", 0, -1, 1.5, Number.NaN]) {
+      await assert.rejects(
+        completeRound({
+          data_dir: dataDir,
+          contract_version: 1,
+          review_session_id: "session-1",
+          agent: "codex",
+          round: bad,
+          status: "failed",
+        }),
+        /invalid round/,
+        `expected invalid round for ${String(bad)}`,
+      );
+    }
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("getRound rejects non-integer round number", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({ data_dir: dataDir, review_session_id: "session-1", target_root: targetRoot });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    await assert.rejects(
+      getRound({ data_dir: dataDir, review_session_id: "session-1", round: "1" }),
+      /invalid round/,
+    );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("completeRound rejects unsupported contract_version", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
