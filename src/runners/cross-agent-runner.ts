@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
@@ -9,21 +8,195 @@ import { fileURLToPath } from "node:url";
 import { parseCommandArgs, parseIntegerOption, requireOption } from "../lib/cli-args.ts";
 import { normalizePath, normalizePathList } from "../lib/path-utils.ts";
 
+type ReviewDepth = "low" | "medium" | "high" | string;
+type RoundKind = "initial_review" | "deep_dive" | "recovery" | "follow_up" | string;
+type AdapterResponseStatus = "completed" | "failed" | "skipped";
+type OutputType = "text" | "json";
+
+type CrossAgentOptions = {
+  max_rounds: number;
+  auto_deep_dive: boolean;
+  review_depth: ReviewDepth;
+  keep_artifacts: boolean;
+  timeout_seconds?: number | null;
+};
+
+type ArtifactRecord = {
+  path: string;
+  kind: string;
+  owner: string;
+  round: number | null;
+  agent: string | null;
+  created_at: string;
+  temporary: boolean;
+};
+
+type AgentResult = {
+  agent: string;
+  round: number;
+  status: AdapterResponseStatus | string;
+  output_file: string | null;
+  error: unknown;
+};
+
+type RoundEntry = {
+  round: number;
+  kind: RoundKind;
+  agent: string;
+  prompt_file: string;
+  started_at: string;
+  completed_at: string | null;
+  agent_result: AgentResult | null;
+};
+
+type SessionState = {
+  schema_version?: number;
+  review_session_id: string;
+  created_at?: string;
+  updated_at: string;
+  status: string;
+  target_root: string;
+  current_round: number;
+  options: CrossAgentOptions;
+  context?: {
+    context_file: string | null;
+    initial_prompt_file: string | null;
+    focus_question: string | null;
+    target_files: string[];
+    source: string;
+  };
+  rounds: RoundEntry[];
+  artifacts: {
+    files: ArtifactRecord[];
+  };
+  errors?: unknown[];
+};
+
+type SessionPathSet = {
+  sessionsDir: string;
+  sessionDir: string;
+  artifactDir: string;
+  stateFile: string;
+};
+
+type AdapterRequest = {
+  contract_version: 1;
+  review_session_id: string;
+  agent: string;
+  round: number;
+  round_kind: RoundKind;
+  target_root: string;
+  prompt_file: string;
+  context_file: string | null;
+  target_files: string[];
+  focus_question: string | null;
+  options: {
+    review_depth: ReviewDepth;
+    timeout_seconds: number | null;
+  };
+};
+
+type AdapterResponse = {
+  contract_version: number;
+  review_session_id: string | null;
+  agent: string;
+  round: number;
+  status: AdapterResponseStatus | string;
+  output_file?: string | null;
+  artifacts?: unknown[];
+  error?: unknown;
+};
+
+type CommandOutput<T = unknown> = {
+  output_type: OutputType;
+  content: T;
+};
+
+type PrepareRoundResult = CommandOutput<string> & {
+  request_file: string;
+  envelope: AdapterRequest;
+};
+
+type StartSessionInput = {
+  data_dir?: string | null;
+  review_session_id?: string | null;
+  target_root?: string | null;
+  options?: Partial<CrossAgentOptions>;
+};
+
+type PrepareInitialRoundInput = {
+  data_dir?: string | null;
+  review_session_id?: string | null;
+  agent?: string | null;
+  focus_question?: string | null;
+  context_text?: string | null;
+  target_files?: string[];
+  source?: string | null;
+};
+
+type PrepareNextRoundInput = {
+  data_dir?: string | null;
+  review_session_id?: string | null;
+  agent?: string | null;
+  round_kind?: RoundKind | null;
+  prompt_text?: string | null;
+  previous_round?: number;
+  focus_question?: string | null;
+  target_files?: string[];
+};
+
+type CompleteRoundInput = {
+  data_dir?: string | null;
+  response_file?: string | null;
+};
+
+type GetRoundInput = {
+  data_dir?: string | null;
+  review_session_id?: string | null;
+  round?: number;
+};
+
+type CliArgs = Record<string, unknown> & {
+  command?: string | null;
+  help?: boolean;
+  dataDir?: string;
+  targetRoot?: string;
+  reviewSessionId?: string;
+  reviewDepth?: ReviewDepth;
+  maxRounds?: number;
+  agent?: string;
+  focusQuestion?: string;
+  contextFile?: string;
+  targetFiles?: string[];
+  roundKind?: RoundKind;
+  promptFile?: string;
+  previousRound?: number;
+  responseFile?: string;
+  round?: number;
+};
+
+type CommandDefinition = {
+  usage: string;
+  options: Record<string, { field: string; multiple?: boolean; parse?: (value: string, optionName: string) => unknown }>;
+  buildInput: (args: CliArgs) => Promise<unknown>;
+  run: (input: unknown) => Promise<CommandOutput>;
+};
+
 const OWNER = "cross-agent";
-const DEFAULT_OPTIONS = {
+const DEFAULT_OPTIONS: CrossAgentOptions = {
   max_rounds: 2,
   auto_deep_dive: true,
   review_depth: "medium",
   keep_artifacts: false,
 };
 const SUPPORTED_CONTRACT_VERSION = 1;
-const ADAPTER_RESPONSE_STATUSES = new Set(["completed", "failed", "skipped"]);
+const ADAPTER_RESPONSE_STATUSES = new Set<AdapterResponseStatus>(["completed", "failed", "skipped"]);
 // review_session_id は state/artifact のパス要素になる。`..` や slash で data dir 外に
 // 出られないよう、ASCII の英数 + `.` `_` `-` のみ許可する。UUID はこの集合に含まれる。
 const REVIEW_SESSION_ID_RE = /^[A-Za-z0-9._-]+$/;
 
 // review_session_id が path traversal に使えない安全な文字列であることを検証する。
-function validateReviewSessionId(reviewSessionId) {
+function validateReviewSessionId(reviewSessionId: unknown): asserts reviewSessionId is string {
   if (typeof reviewSessionId !== "string" || reviewSessionId.length === 0) {
     throw new Error("review_session_id must be a non-empty string.");
   }
@@ -34,14 +207,14 @@ function validateReviewSessionId(reviewSessionId) {
 
 // round 番号が positive safe integer であることを検証する。文字列や負数、小数で
 // artifact filename が壊れたり、state lookup が暗黙に失敗するのを防ぐ。
-function validateRoundNumber(round) {
-  if (!Number.isSafeInteger(round) || round < 1) {
+function validateRoundNumber(round: unknown): asserts round is number {
+  if (typeof round !== "number" || !Number.isSafeInteger(round) || round < 1) {
     throw new Error(`invalid round: ${round}`);
   }
 }
 
 // 親パス配下に子パスがあるかを判定する。drive 違いでも誤判定しない。
-function isPathInside(parent, child) {
+function isPathInside(parent: string, child: string) {
   const parentPath = resolve(parent);
   const childPath = resolve(child);
   if (parentPath === childPath) return true;
@@ -50,12 +223,12 @@ function isPathInside(parent, child) {
 }
 
 // state や artifact に記録する現在時刻を ISO 文字列で返す。
-function nowIso() {
+function nowIso(): string {
   return new Date().toISOString();
 }
 
 // JSON を一時ファイルへ書いてから rename し、対象ファイルを atomic に更新する。
-async function writeJsonAtomic(filePath, value) {
+async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {
   // state 更新中に落ちても JSON が半端に壊れないようにする。
   const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
   await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
@@ -63,12 +236,12 @@ async function writeJsonAtomic(filePath, value) {
 }
 
 // JSON ファイルを読み込み、オブジェクトとして返す。
-async function readJson(filePath) {
-  return JSON.parse(await readFile(filePath, "utf8"));
+async function readJson<T = unknown>(filePath: string): Promise<T> {
+  return JSON.parse(await readFile(filePath, "utf8")) as T;
 }
 
 // input から plugin data directory を解決する。
-function resolveDataDir(inputDataDir) {
+function resolveDataDir(inputDataDir: string | null | undefined): string {
   // data_dir は CLI から `--data-dir` argv で必須入力 (main 側で input.data_dir に注入する)。
   // 直接 JS API を叩く呼び出し (テストなど) では input.data_dir に同等の値を渡す。
   // plugin 文脈では SKILL.md の例の通り `${CLAUDE_PLUGIN_DATA}` を渡す
@@ -84,18 +257,19 @@ function resolveDataDir(inputDataDir) {
 }
 
 // 指定パスが存在し、ディレクトリであることを検証する。
-async function ensureDirectory(path, label) {
+async function ensureDirectory(path: string, label: string): Promise<void> {
   try {
     const entry = await stat(path);
     if (!entry.isDirectory()) throw new Error(`${label} is not a directory: ${path}`);
   } catch (error) {
-    if (error.code === "ENOENT") throw new Error(`${label} does not exist: ${path}`);
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === "ENOENT") throw new Error(`${label} does not exist: ${path}`);
     throw error;
   }
 }
 
 // data directory と review_session_id から session/state/artifact のパスを組み立てる。
-export function sessionPaths(dataDir, reviewSessionId) {
+export function sessionPaths(dataDir: string, reviewSessionId: string): SessionPathSet {
   // すべての session/artifact パス組み立てがここを通るため、ID 検証もここに置く。
   validateReviewSessionId(reviewSessionId);
   // plugin root ではなく、永続 data store 配下に session と artifact をまとめる。
@@ -111,7 +285,7 @@ export function sessionPaths(dataDir, reviewSessionId) {
 }
 
 // state に append する cross-agent 生成 artifact metadata を作る。
-function artifact(path, kind, round = null, agent = null) {
+function artifact(path: string, kind: string, round: number | null = null, agent: string | null = null): ArtifactRecord {
   // cross-agent が作った artifact だけ owner=cross-agent として記録する。
   return {
     path,
@@ -125,7 +299,7 @@ function artifact(path, kind, round = null, agent = null) {
 }
 
 // 省略された cross-agent option を既定値で補完する。
-export function normalizeOptions(options = {}) {
+export function normalizeOptions(options: Partial<CrossAgentOptions> = {}): CrossAgentOptions {
   // Skill 側が省略した値を、state に残る安定した既定値へそろえる。
   return {
     ...DEFAULT_OPTIONS,
@@ -134,7 +308,15 @@ export function normalizeOptions(options = {}) {
 }
 
 // 初回レビュー用の定型 prompt 本文を組み立てる。
-export function buildInitialPrompt({ focusQuestion, contextFile, targetFiles = [] }) {
+export function buildInitialPrompt({
+  focusQuestion,
+  contextFile,
+  targetFiles = [],
+}: {
+  focusQuestion?: string | null;
+  contextFile?: string | null;
+  targetFiles?: string[];
+}): string {
   // 会話要約そのものは Skill 側で作り、この関数は定型レビュー依頼だけを組み立てる。
   const sections = [
     "あなたは独立したシニアエンジニアです。以下の情報を読み、批判的・建設的なセカンドオピニオンを提供してください。",
@@ -163,7 +345,15 @@ export function buildInitialPrompt({ focusQuestion, contextFile, targetFiles = [
 }
 
 // 追加 round 用の prompt 本文を組み立てる。
-export function buildNextRoundPrompt({ promptText, previousOutputFile = null, focusQuestion = null }) {
+export function buildNextRoundPrompt({
+  promptText,
+  previousOutputFile = null,
+  focusQuestion = null,
+}: {
+  promptText?: string | null;
+  previousOutputFile?: string | null;
+  focusQuestion?: string | null;
+}): string {
   if (!promptText) throw new Error("prompt_text is required.");
 
   const sections = [
@@ -200,7 +390,18 @@ export function buildAdapterRequest({
   targetFiles = [],
   focusQuestion = null,
   options,
-}) {
+}: {
+  reviewSessionId: string;
+  agent: string;
+  round: number;
+  roundKind: RoundKind;
+  targetRoot: string;
+  promptFile: string;
+  contextFile?: string | null;
+  targetFiles?: string[];
+  focusQuestion?: string | null;
+  options: CrossAgentOptions;
+}): AdapterRequest {
   // adapter 境界は v1 envelope に固定し、agent 固有の解釈は adapter 側へ任せる。
   return {
     contract_version: 1,
@@ -221,11 +422,14 @@ export function buildAdapterRequest({
 }
 
 // review_session_id から session state を読み込む。
-async function readSession(dataDir, reviewSessionId) {
+async function readSession(
+  dataDir: string,
+  reviewSessionId: string | null | undefined,
+): Promise<{ paths: SessionPathSet; state: SessionState }> {
   if (!reviewSessionId) throw new Error("review_session_id is required.");
 
   const paths = sessionPaths(dataDir, reviewSessionId);
-  const state = await readJson(paths.stateFile);
+  const state = await readJson<SessionState>(paths.stateFile);
   if (state.review_session_id !== reviewSessionId) {
     throw new Error("state review_session_id does not match input review_session_id.");
   }
@@ -248,7 +452,21 @@ async function prepareRound({
   resetRounds = false,
   extraArtifacts = [],
   updateState = null,
-}) {
+}: {
+  paths: SessionPathSet;
+  state: SessionState;
+  reviewSessionId: string;
+  agent: string;
+  round: number;
+  roundKind: RoundKind;
+  promptText: string;
+  contextFile: string | null;
+  targetFiles: string[];
+  focusQuestion: string | null;
+  resetRounds?: boolean;
+  extraArtifacts?: ArtifactRecord[];
+  updateState?: ((input: { promptFile: string; now: string }) => void) | null;
+}): Promise<PrepareRoundResult> {
   const promptFile = resolve(paths.artifactDir, `round-${round}-prompt.md`);
   const normalizedPromptFile = normalizePath(promptFile);
   const normalizedContextFile = normalizePath(contextFile);
@@ -310,7 +528,7 @@ async function prepareRound({
 }
 
 // review session の空 state を作成する。
-export async function startSession(input) {
+export async function startSession(input: StartSessionInput): Promise<CommandOutput<string>> {
   const dataDir = resolveDataDir(input.data_dir);
   const targetRoot = normalizePath(input.target_root);
   if (!targetRoot) throw new Error("target_root is required.");
@@ -352,19 +570,20 @@ export async function startSession(input) {
 }
 
 // 初回 round に必要な artifact、prompt、adapter request を作成する。
-export async function prepareInitialRound(input) {
+export async function prepareInitialRound(input: PrepareInitialRoundInput): Promise<PrepareRoundResult> {
   const dataDir = resolveDataDir(input.data_dir);
   const reviewSessionId = input.review_session_id;
+  if (!reviewSessionId) throw new Error("review_session_id is required.");
   const { paths, state } = await readSession(dataDir, reviewSessionId);
 
   const agent = input.agent ?? "codex";
-  const targetFiles = normalizePathList(input.target_files ?? []);
+  const targetFiles = normalizePathList(input.target_files ?? []) as string[];
   const focusQuestion = input.focus_question ?? null;
   const contextText = input.context_text ?? null;
   const source = input.source ?? (contextText && targetFiles.length ? "mixed" : contextText ? "conversation" : "files");
 
   let contextFile = null;
-  const artifacts = [];
+  const artifacts: ArtifactRecord[] = [];
   if (contextText) {
     // context_text はすでに要約済みの入力として扱い、ここでは保存だけ行う。
     contextFile = resolve(paths.artifactDir, "context.md");
@@ -401,9 +620,10 @@ export async function prepareInitialRound(input) {
 }
 
 // 追加 round に必要な prompt と adapter request を作成する。
-export async function prepareNextRound(input) {
+export async function prepareNextRound(input: PrepareNextRoundInput): Promise<PrepareRoundResult> {
   const dataDir = resolveDataDir(input.data_dir);
   const reviewSessionId = input.review_session_id;
+  if (!reviewSessionId) throw new Error("review_session_id is required.");
   const { paths, state } = await readSession(dataDir, reviewSessionId);
   if (state.status !== "active") {
     throw new Error(`session is not active: ${state.status}`);
@@ -424,7 +644,7 @@ export async function prepareNextRound(input) {
   const agent = input.agent ?? previousRound.agent;
   const roundKind = input.round_kind ?? "follow_up";
   const focusQuestion = input.focus_question ?? state.context?.focus_question ?? null;
-  const targetFiles = normalizePathList(input.target_files ?? state.context?.target_files ?? []);
+  const targetFiles = normalizePathList(input.target_files ?? state.context?.target_files ?? []) as string[];
   const contextFile = state.context?.context_file ?? null;
   const nextRound = Math.max(0, ...rounds.map((entry) => entry.round)) + 1;
 
@@ -470,11 +690,15 @@ export async function prepareNextRound(input) {
 // adapter response envelope の必須フィールドと output_file の path containment を検証する。
 // adapter runner 自体は信頼できるが、LLM/CLI 境界では契約ドリフトや subagent の
 // 転記事故、prompt injection で envelope が偽造される可能性がある。安価な検証で防げる。
-async function validateAdapterResponse(response, paths, responseFile = null) {
+async function validateAdapterResponse(
+  response: AdapterResponse,
+  paths: SessionPathSet,
+  responseFile: string | null = null,
+): Promise<void> {
   if (response.contract_version !== SUPPORTED_CONTRACT_VERSION) {
     throw new Error(`invalid adapter response: unsupported contract_version ${response.contract_version}`);
   }
-  if (!ADAPTER_RESPONSE_STATUSES.has(response.status)) {
+  if (!ADAPTER_RESPONSE_STATUSES.has(response.status as AdapterResponseStatus)) {
     throw new Error(`invalid adapter response: unknown status ${response.status}`);
   }
   validateRoundNumber(response.round);
@@ -487,7 +711,8 @@ async function validateAdapterResponse(response, paths, responseFile = null) {
     try {
       responseEntry = await stat(responseFile);
     } catch (error) {
-      if (error.code === "ENOENT") {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code === "ENOENT") {
         throw new Error(`invalid adapter response: response_file does not exist: ${responseFile}`);
       }
       throw error;
@@ -508,7 +733,8 @@ async function validateAdapterResponse(response, paths, responseFile = null) {
     try {
       entry = await stat(response.output_file);
     } catch (error) {
-      if (error.code === "ENOENT") {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code === "ENOENT") {
         throw new Error(`invalid adapter response: output_file does not exist: ${response.output_file}`);
       }
       throw error;
@@ -521,19 +747,22 @@ async function validateAdapterResponse(response, paths, responseFile = null) {
   }
 }
 
-async function resolveAdapterResponseInput(input, dataDir) {
+async function resolveAdapterResponseInput(
+  input: CompleteRoundInput,
+  dataDir: string,
+): Promise<{ response: AdapterResponse; responseFile: string }> {
   if (!input.response_file) throw new Error("response_file is required.");
   const responseFile = normalizePath(input.response_file);
   const artifactRoot = resolve(dataDir, "artifacts");
   if (!isPathInside(artifactRoot, responseFile)) {
     throw new Error(`invalid adapter response: response_file is outside artifact root: ${responseFile}`);
   }
-  const response = await readJson(responseFile);
+  const response = await readJson<AdapterResponse>(responseFile);
   return { response, responseFile };
 }
 
 // adapter response を既存 state の rounds[].agent_result に反映し、round を完了させる。
-export async function completeRound(input) {
+export async function completeRound(input: CompleteRoundInput): Promise<Record<string, unknown>> {
   // adapter は artifacts/errors を自分で append する。ここでは round 結果だけを閉じる。
   const dataDir = resolveDataDir(input.data_dir);
   const { response: agentResponse, responseFile } = await resolveAdapterResponseInput(input, dataDir);
@@ -543,7 +772,7 @@ export async function completeRound(input) {
   const paths = sessionPaths(dataDir, reviewSessionId);
   await validateAdapterResponse(agentResponse, paths, responseFile);
 
-  const state = await readJson(paths.stateFile);
+  const state = await readJson<SessionState>(paths.stateFile);
   if (state.review_session_id !== reviewSessionId) {
     throw new Error("state review_session_id does not match input review_session_id.");
   }
@@ -556,7 +785,7 @@ export async function completeRound(input) {
     agent: agentResponse.agent,
     round: agentResponse.round,
     status: agentResponse.status,
-    output_file: normalizePath(agentResponse.output_file),
+    output_file: normalizePath(agentResponse.output_file ?? null),
     error: agentResponse.error,
   };
 
@@ -574,13 +803,20 @@ export async function completeRound(input) {
 }
 
 // state から対象 round の結果を取得する。
-export async function getRound(input) {
+export async function getRound(input: GetRoundInput): Promise<{
+  review_session_id: string;
+  round: number;
+  agent: string;
+  status: string;
+  output_file: string | null;
+  error: unknown;
+}> {
   const dataDir = resolveDataDir(input.data_dir);
   const reviewSessionId = input.review_session_id;
   if (!reviewSessionId) throw new Error("review_session_id is required.");
 
   const stateFile = sessionPaths(dataDir, reviewSessionId).stateFile;
-  const state = await readJson(stateFile);
+  const state = await readJson<SessionState>(stateFile);
   if (state.review_session_id !== reviewSessionId) {
     throw new Error("state review_session_id does not match input review_session_id.");
   }
@@ -609,51 +845,52 @@ export async function getRound(input) {
 }
 
 // round の output file を読み、CLI が stdout へ出す text output を作る。
-export async function getRoundOutput(input) {
+export async function getRoundOutput(input: GetRoundInput): Promise<CommandOutput<string>> {
   const round = await getRound(input);
   if (!round.output_file) throw new Error(`round has no output_file: ${round.round}/${round.agent}`);
   return commandOutput("text", await readFile(round.output_file, "utf8"));
 }
 
-function optionInput(args) {
-  const options = {};
+function optionInput(args: CliArgs): Partial<CrossAgentOptions> | undefined {
+  const options: Partial<CrossAgentOptions> = {};
   if (args.reviewDepth != null) options.review_depth = args.reviewDepth;
   if (args.maxRounds != null) options.max_rounds = args.maxRounds;
   return Object.keys(options).length ? options : undefined;
 }
 
-async function readOptionalTextFile(filePath) {
+async function readOptionalTextFile(filePath: string | null | undefined): Promise<string | null> {
   if (!filePath) return null;
   return readFile(filePath, "utf8");
 }
 
-async function readTextFileIfExists(filePath) {
+async function readTextFileIfExists(filePath: string): Promise<string | null> {
   try {
     return await readFile(filePath, "utf8");
   } catch (error) {
-    if (error.code === "ENOENT") return null;
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === "ENOENT") return null;
     throw error;
   }
 }
 
-function commonInput(args) {
-  return { data_dir: requireOption(args, "dataDir", "--data-dir") };
+function commonInput(args: CliArgs): { data_dir: string } {
+  return { data_dir: requireOption(args, "dataDir", "--data-dir") as string };
 }
 
-async function readPrepareInitialContext(args) {
+async function readPrepareInitialContext(args: CliArgs): Promise<string | null> {
   if (args.contextFile) return readOptionalTextFile(args.contextFile);
-  const dataDir = requireOption(args, "dataDir", "--data-dir");
-  const reviewSessionId = requireOption(args, "reviewSessionId", "--review-session-id");
+  const dataDir = requireOption(args, "dataDir", "--data-dir") as string;
+  const reviewSessionId = requireOption(args, "reviewSessionId", "--review-session-id") as string;
   const defaultContextFile = resolve(sessionPaths(dataDir, reviewSessionId).artifactDir, "context.md");
   return readTextFileIfExists(defaultContextFile);
 }
 
-const commonOptions = {
+const commonOptions: Record<string, { field: string }> = {
   "--data-dir": { field: "dataDir" },
 };
 
 // command ごとの CLI surface をここに集約する。新しい option は対象 command だけへ足す。
-const commandArgs = {
+const commandArgs: Record<string, CommandDefinition> = {
   "start-session": {
     usage:
       "start-session --data-dir <CLAUDE_PLUGIN_DATA> --target-root <root> [--review-session-id <id>] [--review-depth <level>] [--max-rounds <n>]",
@@ -666,10 +903,10 @@ const commandArgs = {
     buildInput: async (args) => ({
       ...commonInput(args),
       review_session_id: args.reviewSessionId,
-      target_root: requireOption(args, "targetRoot", "--target-root"),
+      target_root: requireOption(args, "targetRoot", "--target-root") as string,
       options: optionInput(args),
     }),
-    run: startSession,
+    run: (input) => startSession(input as StartSessionInput),
   },
   "prepare-initial": {
     usage:
@@ -683,13 +920,13 @@ const commandArgs = {
     },
     buildInput: async (args) => ({
       ...commonInput(args),
-      review_session_id: requireOption(args, "reviewSessionId", "--review-session-id"),
+      review_session_id: requireOption(args, "reviewSessionId", "--review-session-id") as string,
       agent: args.agent,
       focus_question: args.focusQuestion,
       context_text: await readPrepareInitialContext(args),
       target_files: args.targetFiles ?? [],
     }),
-    run: prepareInitialRound,
+    run: (input) => prepareInitialRound(input as PrepareInitialRoundInput),
   },
   "prepare-next-round": {
     usage:
@@ -705,15 +942,15 @@ const commandArgs = {
     },
     buildInput: async (args) => ({
       ...commonInput(args),
-      review_session_id: requireOption(args, "reviewSessionId", "--review-session-id"),
+      review_session_id: requireOption(args, "reviewSessionId", "--review-session-id") as string,
       agent: args.agent,
       round_kind: args.roundKind,
-      prompt_text: await readOptionalTextFile(requireOption(args, "promptFile", "--prompt-file")),
+      prompt_text: await readOptionalTextFile(requireOption(args, "promptFile", "--prompt-file") as string),
       previous_round: args.previousRound,
       focus_question: args.focusQuestion,
       target_files: args.targetFiles,
     }),
-    run: prepareNextRound,
+    run: (input) => prepareNextRound(input as PrepareNextRoundInput),
   },
   "complete-round": {
     usage: "complete-round --data-dir <CLAUDE_PLUGIN_DATA> --response-file <response-envelope.json>",
@@ -722,9 +959,9 @@ const commandArgs = {
     },
     buildInput: async (args) => ({
       ...commonInput(args),
-      response_file: requireOption(args, "responseFile", "--response-file"),
+      response_file: requireOption(args, "responseFile", "--response-file") as string,
     }),
-    run: async (input) => commandOutput("json", await completeRound(input)),
+    run: async (input) => commandOutput("json", await completeRound(input as CompleteRoundInput)),
   },
   "get-round-output": {
     usage: "get-round-output --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> [--round <n>]",
@@ -734,31 +971,31 @@ const commandArgs = {
     },
     buildInput: async (args) => ({
       ...commonInput(args),
-      review_session_id: requireOption(args, "reviewSessionId", "--review-session-id"),
+      review_session_id: requireOption(args, "reviewSessionId", "--review-session-id") as string,
       round: args.round,
     }),
-    run: getRoundOutput,
+    run: (input) => getRoundOutput(input as GetRoundInput),
   },
 };
 
 // CLI 引数を、この runner が扱う command option に変換する。
-function parseArgs(argv) {
-  return parseCommandArgs(argv, { commands: commandArgs, commonOptions });
+function parseArgs(argv: string[]): CliArgs & { command: string | null; help?: boolean } {
+  return parseCommandArgs<CliArgs>(argv, { commands: commandArgs, commonOptions });
 }
 
 // CLI の使い方テキストを返す。
-function usage() {
+function usage(): string {
   return `Usage:
   node scripts/utils-runner.mjs normalize-path <path...>
 ${Object.values(commandArgs).map((command) => `  node scripts/cross-agent-runner.mjs ${command.usage}`).join("\n")}`;
 }
 
 // command result を stdout へ出す形式へそろえる。
-function commandOutput(outputType, content) {
+function commandOutput<T>(outputType: OutputType, content: T): CommandOutput<T> {
   return { output_type: outputType, content };
 }
 
-function writeCommandOutput(result) {
+function writeCommandOutput(result: CommandOutput): void {
   if (result.output_type === "text") {
     const text = String(result.content ?? "");
     process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
@@ -768,7 +1005,7 @@ function writeCommandOutput(result) {
 }
 
 // CLI entrypoint。command に応じて prepare-initial または complete-round を実行する。
-async function main() {
+async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.command) {
     process.stdout.write(`${usage()}\n`);
@@ -776,6 +1013,7 @@ async function main() {
   }
 
   const command = commandArgs[args.command];
+  if (!command) throw new Error(`Unknown command: ${args.command}`);
   const input = await command.buildInput(args);
   const result = await command.run(input);
   writeCommandOutput(result);
@@ -784,7 +1022,8 @@ async function main() {
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : null;
 if (invokedPath && invokedPath === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
-    process.stderr.write(`${error.stack ?? error.message}\n`);
+    const caught = error as Error;
+    process.stderr.write(`${caught.stack ?? caught.message}\n`);
     process.exitCode = 1;
   });
 }
