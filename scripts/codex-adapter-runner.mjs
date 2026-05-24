@@ -6,6 +6,7 @@ import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promis
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parseOptionArgs } from "./cli-args.mjs";
 import { normalizePath, normalizePathList } from "./path-utils.mjs";
 
 const OWNER = "codex-adapter";
@@ -76,35 +77,28 @@ export function shouldStartNewSession(agentState, targetRoot) {
   return { startNew: false, reason: "resume" };
 }
 
+const optionArgs = {
+  "--request": { field: "requestFile" },
+  "-r": { field: "requestFile" },
+  "--codex-bin": { field: "codexBin" },
+  "--data-dir": { field: "dataDir" },
+  "--launcher": {
+    field: "launcher",
+    // codex 起動を POSIX shell 経由で wrap する。空文字なら未指定扱い (直接 spawn) にする。
+    parse: (value) => (value === "" ? null : value),
+  },
+};
+
 // CLI 引数を、この runner が扱う option に変換する。
-function parseArgs(argv) {
-  const args = {
-    requestFile: null,
-    codexBin: "codex",
-    dataDir: null,
-    launcher: null,
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "--request" || arg === "-r") {
-      args.requestFile = argv[++index];
-    } else if (arg === "--codex-bin") {
-      args.codexBin = argv[++index];
-    } else if (arg === "--data-dir") {
-      args.dataDir = argv[++index];
-    } else if (arg === "--launcher") {
-      // codex 起動を POSIX shell 経由で wrap する。空文字なら未指定扱い (直接 spawn) にする。
-      const value = argv[++index];
-      args.launcher = value === "" ? null : value;
-    } else if (arg === "--help" || arg === "-h") {
-      args.help = true;
-    } else {
-      throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
-  return args;
+export function parseArgs(argv) {
+  return parseOptionArgs(argv, optionArgs, {
+    initialArgs: {
+      requestFile: null,
+      codexBin: "codex",
+      dataDir: null,
+      launcher: null,
+    },
+  });
 }
 
 // CLI の使い方テキストを返す。
@@ -256,9 +250,10 @@ async function validateRequest(request) {
 // 環境差異 (Windows の .cmd shim 等) は agent が --launcher で渡したシェルが解決する。
 export function wrapWithLauncher(launcher, command, extraArgs) {
   if (!launcher) return { command, args: extraArgs };
+  const launcherCommand = normalizePath(command);
   return {
     command: launcher,
-    args: ["-c", 'exec "$@"', launcher, command, ...extraArgs],
+    args: ["-c", 'exec "$@"', launcher, launcherCommand, ...extraArgs],
   };
 }
 
@@ -399,15 +394,17 @@ export async function runAdapter(request, options = {}) {
   const agentStateFile = agentStateFileFor(dataDir ?? ".", request.review_session_id ?? "unknown");
 
   if (!dataDir) {
-    return await handleFailure({
-      request: requestWithDataDir,
-      agentState: null,
-      paths,
-      code: "invalid_request_envelope",
-      message:
+    return makeResponse(
+      requestWithDataDir,
+      "failed",
+      null,
+      [],
+      makeError(
+        "invalid_request_envelope",
         "--data-dir is required. In plugin context, pass `--data-dir \"${CLAUDE_PLUGIN_DATA}\"` " +
-        "(Claude Code substitutes this in skill content).",
-    });
+          "(Claude Code substitutes this in skill content).",
+      ),
+    );
   }
 
   await mkdir(artifactDir, { recursive: true });

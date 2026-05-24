@@ -10,7 +10,7 @@ export function requireOption(args, field, optionName) {
 }
 
 function parseOptionValue(option, value, optionName) {
-  return option.parse?.(value, optionName) ?? value;
+  return option.parse ? option.parse(value, optionName) : value;
 }
 
 export function parseOptionArgs(argv, optionDefinitions, { startIndex = 0, initialArgs = {} } = {}) {

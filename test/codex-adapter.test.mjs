@@ -5,9 +5,13 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// 環境に bash があるかをテスト実行時に観測する。Windows なら Git Bash の bash.exe を想定。
-function hasBashOnPath() {
-  const result = spawnSync("bash", ["-c", "exit 0"], { stdio: "ignore" });
+// 環境に launcher として使える bash があるかをテスト実行時に観測する。
+// Windows の WSL stub は `bash -c exit 0` だけなら通ることがあるため、実際の launcher 形式を試す。
+function hasUsableBashLauncher() {
+  const result = spawnSync("bash", ["-c", 'exec "$@"', "bash", "printf", "ok"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
   return result.status === 0;
 }
 
@@ -17,6 +21,7 @@ import {
   artifactPaths,
   effortForReviewDepth,
   extractThreadIdFromJsonl,
+  parseArgs,
   runAdapter,
   sessionStateFileFor,
   shouldStartNewSession,
@@ -130,6 +135,14 @@ test("wrapWithLauncher routes spawn through `launcher -c 'exec \"$@\"' launcher 
   assert.deepEqual(wrapped.args, ["-c", 'exec "$@"', "bash", "codex", "exec", "prompt with $var"]);
 });
 
+test("wrapWithLauncher normalizes only the launched command path", () => {
+  const command = "C:\\tools\\codex.exe";
+  const expectedCommand = process.platform === "win32" ? "C:/tools/codex.exe" : command;
+  const wrapped = wrapWithLauncher("bash", command, ["exec", "prompt with C:\\raw\\text"]);
+
+  assert.deepEqual(wrapped.args, ["-c", 'exec "$@"', "bash", expectedCommand, "exec", "prompt with C:\\raw\\text"]);
+});
+
 test("shouldStartNewSession starts when thread id is missing", () => {
   assert.deepEqual(shouldStartNewSession({}, "C:/repo"), {
     startNew: true,
@@ -166,6 +179,48 @@ test("artifact path helpers use data directory layout", () => {
   assert.match(paths.eventLog.replaceAll("\\", "/"), /round-2-codex-events\.jsonl$/);
   assert.match(paths.diagnosticFile.replaceAll("\\", "/"), /round-2-codex-diagnostic\.md$/);
   assert.match(paths.responseFile.replaceAll("\\", "/"), /round-2-codex-response\.json$/);
+});
+
+test("parseArgs uses shared option parser for codex adapter CLI options", () => {
+  assert.deepEqual(parseArgs([]), {
+    requestFile: null,
+    codexBin: "codex",
+    dataDir: null,
+    launcher: null,
+  });
+
+  assert.deepEqual(
+    parseArgs([
+      "-r",
+      "request.json",
+      "--codex-bin",
+      "codex-next",
+      "--data-dir",
+      "C:/data",
+      "--launcher",
+      "",
+    ]),
+    {
+      requestFile: "request.json",
+      codexBin: "codex-next",
+      dataDir: "C:/data",
+      launcher: null,
+    },
+  );
+
+  assert.deepEqual(parseArgs(["--help"]), {
+    requestFile: null,
+    codexBin: "codex",
+    dataDir: null,
+    launcher: null,
+    help: true,
+  });
+});
+
+test("parseArgs rejects unknown codex adapter options and missing values", () => {
+  assert.throws(() => parseArgs(["--unknown"]), /Unknown argument: --unknown/);
+  assert.throws(() => parseArgs(["extra"]), /Unexpected positional argument: extra/);
+  assert.throws(() => parseArgs(["--request"]), /--request requires a value/);
 });
 
 test("runAdapter returns failed envelope when dataDir is missing (no env var fallback)", async () => {
@@ -216,7 +271,7 @@ test("runAdapter starts a Codex session and persists thread mapping", async () =
 
 test(
   "runAdapter with launcher routes spawn through bash and preserves prompt with shell metacharacters",
-  { skip: hasBashOnPath() ? false : "bash not on PATH" },
+  { skip: hasUsableBashLauncher() ? false : "usable bash launcher not available" },
   async () => {
     const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
     try {

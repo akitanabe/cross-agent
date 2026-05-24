@@ -52,6 +52,14 @@ test("parseOptionArgs applies option parse callbacks", () => {
   assert.deepEqual(args, { round: 3 });
 });
 
+test("parseOptionArgs preserves parse callback return values", () => {
+  const args = parseOptionArgs(["--launcher", ""], {
+    "--launcher": { field: "launcher", parse: (value) => (value === "" ? null : value) },
+  });
+
+  assert.deepEqual(args, { launcher: null });
+});
+
 test("parseOptionArgs preserves initial args and supports help", () => {
   const args = parseOptionArgs(["command", "--help"], {}, {
     startIndex: 1,
