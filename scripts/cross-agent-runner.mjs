@@ -6,7 +6,6 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { normalizePath, normalizePathList } from "./path-utils.mjs";
-import { runNormalizePathCommand } from "./utils-runner.mjs";
 
 const OWNER = "cross-agent";
 const DEFAULT_OPTIONS = {
@@ -550,17 +549,6 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.command) {
     process.stdout.write(`${usage()}\n`);
-    return;
-  }
-
-  // normalize-path は互換用 alias。新しい呼び出しは utils-runner.mjs を使う。
-  // パスを JSON に埋めると \U などで JSON.parse が落ちるため、呼び出し側はこれで先に
-  // 正規化してから他コマンドの JSON 本文に埋める。stdin/JSON 入力は不要。
-  if (args.command === "normalize-path") {
-    // 引数が 2 個以上なら quote 忘れの可能性が高い (例: `normalize-path C:\Program Files\...` が
-    // 空白で分解されている)。サイレントに先頭だけ採用するとパス断片だけ正規化して返してしまい
-    // 事故るので、ここで fail-loud にする。
-    process.stdout.write(`${runNormalizePathCommand(args.positional)}\n`);
     return;
   }
 

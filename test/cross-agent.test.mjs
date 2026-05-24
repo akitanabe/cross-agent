@@ -204,15 +204,6 @@ test("utils-runner normalize-path command rejects multiple positional args to ca
   );
 });
 
-test("cross-agent-runner keeps normalize-path as a compatibility alias", async () => {
-  const result = await runRunner(["normalize-path", "C:\\Users\\example"], "");
-  if (process.platform === "win32") {
-    assert.equal(result.stdout, "C:/Users/example\n");
-  } else {
-    assert.equal(result.stdout, "C:\\Users\\example\n");
-  }
-});
-
 test("start-session command fails loud on raw Windows path embedded in JSON", async () => {
   // SKILL の契約: パスは事前に normalize-path で正規化したリテラルを JSON に書く。
   // 契約違反 (生の backslash パス) は JSON.parse で派手に落ちる、という設計意図の回帰テスト。
