@@ -14,7 +14,7 @@ cross-agent/
 ├── agents/
 │   └── codex-agent.md               # Codex adapter を実行する subagent
 ├── skills/
-│   ├── cross-agent/SKILL.md         # オーケストレーター（/cross-agent）
+│   ├── review/SKILL.md              # オーケストレーター（cross-agent:review）
 │   ├── codex-adapter/SKILL.md       # Codex CLI 固有の実装
 │   └── claude-adapter/SKILL.md      # Claude 固有の実装
 ├── docs/

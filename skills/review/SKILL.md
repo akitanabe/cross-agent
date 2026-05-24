@@ -1,5 +1,5 @@
 ---
-name: cross-agent
+name: review
 description: 外部エージェント（Codex、Claude など）を選んでセカンドオピニオン・批判的レビューを依頼するスキル。プランや設計案のレビュー、コードの問題点洗い出し、判断の妥当性確認など、独立した視点が欲しいときに使用する。「セカンドオピニオンが欲しい」「別のAIに聞いてみて」「第三者の目で見て」「クロスでレビューして」「cross-agent して」などの言葉が出たら使用する。
 user-invocable: true
 allowed-tools: Bash(node "**/cross-agent-runner.mjs"**) Glob Write
