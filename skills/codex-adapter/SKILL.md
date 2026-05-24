@@ -10,9 +10,6 @@ allowed-tools: Bash(uname -s) Bash(node "**/codex-adapter-runner.mjs"**)
 codex-adapter は Codex CLI 実行境界を担当する。cross-agent から request envelope file path を受け取り、
 Node.js runner を実行して response envelope file path を返す。
 
-詳細な入出力契約、state 更新範囲、artifact、エラーコード、Codex CLI の分岐条件は
-[docs/codex-adapter-spec.md](../../docs/codex-adapter-spec.md) を正とする。
-
 ## 実行
 
 request envelope file path を `--request` で渡して以下を実行する。
@@ -60,8 +57,12 @@ runner は `--launcher` 指定時、`<launcher> -c 'exec "$@"' <launcher> codex 
 ## 実装メモ
 
 - 実装本体: `scripts/codex-adapter-runner.mjs`
+- 仕様: `docs/codex-adapter-spec.md`
 - テスト: `test/codex-adapter.test.mjs`
 - Node.js: 24+
+
+詳細な入出力契約、state 更新範囲、artifact、エラーコード、Codex CLI の分岐条件は
+[docs/codex-adapter-spec.md](../../docs/codex-adapter-spec.md) を正とする。
 
 runner を変更したら、少なくとも以下を実行する。
 
