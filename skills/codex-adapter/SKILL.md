@@ -2,6 +2,9 @@
 name: codex-adapter
 description: cross-agent から委譲される Codex CLI（codex exec）固有のアダプター。review_session_id を Codex の thread_id にマッピングしてセッションを継続し、レビューを実行する。通常はユーザーが直接呼ばず、cross-agent オーケストレーターから呼び出される。
 user-invocable: false
+allowed-tools:
+  - Bash(uname -s)
+  - Bash(node **/scripts/codex-adapter-runner.mjs*)
 ---
 
 ## 役割
@@ -55,10 +58,10 @@ uname -s
 
 出力に応じて選ぶ。
 
-| `uname -s` の出力 | 渡す `--launcher` |
-|---|---|
+| `uname -s` の出力                                    | 渡す `--launcher` |
+| ---------------------------------------------------- | ----------------- |
 | `MINGW*` / `MSYS*` / `CYGWIN*` (Git Bash on Windows) | `--launcher bash` |
-| `Linux` / `Darwin` / その他 POSIX | 渡さない (省略) |
+| `Linux` / `Darwin` / その他 POSIX                    | 渡さない (省略)   |
 
 `bash` が PATH 上で解決されない環境では、絶対パス (POSIX 形式) を渡す。例:
 `--launcher /c/Program\ Files/Git/bin/bash.exe`

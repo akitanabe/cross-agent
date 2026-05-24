@@ -2,6 +2,8 @@
 name: cross-agent
 description: 外部エージェント（Codex、Claude など）を選んでセカンドオピニオン・批判的レビューを依頼するスキル。プランや設計案のレビュー、コードの問題点洗い出し、判断の妥当性確認など、独立した視点が欲しいときに使用する。「セカンドオピニオンが欲しい」「別のAIに聞いてみて」「第三者の目で見て」「クロスでレビューして」「cross-agent して」などの言葉が出たら使用する。
 user-invocable: true
+allowed-tools:
+  - Bash(node **/scripts/cross-agent-runner.mjs*)
 ---
 
 ## 役割
@@ -121,8 +123,8 @@ runner は次に渡す adapter request envelope をそのまま返す。
 
 返ってきた JSON 全体を依頼本文に含め、対応する subagent に委譲する。
 
-| Agent | 委譲先 |
-|---|---|
+| Agent   | 委譲先                                                        |
+| ------- | ------------------------------------------------------------- |
 | `codex` | `codex-agent` subagent（内部で `codex-adapter` skill を使用） |
 
 `claude-adapter` は未完成のため、v1 では `codex` のみを実行対象とする。
@@ -219,11 +221,11 @@ runner は次に渡す adapter request envelope をそのまま返す。
 
 `round_kind` は用途で使い分ける。
 
-| kind | 用途 |
-|---|---|
-| `deep_dive` | Round 1 の重要指摘を深掘り・反証・見落とし確認する自動深掘り |
-| `follow_up` | 統合表示後のユーザー追加質問。`max_rounds` の対象外 |
-| `recovery` | adapter 失敗後に、同じ session を使って復旧・再試行する round |
+| kind        | 用途                                                          |
+| ----------- | ------------------------------------------------------------- |
+| `deep_dive` | Round 1 の重要指摘を深掘り・反証・見落とし確認する自動深掘り  |
+| `follow_up` | 統合表示後のユーザー追加質問。`max_rounds` の対象外           |
+| `recovery`  | adapter 失敗後に、同じ session を使って復旧・再試行する round |
 
 Round 2 の自動深掘り prompt には、Round 1 の繰り返しではなく以下を含める。
 
