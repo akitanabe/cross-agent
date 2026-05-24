@@ -15,5 +15,10 @@
     "codex",
     "subagent",
     "cross-agent"
-  ]
+  ],
+  "settings": {
+    "permissions": {
+      "allow": ["Bash(node \"**/*-adapter-runner.mjs\"**)", "Bash(uname -s)"]
+    }
+  }
 }

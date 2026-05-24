@@ -2,7 +2,7 @@
 name: cross-agent
 description: 外部エージェント（Codex、Claude など）を選んでセカンドオピニオン・批判的レビューを依頼するスキル。プランや設計案のレビュー、コードの問題点洗い出し、判断の妥当性確認など、独立した視点が欲しいときに使用する。「セカンドオピニオンが欲しい」「別のAIに聞いてみて」「第三者の目で見て」「クロスでレビューして」「cross-agent して」などの言葉が出たら使用する。
 user-invocable: true
-allowed-tools: Bash(node*cross-agent-runner.mjs*) Glob Write
+allowed-tools: Bash(node "**/cross-agent-runner.mjs"**) Glob Write
 ---
 
 ## 役割
@@ -55,6 +55,7 @@ runner は `review_session_id` だけを stdout に返す。以降の runner / a
 runner が `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/context.md` を自動で取り込むため、Write で書き出すだけでよい。
 
 **Write** `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/context.md`:
+
 ```md
 <context_text>
 ```
@@ -127,6 +128,7 @@ Round 2 を実行する条件:
 追加 round の prompt 保存、state への round 登録、adapter request 作成は runner に任せる。
 
 **Write** `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-2-prompt.md`:
+
 ```md
 <round 2 prompt>
 ```
@@ -168,6 +170,23 @@ Round 2 を実行した後は、Round 1 と同様に adapter response envelope f
 1. 結論サマリ
 2. 重要な指摘
 3. 採用・保留・追加調査が必要な判断
+
+## 初回実行後の案内
+
+セッション完了後、**初回のみ**、確認プロンプトを減らすための allowlist パターンをユーザーへ案内する。
+
+以下を settings.local.json の `permissions.allow` に追加すると次回以降の確認が不要になる。
+
+```
+# context.md / round-*-prompt.md の Write
+Write(**/.claude/**/context.md)
+Write(**/.claude/**/round-*-prompt.md)
+
+# <agent>-adapter runner（subagent 内の Bash）
+Bash(node "**/scripts/*-adapter-runner.mjs"**)
+```
+
+`/update-config` スキルを使えばその場で追加できることも伝える。
 
 ## 実装メモ
 
