@@ -417,9 +417,24 @@ export async function prepareNextRound(input) {
   const contextFile = state.context?.context_file ?? null;
   const nextRound = Math.max(0, ...rounds.map((entry) => entry.round)) + 1;
 
+  // round_kind ごとの前提条件: deep_dive は前 round の成功結果を掘るための round なので
+  // status: completed を必須、recovery は失敗復旧用なので status: failed を必須にする。
+  // follow_up は仕様上「statusは completed を推奨」なので緩めに許す。
+  if (roundKind === "deep_dive" && previousResult.status !== "completed") {
+    throw new Error(`deep_dive requires previous round status=completed, got ${previousResult.status}`);
+  }
+  if (roundKind === "recovery" && previousResult.status !== "failed") {
+    throw new Error(`recovery requires previous round status=failed, got ${previousResult.status}`);
+  }
+
+  // max_rounds の予算は follow_up を除いて数える。follow_up は仕様上 max_rounds 対象外
+  // なので、follow_up を挟んだ後に deep_dive / recovery が誤って詰まらないようにする。
   const maxRounds = state.options?.max_rounds ?? DEFAULT_OPTIONS.max_rounds;
-  if (nextRound > maxRounds && roundKind !== "follow_up") {
-    throw new Error(`max_rounds exceeded: ${nextRound} > ${maxRounds}`);
+  if (roundKind !== "follow_up") {
+    const consumed = rounds.filter((entry) => entry.kind !== "follow_up").length;
+    if (consumed >= maxRounds) {
+      throw new Error(`max_rounds exceeded: ${consumed + 1} > ${maxRounds}`);
+    }
   }
 
   const promptText = buildNextRoundPrompt({

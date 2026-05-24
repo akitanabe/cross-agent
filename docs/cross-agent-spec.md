@@ -474,6 +474,19 @@ cross-agent は `prepare-next-round` で追加 round を作成し、adapter resp
 | `follow_up` | 統合表示後のユーザー追加質問 | 対象外 |
 | `recovery` | adapter 失敗後の復旧・再試行 | 対象 |
 
+`prepare-next-round` は `round_kind` ごとに次の前提条件を持つ。
+
+- `deep_dive`: 直前 round の `agent_result.status === "completed"` を必須とする。失敗 round
+  の結果を掘っても意味がないため、`recovery` を経て成功させてから深掘りする。
+- `recovery`: 直前 round の `agent_result.status === "failed"` を必須とする。成功 round に
+  対する recovery は原則拒否する。
+- `follow_up`: 直前 round の `agent_result.status` は `completed` を推奨するが、失敗後の
+  ユーザー質問もあり得るため緩める。本文参照ができない場合があることに注意する。
+
+`max_rounds` の予算は `follow_up` を除いた round 数 (`initial_review` / `deep_dive` /
+`recovery`) で評価する。`follow_up` を挟んだことで後続の `deep_dive` / `recovery` が
+誤って詰まらないようにする。
+
 Round 3 以降は v1 では自動継続しない。ユーザーが追加質問をした場合は
 `follow_up` として扱う。ユーザーが明示的に深掘り継続を求め、かつ `max_rounds` に
 余裕がある場合だけ、追加の `deep_dive` round を作成してよい。

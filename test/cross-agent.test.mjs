@@ -475,6 +475,183 @@ test("completeRound records adapter response into state", async () => {
   }
 });
 
+test("prepareNextRound rejects deep_dive when previous round failed", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      target_root: targetRoot,
+      options: { max_rounds: 2 },
+    });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+    await completeRound({
+      data_dir: dataDir,
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 1,
+      status: "failed",
+      error: { message: "codex CLI exited 1" },
+    });
+
+    await assert.rejects(
+      prepareNextRound({
+        data_dir: dataDir,
+        review_session_id: "session-1",
+        round_kind: "deep_dive",
+        prompt_text: "深掘りを試みる",
+      }),
+      /deep_dive requires previous round status=completed/,
+    );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("prepareNextRound rejects recovery when previous round completed", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      target_root: targetRoot,
+      options: { max_rounds: 2 },
+    });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
+    await writeFile(outputFile, "ok", "utf8");
+    await completeRound({
+      data_dir: dataDir,
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 1,
+      status: "completed",
+      output_file: outputFile,
+    });
+
+    await assert.rejects(
+      prepareNextRound({
+        data_dir: dataDir,
+        review_session_id: "session-1",
+        round_kind: "recovery",
+        prompt_text: "成功 round を復旧する",
+      }),
+      /recovery requires previous round status=failed/,
+    );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("prepareNextRound max_rounds does not count follow_up rounds", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      target_root: targetRoot,
+      options: { max_rounds: 2 },
+    });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    const round1Output = join(paths.artifactDir, "round-1-codex-output.md");
+    await writeFile(round1Output, "round 1", "utf8");
+    await completeRound({
+      data_dir: dataDir,
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 1,
+      status: "completed",
+      output_file: round1Output,
+    });
+
+    await prepareNextRound({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      round_kind: "follow_up",
+      prompt_text: "ユーザー追加質問 (consumed=1 のまま残る想定)",
+    });
+    const round2Output = join(paths.artifactDir, "round-2-codex-output.md");
+    await writeFile(round2Output, "round 2", "utf8");
+    await completeRound({
+      data_dir: dataDir,
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 2,
+      status: "completed",
+      output_file: round2Output,
+    });
+
+    const result = await prepareNextRound({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      round_kind: "deep_dive",
+      prompt_text: "follow_up 後の deep_dive は通る (consumed=1, max=2)",
+    });
+    assert.equal(result.content.round, 3);
+    assert.equal(result.content.round_kind, "deep_dive");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("prepareNextRound max_rounds blocks deep_dive when budget exhausted", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      target_root: targetRoot,
+      options: { max_rounds: 1 },
+    });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
+    await writeFile(outputFile, "ok", "utf8");
+    await completeRound({
+      data_dir: dataDir,
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 1,
+      status: "completed",
+      output_file: outputFile,
+    });
+
+    await assert.rejects(
+      prepareNextRound({
+        data_dir: dataDir,
+        review_session_id: "session-1",
+        round_kind: "deep_dive",
+        prompt_text: "max_rounds=1 では deep_dive は通らない",
+      }),
+      /max_rounds exceeded/,
+    );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("sessionPaths rejects review_session_id with path traversal", () => {
   assert.throws(() => sessionPaths("/tmp/data", "../escape"), /invalid review_session_id/);
   assert.throws(() => sessionPaths("/tmp/data", "foo/bar"), /invalid review_session_id/);
