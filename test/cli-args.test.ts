@@ -1,4 +1,5 @@
-import test from "node:test";
+// @ts-nocheck
+import { expect, test } from "vitest";
 import assert from "node:assert/strict";
 
 import {
@@ -6,7 +7,7 @@ import {
   parseIntegerOption,
   parseOptionArgs,
   requireOption,
-} from "../scripts/cli-args.mjs";
+} from "../src/lib/cli-args.ts";
 
 test("parseIntegerOption parses safe integers", () => {
   assert.equal(parseIntegerOption("2", "--round"), 2);

@@ -22,10 +22,14 @@ cross-agent/
 │   └── codex-adapter-spec.md        # codex-adapter 詳細仕様
 ├── scripts/
 │   ├── cross-agent-runner.mjs       # cross-agent runner
-│   └── codex-adapter-runner.mjs     # Codex adapter runner
-├── test/
-│   ├── cross-agent.test.mjs         # cross-agent runner のテスト
-│   └── codex-adapter.test.mjs       # Codex adapter runner のテスト
+│   ├── codex-adapter-runner.mjs     # Codex adapter runner
+│   └── utils-runner.mjs             # 共通 utility runner
+├── src/
+│   ├── runners/                     # runner の TypeScript 正本
+│   └── lib/                         # bundle に閉じ込める共有実装
+├── test/                            # Vitest テスト
+├── tools/
+│   └── build.mjs                    # esbuild bundle
 └── README.md
 ```
 
@@ -46,12 +50,14 @@ cross-agent/
 - Node.js 24+
 
 ```bash
+npm install
+npm run check
+npm test
 claude --plugin-dir /path/to/cross-agent
 claude plugin validate /path/to/cross-agent
-node --test
 ```
 
-Codex adapter の実行ロジックは Node.js スクリプトとして実装する。
+runner は `src/runners/*.ts` を正本とし、`npm run build` で `scripts/*.mjs` に bundle する。
 
 ```bash
 node scripts/cross-agent-runner.mjs prepare-initial --data-dir /path/to/data --review-session-id session-1

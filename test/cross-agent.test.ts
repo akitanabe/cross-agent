@@ -1,4 +1,5 @@
-import test from "node:test";
+// @ts-nocheck
+import { expect, test } from "vitest";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -18,7 +19,7 @@ import {
   prepareNextRound,
   sessionPaths,
   startSession,
-} from "../scripts/cross-agent-runner.mjs";
+} from "../src/runners/cross-agent-runner.ts";
 import { normalizePath } from "../src/lib/path-utils.ts";
 
 const runnerPath = fileURLToPath(new URL("../scripts/cross-agent-runner.mjs", import.meta.url));

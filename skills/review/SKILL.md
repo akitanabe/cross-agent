@@ -190,14 +190,16 @@ Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/*-adapter-runner.mjs"**)
 
 ## 実装メモ
 
-- 実装本体: `scripts/cross-agent-runner.mjs`
+- 実装本体: `src/runners/cross-agent-runner.ts`
+- 配布 runner: `scripts/cross-agent-runner.mjs`
 - 仕様: `docs/cross-agent-spec.md`
-- テスト: `test/cross-agent.test.mjs`
+- テスト: `test/cross-agent.test.ts`
 - Node.js: 24+
 
 runner や仕様を変更したら、少なくとも以下を実行する。
 
 ```bash
-node --test
+npm run check
+npm test
 claude plugin validate .
 ```

@@ -6,7 +6,7 @@
 //
 // posix 環境では `\` も `/c/...` も正当な値になりうるため、変換は win32 のときだけ行う。
 // platform を引数で渡せるようにして、テストを実行環境に依存させない。
-export function normalizePath(value, platform = process.platform) {
+export function normalizePath<T>(value: T, platform: NodeJS.Platform | string = process.platform): T | string {
   if (typeof value !== "string" || value.length === 0) return value;
   if (platform !== "win32") return value;
 
@@ -22,7 +22,7 @@ export function normalizePath(value, platform = process.platform) {
 }
 
 // 文字列配列の各要素を normalizePath で正規化する。null / undefined はそのまま返す。
-export function normalizePathList(values, platform = process.platform) {
+export function normalizePathList<T>(values: T, platform: NodeJS.Platform | string = process.platform): T | string[] {
   if (!Array.isArray(values)) return values;
   return values.map((value) => normalizePath(value, platform));
 }

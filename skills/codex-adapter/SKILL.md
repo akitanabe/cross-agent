@@ -56,9 +56,10 @@ runner は `--launcher` 指定時、`<launcher> -c 'exec "$@"' <launcher> codex 
 
 ## 実装メモ
 
-- 実装本体: `scripts/codex-adapter-runner.mjs`
+- 実装本体: `src/runners/codex-adapter-runner.ts`
+- 配布 runner: `scripts/codex-adapter-runner.mjs`
 - 仕様: `docs/codex-adapter-spec.md`
-- テスト: `test/codex-adapter.test.mjs`
+- テスト: `test/codex-adapter.test.ts`
 - Node.js: 24+
 
 詳細な入出力契約、state 更新範囲、artifact、エラーコード、Codex CLI の分岐条件は
@@ -67,6 +68,7 @@ runner は `--launcher` 指定時、`<launcher> -c 'exec "$@"' <launcher> codex 
 runner を変更したら、少なくとも以下を実行する。
 
 ```bash
-node --test
+npm run check
+npm test
 claude plugin validate .
 ```
