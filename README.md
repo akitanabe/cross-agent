@@ -18,7 +18,6 @@ cross-agent/
 │   ├── codex-adapter/SKILL.md       # Codex CLI 固有の実装
 │   └── claude-adapter/SKILL.md      # Claude 固有の実装
 ├── docs/
-│   ├── SKILL.md                     # 既存 advice スキル（移植元の参照）
 │   ├── cross-agent-spec.md          # cross-agent 詳細仕様
 │   └── codex-adapter-spec.md        # codex-adapter 詳細仕様
 ├── scripts/
