@@ -206,10 +206,10 @@ export function buildAdapterRequest({
     agent,
     round,
     round_kind: roundKind,
-    target_root: targetRoot,
-    prompt_file: promptFile,
-    context_file: contextFile,
-    target_files: targetFiles,
+    target_root: normalizePath(targetRoot),
+    prompt_file: normalizePath(promptFile),
+    context_file: normalizePath(contextFile),
+    target_files: normalizePathList(targetFiles),
     focus_question: focusQuestion,
     options: {
       review_depth: options.review_depth,
@@ -248,6 +248,8 @@ async function prepareRound({
   updateState = null,
 }) {
   const promptFile = resolve(paths.artifactDir, `round-${round}-prompt.md`);
+  const normalizedPromptFile = normalizePath(promptFile);
+  const normalizedContextFile = normalizePath(contextFile);
   await writeFile(promptFile, promptText, "utf8");
 
   const adapterRequest = buildAdapterRequest({
@@ -256,26 +258,27 @@ async function prepareRound({
     round,
     roundKind,
     targetRoot: state.target_root,
-    promptFile,
-    contextFile,
+    promptFile: normalizedPromptFile,
+    contextFile: normalizedContextFile,
     targetFiles,
     focusQuestion,
     options: state.options,
   });
 
   const adapterRequestFile = resolve(paths.artifactDir, `round-${round}-adapter-request.json`);
+  const normalizedAdapterRequestFile = normalizePath(adapterRequestFile);
   await writeJsonAtomic(adapterRequestFile, adapterRequest);
 
   const now = nowIso();
   state.updated_at = now;
   state.current_round = round;
-  updateState?.({ promptFile, now });
+  updateState?.({ promptFile: normalizedPromptFile, now });
 
   const roundEntry = {
     round,
     kind: roundKind,
     agent,
-    prompt_file: promptFile,
+    prompt_file: normalizedPromptFile,
     started_at: now,
     completed_at: null,
     agent_result: null,
@@ -291,8 +294,8 @@ async function prepareRound({
   state.artifacts.files ??= [];
   state.artifacts.files.push(
     ...extraArtifacts,
-    artifact(promptFile, "prompt", round, agent),
-    artifact(adapterRequestFile, "adapter_request", round, agent),
+    artifact(normalizedPromptFile, "prompt", round, agent),
+    artifact(normalizedAdapterRequestFile, "adapter_request", round, agent),
   );
 
   await writeJsonAtomic(paths.stateFile, state);
@@ -359,8 +362,10 @@ export async function prepareInitialRound(input) {
   if (contextText) {
     // context_text はすでに要約済みの入力として扱い、ここでは保存だけ行う。
     contextFile = resolve(paths.artifactDir, "context.md");
+    const normalizedContextFile = normalizePath(contextFile);
     await writeFile(contextFile, contextText.endsWith("\n") ? contextText : `${contextText}\n`, "utf8");
-    artifacts.push(artifact(contextFile, "context"));
+    artifacts.push(artifact(normalizedContextFile, "context"));
+    contextFile = normalizedContextFile;
   }
 
   const promptText = buildInitialPrompt({ focusQuestion, contextFile, targetFiles });
@@ -516,7 +521,7 @@ export async function completeRound(input) {
     agent: agentResponse.agent,
     round: agentResponse.round,
     status: agentResponse.status,
-    output_file: agentResponse.output_file,
+    output_file: normalizePath(agentResponse.output_file),
     error: agentResponse.error,
   };
 

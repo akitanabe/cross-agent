@@ -293,12 +293,21 @@ test("prepareInitialRound creates prompt and adapter request", async () => {
     assert.equal(adapterRequest.state_file, undefined);
     assert.equal(adapterRequest.agent_state_file, undefined);
     assert.equal(adapterRequest.options.review_depth, "low");
+    assert.equal(adapterRequest.prompt_file, normalizePath(adapterRequest.prompt_file));
+    assert.equal(adapterRequest.context_file, normalizePath(adapterRequest.context_file));
 
     const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
     assert.equal(state.current_round, 1);
     assert.equal(state.agent_state_files, undefined);
     assert.equal(state.agents, undefined);
     assert.equal(state.rounds[0].agent_result, null);
+    assert.equal(state.context.context_file, normalizePath(state.context.context_file));
+    assert.equal(state.context.initial_prompt_file, normalizePath(state.context.initial_prompt_file));
+    assert.equal(state.rounds[0].prompt_file, normalizePath(state.rounds[0].prompt_file));
+    assert.equal(
+      state.artifacts.files.every((entry) => entry.path === normalizePath(entry.path)),
+      true,
+    );
     assert.equal(state.artifacts.files.length, 3);
 
     const prompt = await readFile(adapterRequest.prompt_file, "utf8");
@@ -357,7 +366,8 @@ test("prepareNextRound appends a deep dive round and adapter request", async () 
     assert.equal(adapterRequest.round, 2);
     assert.equal(adapterRequest.round_kind, "deep_dive");
     assert.equal(adapterRequest.agent, "codex");
-    assert.equal(adapterRequest.context_file, join(paths.artifactDir, "context.md"));
+    assert.equal(adapterRequest.context_file, normalizePath(join(paths.artifactDir, "context.md")));
+    assert.equal(adapterRequest.prompt_file, normalizePath(adapterRequest.prompt_file));
     assert.deepEqual(adapterRequest.target_files, ["src/a.ts"]);
     assert.equal(adapterRequest.options.review_depth, "high");
 
@@ -366,6 +376,8 @@ test("prepareNextRound appends a deep dive round and adapter request", async () 
     assert.equal(state.rounds.length, 2);
     assert.equal(state.rounds[1].kind, "deep_dive");
     assert.equal(state.rounds[1].agent_result, null);
+    assert.equal(state.rounds[0].agent_result.output_file, normalizePath(state.rounds[0].agent_result.output_file));
+    assert.equal(state.rounds[1].prompt_file, normalizePath(state.rounds[1].prompt_file));
     assert.equal(state.artifacts.files.length, 5);
 
     const prompt = await readFile(adapterRequest.prompt_file, "utf8");
@@ -467,7 +479,7 @@ test("completeRound records adapter response into state", async () => {
     assert.equal(result.status, "completed");
     assert.equal(adapterRequest.review_session_id, "session-1");
     const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
-    assert.equal(state.rounds[0].agent_result.output_file, outputFile);
+    assert.equal(state.rounds[0].agent_result.output_file, normalizePath(outputFile));
     assert.equal(state.rounds[0].agent_result.agent_state_file, undefined);
     assert.equal(state.artifacts.files.every((entry) => entry.owner === "cross-agent"), true);
   } finally {
@@ -934,7 +946,7 @@ test("getRound returns round state", async () => {
       round: 1,
     });
 
-    assert.equal(output.output_file, outputFile);
+    assert.equal(output.output_file, normalizePath(outputFile));
     assert.equal(output.output_text, undefined);
   } finally {
     await rm(temp, { recursive: true, force: true });

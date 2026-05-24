@@ -41,6 +41,11 @@ Skill は runner input の JSON 本文に入れる前に、`target_root` と `ta
 Windows の `\` を JSON に素で埋め込むと `\U` などが不正 escape になりうるため、
 JSON へ貼る値は forward slash 表記にそろえる。
 
+runner が生成する `prompt_file`, `context_file`, `target_root`, `target_files` と
+artifact metadata の path も、adapter request envelope や session state に記録する境界では
+forward slash 表記に正規化する。ファイル操作には同じパス文字列を使えるため、Windows でも
+`C:/...` の形を契約上の安定表現とする。
+
 ```bash
 node scripts/cross-agent-runner.mjs normalize-review-paths --target-root "<target_root>" --target-files "<target_file_1>" "<target_file_2>"
 ```
