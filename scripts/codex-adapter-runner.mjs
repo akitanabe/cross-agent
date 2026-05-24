@@ -186,16 +186,23 @@ function makeError(code, message, detailsFile = null) {
 }
 
 // cross-agent へ返す adapter response envelope を作る。
+// adapter 境界の契約として、path フィールドは forward slash に統一する。
+// Windows の `\` をそのまま JSON に乗せると、後段の `JSON.parse` が `\U` 等で落ちる。
 function makeResponse(request, status, outputFile, artifacts, error) {
+  const normalizedArtifacts = (artifacts ?? []).map((entry) =>
+    entry?.path ? { ...entry, path: normalizePath(entry.path) } : entry,
+  );
+  const normalizedError =
+    error && error.details_file ? { ...error, details_file: normalizePath(error.details_file) } : error;
   return {
     contract_version: 1,
     review_session_id: request?.review_session_id ?? null,
     agent: "codex",
     round: request?.round ?? null,
     status,
-    output_file: outputFile,
-    artifacts,
-    error,
+    output_file: outputFile ? normalizePath(outputFile) : outputFile,
+    artifacts: normalizedArtifacts,
+    error: normalizedError,
   };
 }
 

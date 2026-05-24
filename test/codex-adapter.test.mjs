@@ -244,6 +244,60 @@ test(
   },
 );
 
+test("runAdapter response envelope path fields are forward-slash normalized", async () => {
+  // adapter 境界の契約: cross-agent runner が `JSON.parse` する envelope に Windows の `\` が
+  // 混ざると `\U` などの不正エスケープで落ちる。出力境界 (makeResponse) で normalize する。
+  const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
+  try {
+    const fakeCodex = await writeFakeCodex(temp);
+    const { dataDir, request } = await createRequestFixture(temp);
+
+    const response = await runAdapter(request, {
+      codexBin: process.execPath,
+      codexBinArgs: [fakeCodex],
+      dataDir,
+    });
+
+    assert.equal(response.status, "completed");
+    assert.ok(!response.output_file.includes("\\"), `output_file has backslash: ${response.output_file}`);
+    for (const entry of response.artifacts) {
+      assert.ok(!entry.path.includes("\\"), `artifact path has backslash: ${entry.path}`);
+    }
+
+    // JSON 経由で stdin に流したときに parse 失敗しないことを確認する。
+    const serialized = JSON.stringify(response);
+    assert.doesNotThrow(() => JSON.parse(serialized));
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("runAdapter failure envelope normalizes error.details_file", async () => {
+  // 失敗パスでも details_file が forward slash になることを確認する。
+  const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
+  try {
+    const { dataDir, request } = await createRequestFixture(temp);
+    // prompt_file を消して prompt_file_missing を誘発する。
+    await rm(request.prompt_file);
+
+    const response = await runAdapter(request, {
+      codexBin: process.execPath,
+      codexBinArgs: [],
+      dataDir,
+    });
+
+    assert.equal(response.status, "failed");
+    assert.equal(response.error.code, "prompt_file_missing");
+    assert.ok(
+      !response.error.details_file.includes("\\"),
+      `error.details_file has backslash: ${response.error.details_file}`,
+    );
+    assert.doesNotThrow(() => JSON.parse(JSON.stringify(response)));
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("runAdapter resumes an existing Codex session when target root matches", async () => {
   const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
   try {

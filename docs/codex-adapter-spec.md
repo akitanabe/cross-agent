@@ -192,6 +192,11 @@ resume 実行そのものに失敗した場合は `codex_resume_failed` とし�
 
 ## Response envelope
 
+`output_file`, `artifacts[].path`, `error.details_file` などの path フィールドは
+forward slash 表記 (`C:/Users/...`) で返す。受信側 (cross-agent runner) は envelope を
+`JSON.parse` するため、Windows の `\` をそのまま埋めると `\U` 等で parse 失敗になる。
+内部 state (Codex agent state file 等) は OS ネイティブの区切りで保持してよい。
+
 成功時:
 
 ```json

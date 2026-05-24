@@ -389,6 +389,11 @@ adapter は `${CLAUDE_PLUGIN_DATA}` と `review_session_id` から必要な stat
 response envelope は要約フィールドを持たない。
 最終的な統合要約は cross-agent が `get-round-output` で取得した本文から作る。
 
+`output_file`, `artifacts[].path`, `error.details_file` などの path フィールドは
+forward slash で返す。cross-agent runner はこの envelope を `JSON.parse` するため、
+Windows の `\` をエスケープせず素で入れると parse 失敗する。adapter 側で `normalizePath`
+相当の正規化を行うこと。
+
 ## Status / kind
 
 `session.status`:
