@@ -179,11 +179,11 @@ Round 2 を実行した後は、Round 1 と同様に adapter response envelope f
 
 ```
 # context.md / round-*-prompt.md の Write
-Write(**/.claude/**/context.md)
-Write(**/.claude/**/round-*-prompt.md)
+Write(${CLAUDE_PLUGIN_DATA}/artifacts/*/context.md)
+Write(${CLAUDE_PLUGIN_DATA}/artifacts/*/round-*-prompt.md)
 
 # <agent>-adapter runner（subagent 内の Bash）
-Bash(node "**/scripts/*-adapter-runner.mjs"**)
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/*-adapter-runner.mjs"**)
 ```
 
 `/update-config` スキルを使えばその場で追加できることも伝える。
