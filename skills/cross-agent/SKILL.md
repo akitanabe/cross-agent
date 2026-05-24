@@ -41,11 +41,7 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 
 機械的にできる session state の作成は `cross-agent-runner.mjs` に任せる。
 
-`--data-dir` は全 runner 呼び出しで必須。plugin 文脈では `${CLAUDE_PLUGIN_DATA}` をそのまま
-渡す。Claude Code が skill content を読み込む時点で絶対パス
-(`~/.claude/plugins/data/<plugin-id>/`) に展開してから LLM に渡すため、argv 経由でも
-展開済みの絶対パスが届く。env var は Bash 経由では export されないので、runner 側の
-フォールバックは無い。
+`--data-dir` は全 runner 呼び出しで必須。plugin 文脈では `${CLAUDE_PLUGIN_DATA}` をそのまま渡す。
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session \
