@@ -46,7 +46,7 @@ Windows のバックスラッシュ (`C:\Users\...`) を素で JSON に書くと
 `JSON.parse` が落ちる。1 件ずつ `normalize-path` に通し、結果を JSON にリテラルで貼る。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" normalize-path "<path>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/utils-runner.mjs" normalize-path "<path>"
 # → 例: C:/path/to/project
 ```
 

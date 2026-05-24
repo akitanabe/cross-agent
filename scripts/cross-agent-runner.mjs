@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { normalizePath, normalizePathList } from "./path-utils.mjs";
+import { runNormalizePathCommand } from "./utils-runner.mjs";
 
 const OWNER = "cross-agent";
 const DEFAULT_OPTIONS = {
@@ -509,7 +510,7 @@ function parseArgs(argv) {
 // CLI の使い方テキストを返す。
 function usage() {
   return `Usage:
-  node scripts/cross-agent-runner.mjs normalize-path <path>
+  node scripts/utils-runner.mjs normalize-path <path>
   node scripts/cross-agent-runner.mjs start-session       --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
   node scripts/cross-agent-runner.mjs prepare-initial     --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
   node scripts/cross-agent-runner.mjs prepare-next-round  --data-dir <CLAUDE_PLUGIN_DATA> [--input <input.json>]
@@ -552,21 +553,14 @@ async function main() {
     return;
   }
 
-  // normalize-path はパスを argv で受け、正規化結果を stdout へ返す独立コマンド。
+  // normalize-path は互換用 alias。新しい呼び出しは utils-runner.mjs を使う。
   // パスを JSON に埋めると \U などで JSON.parse が落ちるため、呼び出し側はこれで先に
   // 正規化してから他コマンドの JSON 本文に埋める。stdin/JSON 入力は不要。
   if (args.command === "normalize-path") {
     // 引数が 2 個以上なら quote 忘れの可能性が高い (例: `normalize-path C:\Program Files\...` が
     // 空白で分解されている)。サイレントに先頭だけ採用するとパス断片だけ正規化して返してしまい
     // 事故るので、ここで fail-loud にする。
-    if (args.positional.length === 0) throw new Error("normalize-path requires a path argument.");
-    if (args.positional.length > 1) {
-      throw new Error(
-        `normalize-path expects exactly one path; received ${args.positional.length}. ` +
-          `Quote the path if it contains spaces.`,
-      );
-    }
-    process.stdout.write(`${normalizePath(args.positional[0])}\n`);
+    process.stdout.write(`${runNormalizePathCommand(args.positional)}\n`);
     return;
   }
 

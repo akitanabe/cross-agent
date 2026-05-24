@@ -22,10 +22,11 @@ import {
 import { normalizePath } from "../scripts/path-utils.mjs";
 
 const runnerPath = fileURLToPath(new URL("../scripts/cross-agent-runner.mjs", import.meta.url));
+const utilsRunnerPath = fileURLToPath(new URL("../scripts/utils-runner.mjs", import.meta.url));
 
-function runRunner(args, input) {
+function runNodeScript(scriptPath, args, input) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [runnerPath, ...args], {
+    const child = spawn(process.execPath, [scriptPath, ...args], {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -49,6 +50,14 @@ function runRunner(args, input) {
     });
     child.stdin.end(input);
   });
+}
+
+function runRunner(args, input) {
+  return runNodeScript(runnerPath, args, input);
+}
+
+function runUtilsRunner(args, input = "") {
+  return runNodeScript(utilsRunnerPath, args, input);
 }
 
 test("normalizeOptions fills defaults", () => {
@@ -173,12 +182,12 @@ test("start-session command writes review session id as text", async () => {
   }
 });
 
-test("normalize-path command converts paths according to host platform", async () => {
+test("utils-runner normalize-path command converts paths according to host platform", async () => {
   // 呼び出し側はこれで先に正規化してから JSON 本文に埋め込む想定。argv 経由なので
   // backslash パスもシェルがリテラルに渡し、runner が forward slash に変換して返す。
   // 期待値は host platform で確定させる: win32 なら backslash → forward slash、posix なら no-op。
   const raw = "C:\\Users\\example\\Projects\\sample-repo";
-  const result = await runRunner(["normalize-path", raw], "");
+  const result = await runUtilsRunner(["normalize-path", raw]);
   if (process.platform === "win32") {
     assert.equal(result.stdout, "C:/Users/example/Projects/sample-repo\n");
   } else {
@@ -186,13 +195,22 @@ test("normalize-path command converts paths according to host platform", async (
   }
 });
 
-test("normalize-path command rejects multiple positional args to catch quote omissions", async () => {
+test("utils-runner normalize-path command rejects multiple positional args to catch quote omissions", async () => {
   // `normalize-path C:\Program Files\...` のように quote 忘れで空白分解された場合に、
   // サイレントに先頭片を採用すると壊れたパスが下流に伝播する。fail-loud で止める。
   await assert.rejects(
-    runRunner(["normalize-path", "C:\\Program", "Files\\App"], ""),
+    runUtilsRunner(["normalize-path", "C:\\Program", "Files\\App"]),
     /normalize-path expects exactly one path/,
   );
+});
+
+test("cross-agent-runner keeps normalize-path as a compatibility alias", async () => {
+  const result = await runRunner(["normalize-path", "C:\\Users\\example"], "");
+  if (process.platform === "win32") {
+    assert.equal(result.stdout, "C:/Users/example\n");
+  } else {
+    assert.equal(result.stdout, "C:\\Users\\example\n");
+  }
 });
 
 test("start-session command fails loud on raw Windows path embedded in JSON", async () => {
