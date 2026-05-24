@@ -11,9 +11,6 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 自分ではレビュー本文を生成せず、ユーザー依頼を整理し、共通コンテキストとプロンプトを作り、
 選択した adapter に渡し、戻ってきた出力を統合してユーザーへ提示する。
 
-詳細な state schema、adapter 入出力契約、artifact、status、round の仕様は
-[docs/cross-agent-spec.md](../../docs/cross-agent-spec.md) を正とする。
-
 ## 実行
 
 ユーザー依頼から以下を判断する。
@@ -55,7 +52,7 @@ runner は `review_session_id` だけを stdout に返す。以降の runner / a
 `review_session_id` を渡す。
 
 会話要約や設計案が必要な場合は本文を整理し、初回 round の前に context file として保存する。
-runner は `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/context.md` が存在する場合、自動で読み込む。
+runner が `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/context.md` を自動で取り込むため、Write で書き出すだけでよい。
 
 **Write** `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/context.md`:
 ```md
@@ -108,7 +105,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" get-round-output \
 
 `max_rounds <= 1` の場合は深掘りしない。
 
-Round 1 の結果を読んで追加確認が必要な場合は、Round 2 の prompt を作り、同じ
+Round 1 の結果（`get-round-output` で取得した出力）を確認して追加確認が必要な場合は、Round 2 の prompt を作り、同じ
 adapter request 形式で原則同じ agent に送る。
 
 Round 2 を実行しない条件:
