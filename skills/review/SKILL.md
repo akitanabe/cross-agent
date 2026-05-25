@@ -40,6 +40,11 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 
 `--data-dir` は全 runner 呼び出しで必須。plugin 文脈では `${CLAUDE_PLUGIN_DATA}` をそのまま渡す。
 
+Bash で runner に渡すパス引数は forward slash 形式に正規化し、double quote で囲む。
+Windows drive path は `"C:/path/to/repo"`、UNC は `"//Server/Share/path"` の形で渡す。
+backslash 形式の Windows パスは Bash の escape 処理で壊れやすいため使わない。
+共有名やパス要素に `$` など shell 展開される文字が含まれる場合だけ single quote を使う。
+
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
@@ -47,6 +52,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session \
   --review-depth "medium" \
   --max-rounds "2"
 ```
+
+Git Bash から Windows UNC を渡す場合は `"//Server/Share/path"` の形式にする。
+`"\\Server\Share"` のような backslash 形式は、bash の escape 処理で先頭の `\\` が `\` に潰れることがある。
 
 runner は `review_session_id` だけを stdout に返す。以降の runner / adapter 呼び出しにはこの
 `review_session_id` を渡す。

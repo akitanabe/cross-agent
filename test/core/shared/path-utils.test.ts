@@ -17,11 +17,11 @@ test("normalizePath unifies backslashes to forward slashes on win32", () => {
 test("normalizePath preserves Windows UNC paths on win32", () => {
   assert.equal(
     normalizePath("\\\\wsl.localhost\\Ubuntu\\home\\user\\repo", "win32"),
-    "\\\\wsl.localhost/Ubuntu/home/user/repo",
+    "//wsl.localhost/Ubuntu/home/user/repo",
   );
   assert.equal(
     normalizePath("//wsl.localhost/Ubuntu/home/user/repo", "win32"),
-    "\\\\wsl.localhost/Ubuntu/home/user/repo",
+    "//wsl.localhost/Ubuntu/home/user/repo",
   );
 });
 

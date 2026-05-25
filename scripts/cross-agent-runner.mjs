@@ -74,7 +74,7 @@ function normalizePath(value, platform = process.platform) {
   if (typeof value !== "string" || value.length === 0) return value;
   if (platform !== "win32") return value;
   const isUnc = /^[\\/]{2}[^\\/]+[\\/][^\\/]+/.test(value);
-  const uncPath = isUnc ? "\\\\" : "";
+  const uncPath = isUnc ? "//" : "";
   const path = isUnc ? value.slice(2) : value;
   let normalized = uncPath + path.replace(/\\/g, "/");
   const msys = /^\/([a-zA-Z])(\/|$)/.exec(normalized);

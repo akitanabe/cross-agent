@@ -2,7 +2,7 @@
 //
 // 想定する差異:
 // - Windows の区切り文字 `\`（JSON へ素で埋めると壊れるため、受理時に `/` へ統一）
-//   ただし UNC パスは Node.js の fs が UNC として扱えるよう先頭の `\\` を保つ。
+//   UNC パスも `//server/share` 形式へ統一する。
 // - git-bash / MSYS の drive 表記 `/c/Users/...`（Node の fs が解決できないため `C:/Users/...` へ変換）
 //
 // posix 環境では `\` も `/c/...` も正当な値になりうるため、変換は win32 のときだけ行う。
@@ -11,10 +11,9 @@ export function normalizePath<T>(value: T, platform: NodeJS.Platform | string = 
   if (typeof value !== "string" || value.length === 0) return value;
   if (platform !== "win32") return value;
 
-  // UNC パスは先頭まで `//` にすると fs.stat などが UNC として扱えないことがある。
-  // UNC の sigil だけ退避し、以降の区切りは通常どおり `/` へ統一する。
+  // UNC パスは先頭の sigil も含めて `//server/share` 形式へ統一する。
   const isUnc = /^[\\/]{2}[^\\/]+[\\/][^\\/]+/.test(value);
-  const uncPath = isUnc ? "\\\\" : "";
+  const uncPath = isUnc ? "//" : "";
   const path = isUnc ? value.slice(2) : value;
 
   // 区切り文字を `/` に統一する。Windows API は forward slash を受理する。
