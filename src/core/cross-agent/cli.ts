@@ -186,6 +186,5 @@ export function commandFor(name: string): CommandDefinition | undefined {
 
 export function usage(): string {
   return `Usage:
-  node scripts/utils-runner.mjs normalize-path <path...>
 ${Object.values(commandArgs).map((command) => `  node scripts/cross-agent-runner.mjs ${command.usage}`).join("\n")}`;
 }

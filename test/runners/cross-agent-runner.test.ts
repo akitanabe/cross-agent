@@ -13,14 +13,9 @@ import { completeRoundFromEnvelope, writeAdapterResponse } from "../helpers/cros
 import { runNodeScript } from "../helpers/run-node-script.ts";
 
 const runnerPath = fileURLToPath(new URL("../../scripts/cross-agent-runner.mjs", import.meta.url));
-const utilsRunnerPath = fileURLToPath(new URL("../../scripts/utils-runner.mjs", import.meta.url));
 
 function runRunner(args, input = "") {
   return runNodeScript(runnerPath, args, input);
-}
-
-function runUtilsRunner(args, input = "") {
-  return runNodeScript(utilsRunnerPath, args, input);
 }
 
 test("start-session command writes review session id as text", async () => {
@@ -53,35 +48,6 @@ test("start-session command writes review session id as text", async () => {
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
-});
-
-
-test("utils-runner normalize-path command converts paths according to host platform", async () => {
-  // 汎用 path utility は runner CLI 以外でも使う。argv 経由なので backslash パスも
-  // シェルがリテラルに渡し、utility が forward slash に変換して返す。
-  // 期待値は host platform で確定させる: win32 なら backslash → forward slash、posix なら no-op。
-  const raw = "C:\\Users\\example\\Projects\\sample-repo";
-  const result = await runUtilsRunner(["normalize-path", raw]);
-  if (process.platform === "win32") {
-    assert.equal(result.stdout, "C:/Users/example/Projects/sample-repo\n");
-  } else {
-    assert.equal(result.stdout, `${raw}\n`);
-  }
-});
-
-
-test("utils-runner normalize-path command supports multiple path arguments", async () => {
-  const result = await runUtilsRunner(["normalize-path", "C:\\repo", "src\\a.ts", "src\\b.ts"]);
-  if (process.platform === "win32") {
-    assert.equal(result.stdout, "C:/repo\nsrc/a.ts\nsrc/b.ts\n");
-  } else {
-    assert.equal(result.stdout, "C:\\repo\nsrc\\a.ts\nsrc\\b.ts\n");
-  }
-});
-
-
-test("utils-runner normalize-path command requires at least one path", async () => {
-  await assert.rejects(runUtilsRunner(["normalize-path"]), /normalize-path requires at least one path/);
 });
 
 

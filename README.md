@@ -22,11 +22,10 @@ cross-agent/
 │   └── codex-adapter-spec.md        # codex-adapter 詳細仕様
 ├── scripts/
 │   ├── cross-agent-runner.mjs       # cross-agent runner
-│   ├── codex-adapter-runner.mjs     # Codex adapter runner
-│   └── utils-runner.mjs             # 共通 utility runner
+│   └── codex-adapter-runner.mjs     # Codex adapter runner
 ├── src/
 │   ├── runners/                     # runner の TypeScript 正本
-│   └── lib/                         # bundle に閉じ込める共有実装
+│   └── core/                        # 責務別の共有実装
 ├── test/                            # Vitest テスト
 ├── tools/
 │   └── build.mjs                    # esbuild bundle
