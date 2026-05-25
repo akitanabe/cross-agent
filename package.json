@@ -9,8 +9,7 @@
   "scripts": {
     "build": "node tools/build.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && vitest run",
-    "test:node": "npm run build && node --test test/cross-agent.test.mjs test/codex-adapter.test.mjs"
+    "test": "npm run build && vitest run"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",
