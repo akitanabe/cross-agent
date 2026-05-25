@@ -73,7 +73,10 @@ import { isAbsolute, relative, resolve } from "node:path";
 function normalizePath(value, platform = process.platform) {
   if (typeof value !== "string" || value.length === 0) return value;
   if (platform !== "win32") return value;
-  let normalized = value.replace(/\\/g, "/");
+  const isUnc = /^[\\/]{2}[^\\/]+[\\/][^\\/]+/.test(value);
+  const uncPath = isUnc ? "\\\\" : "";
+  const path = isUnc ? value.slice(2) : value;
+  let normalized = uncPath + path.replace(/\\/g, "/");
   const msys = /^\/([a-zA-Z])(\/|$)/.exec(normalized);
   if (msys) normalized = `${msys[1].toUpperCase()}:${normalized.slice(2)}`;
   return normalized;

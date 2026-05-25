@@ -14,6 +14,17 @@ test("normalizePath unifies backslashes to forward slashes on win32", () => {
   assert.equal(normalizePath(".claude-plugin\\plugin.json", "win32"), ".claude-plugin/plugin.json");
 });
 
+test("normalizePath preserves Windows UNC paths on win32", () => {
+  assert.equal(
+    normalizePath("\\\\wsl.localhost\\Ubuntu\\home\\user\\repo", "win32"),
+    "\\\\wsl.localhost/Ubuntu/home/user/repo",
+  );
+  assert.equal(
+    normalizePath("//wsl.localhost/Ubuntu/home/user/repo", "win32"),
+    "\\\\wsl.localhost/Ubuntu/home/user/repo",
+  );
+});
+
 test("normalizePath handles bare drive root on win32", () => {
   assert.equal(normalizePath("/c", "win32"), "C:");
   assert.equal(normalizePath("/c/", "win32"), "C:/");
