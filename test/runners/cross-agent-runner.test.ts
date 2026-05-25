@@ -7,8 +7,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { sessionPaths } from "../../src/core/cross-agent/state.ts";
-import { completeRound, prepareInitialRound, startSession } from "../../src/core/cross-agent/workflow.ts";
+import { prepareInitialRound, startSession } from "../../src/core/cross-agent/workflow.ts";
 import { normalizePath } from "../../src/core/shared/path-utils.ts";
+import { completeRoundFromEnvelope, writeAdapterResponse } from "../helpers/cross-agent-fixtures.ts";
 import { runNodeScript } from "../helpers/run-node-script.ts";
 
 const runnerPath = fileURLToPath(new URL("../../scripts/cross-agent-runner.mjs", import.meta.url));
@@ -20,17 +21,6 @@ function runRunner(args, input = "") {
 
 function runUtilsRunner(args, input = "") {
   return runNodeScript(utilsRunnerPath, args, input);
-}
-
-async function writeAdapterResponse(filePath, response) {
-  await writeFile(filePath, `${JSON.stringify(response, null, 2)}\n`, "utf8");
-}
-
-async function completeRoundFromEnvelope(dataDir, response) {
-  const paths = sessionPaths(dataDir, response.review_session_id);
-  const responseFile = join(paths.artifactDir, `round-${response.round}-${response.agent}-response.json`);
-  await writeAdapterResponse(responseFile, response);
-  return completeRound({ data_dir: dataDir, response_file: responseFile });
 }
 
 test("start-session command writes review session id as text", async () => {
