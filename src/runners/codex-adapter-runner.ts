@@ -9,30 +9,6 @@ import { artifactDirFor, artifactPaths } from "../core/codex-adapter/state.ts";
 import { runAdapter } from "../core/codex-adapter/workflow.ts";
 import { normalizePath } from "../core/shared/path-utils.ts";
 
-export { parseArgs, usage } from "../core/codex-adapter/cli.ts";
-export { wrapWithLauncher } from "../core/codex-adapter/process.ts";
-export {
-  agentStateFileFor,
-  artifactDirFor,
-  artifactPaths,
-  effortForReviewDepth,
-  extractThreadIdFromJsonl,
-  sessionStateFileFor,
-  shouldStartNewSession,
-} from "../core/codex-adapter/state.ts";
-export { runAdapter } from "../core/codex-adapter/workflow.ts";
-export type {
-  AdapterRequestInput,
-  ArtifactPathSet,
-  CodexAgentState,
-  CodexRunOptions,
-  EffortDecision,
-  LaunchTarget,
-  ParsedCodexAdapterArgs,
-  RecoverableError,
-  SessionDecision,
-} from "../core/codex-adapter/types.ts";
-
 // CLI entrypoint。request file を読み込み runner を実行して response file path を stdout に出す。
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));

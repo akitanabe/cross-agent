@@ -23,12 +23,12 @@ import {
   artifactPaths,
   effortForReviewDepth,
   extractThreadIdFromJsonl,
-  parseArgs,
-  runAdapter,
   sessionStateFileFor,
   shouldStartNewSession,
-  wrapWithLauncher,
-} from "../src/runners/codex-adapter-runner.ts";
+} from "../src/core/codex-adapter/state.ts";
+import { parseArgs } from "../src/core/codex-adapter/cli.ts";
+import { wrapWithLauncher } from "../src/core/codex-adapter/process.ts";
+import { runAdapter } from "../src/core/codex-adapter/workflow.ts";
 
 const runnerPath = fileURLToPath(new URL("../scripts/codex-adapter-runner.mjs", import.meta.url));
 

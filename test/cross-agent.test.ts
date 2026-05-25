@@ -7,19 +7,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildAdapterRequest } from "../src/core/cross-agent/envelope.ts";
+import { buildInitialPrompt, buildNextRoundPrompt } from "../src/core/cross-agent/prompts.ts";
+import { normalizeOptions, sessionPaths } from "../src/core/cross-agent/state.ts";
 import {
-  buildAdapterRequest,
-  buildInitialPrompt,
-  buildNextRoundPrompt,
   completeRound,
   getRound,
   getRoundOutput,
-  normalizeOptions,
   prepareInitialRound,
   prepareNextRound,
-  sessionPaths,
   startSession,
-} from "../src/runners/cross-agent-runner.ts";
+} from "../src/core/cross-agent/workflow.ts";
 import { normalizePath } from "../src/core/shared/path-utils.ts";
 
 const runnerPath = fileURLToPath(new URL("../scripts/cross-agent-runner.mjs", import.meta.url));

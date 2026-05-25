@@ -767,16 +767,3 @@ if (invokedPath && invokedPath === fileURLToPath(import.meta.url)) {
     process.exitCode = 1;
   });
 }
-export {
-  buildAdapterRequest,
-  buildInitialPrompt,
-  buildNextRoundPrompt,
-  completeRound,
-  getRound,
-  getRoundOutput,
-  normalizeOptions,
-  prepareInitialRound,
-  prepareNextRound,
-  sessionPaths,
-  startSession
-};

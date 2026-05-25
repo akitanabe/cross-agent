@@ -6,18 +6,6 @@ import { fileURLToPath } from "node:url";
 import { commandFor, parseArgs, usage } from "../core/cross-agent/cli.ts";
 import type { CommandOutput } from "../core/cross-agent/types.ts";
 
-export { buildAdapterRequest } from "../core/cross-agent/envelope.ts";
-export { buildInitialPrompt, buildNextRoundPrompt } from "../core/cross-agent/prompts.ts";
-export { normalizeOptions, sessionPaths } from "../core/cross-agent/state.ts";
-export {
-  completeRound,
-  getRound,
-  getRoundOutput,
-  prepareInitialRound,
-  prepareNextRound,
-  startSession,
-} from "../core/cross-agent/workflow.ts";
-
 function writeCommandOutput(result: CommandOutput): void {
   if (result.output_type === "text") {
     const text = String(result.content ?? "");
