@@ -7,7 +7,7 @@ import {
   parseIntegerOption,
   parseOptionArgs,
   requireOption,
-} from "../src/lib/cli-args.ts";
+} from "../src/core/shared/cli-args.ts";
 
 test("parseIntegerOption parses safe integers", () => {
   assert.equal(parseIntegerOption("2", "--round"), 2);

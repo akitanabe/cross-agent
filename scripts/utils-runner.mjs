@@ -4,7 +4,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// src/lib/path-utils.ts
+// src/core/shared/path-utils.ts
 function normalizePath(value, platform = process.platform) {
   if (typeof value !== "string" || value.length === 0) return value;
   if (platform !== "win32") return value;

@@ -3,7 +3,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { normalizePath } from "../lib/path-utils.ts";
+import { normalizePath } from "../core/shared/path-utils.ts";
 
 function parseArgs(argv: string[]) {
   return { command: argv[0], positional: argv.slice(1), help: argv.includes("--help") || argv.includes("-h") };

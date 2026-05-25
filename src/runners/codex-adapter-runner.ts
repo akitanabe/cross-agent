@@ -4,13 +4,13 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseArgs, usage } from "../lib/codex-adapter-cli.ts";
-import { artifactDirFor, artifactPaths } from "../lib/codex-adapter-state.ts";
-import { runAdapter } from "../lib/codex-adapter-workflow.ts";
-import { normalizePath } from "../lib/path-utils.ts";
+import { parseArgs, usage } from "../core/codex-adapter/cli.ts";
+import { artifactDirFor, artifactPaths } from "../core/codex-adapter/state.ts";
+import { runAdapter } from "../core/codex-adapter/workflow.ts";
+import { normalizePath } from "../core/shared/path-utils.ts";
 
-export { parseArgs, usage } from "../lib/codex-adapter-cli.ts";
-export { wrapWithLauncher } from "../lib/codex-adapter-process.ts";
+export { parseArgs, usage } from "../core/codex-adapter/cli.ts";
+export { wrapWithLauncher } from "../core/codex-adapter/process.ts";
 export {
   agentStateFileFor,
   artifactDirFor,
@@ -19,8 +19,8 @@ export {
   extractThreadIdFromJsonl,
   sessionStateFileFor,
   shouldStartNewSession,
-} from "../lib/codex-adapter-state.ts";
-export { runAdapter } from "../lib/codex-adapter-workflow.ts";
+} from "../core/codex-adapter/state.ts";
+export { runAdapter } from "../core/codex-adapter/workflow.ts";
 export type {
   AdapterRequestInput,
   ArtifactPathSet,
@@ -31,7 +31,7 @@ export type {
   ParsedCodexAdapterArgs,
   RecoverableError,
   SessionDecision,
-} from "../lib/codex-adapter-types.ts";
+} from "../core/codex-adapter/types.ts";
 
 // CLI entrypoint。request file を読み込み runner を実行して response file path を stdout に出す。
 async function main(): Promise<void> {

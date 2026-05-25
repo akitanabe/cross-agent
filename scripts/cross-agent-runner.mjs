@@ -4,11 +4,11 @@
 import { resolve as resolve4 } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// src/lib/cross-agent-cli.ts
+// src/core/cross-agent/cli.ts
 import { readFile as readFile3 } from "node:fs/promises";
 import { resolve as resolve3 } from "node:path";
 
-// src/lib/cli-args.ts
+// src/core/shared/cli-args.ts
 function parseIntegerOption(value, optionName) {
   const number = Number(value);
   if (!Number.isSafeInteger(number)) throw new Error(`${optionName} must be an integer.`);
@@ -65,11 +65,11 @@ function parseCommandArgs(argv, {
   });
 }
 
-// src/lib/cross-agent-state.ts
+// src/core/cross-agent/state.ts
 import { readFile, rename, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 
-// src/lib/path-utils.ts
+// src/core/shared/path-utils.ts
 function normalizePath(value, platform = process.platform) {
   if (typeof value !== "string" || value.length === 0) return value;
   if (platform !== "win32") return value;
@@ -83,7 +83,7 @@ function normalizePathList(values, platform = process.platform) {
   return values.map((value) => normalizePath(value, platform));
 }
 
-// src/lib/cross-agent-state.ts
+// src/core/cross-agent/state.ts
 var OWNER = "cross-agent";
 var DEFAULT_OPTIONS = {
   max_rounds: 2,
@@ -174,12 +174,12 @@ function normalizeOptions(options = {}) {
   };
 }
 
-// src/lib/cross-agent-workflow.ts
+// src/core/cross-agent/workflow.ts
 import { randomUUID } from "node:crypto";
 import { mkdir as mkdir2, readFile as readFile2, stat as stat2, writeFile as writeFile2 } from "node:fs/promises";
 import { resolve as resolve2 } from "node:path";
 
-// src/lib/cross-agent-envelope.ts
+// src/core/cross-agent/envelope.ts
 function buildAdapterRequest({
   reviewSessionId,
   agent,
@@ -210,7 +210,7 @@ function buildAdapterRequest({
   };
 }
 
-// src/lib/cross-agent-prompts.ts
+// src/core/cross-agent/prompts.ts
 function buildInitialPrompt({
   focusQuestion,
   contextFile,
@@ -269,7 +269,7 @@ ${promptText}`);
 `;
 }
 
-// src/lib/cross-agent-workflow.ts
+// src/core/cross-agent/workflow.ts
 function commandOutput(outputType, content) {
   return { output_type: outputType, content };
 }
@@ -605,7 +605,7 @@ async function getRoundOutput(input) {
   return commandOutput("text", await readFile2(round.output_file, "utf8"));
 }
 
-// src/lib/cross-agent-cli.ts
+// src/core/cross-agent/cli.ts
 function optionInput(args) {
   const options = {};
   if (args.reviewDepth != null) options.review_depth = args.reviewDepth;

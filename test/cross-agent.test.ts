@@ -20,7 +20,7 @@ import {
   sessionPaths,
   startSession,
 } from "../src/runners/cross-agent-runner.ts";
-import { normalizePath } from "../src/lib/path-utils.ts";
+import { normalizePath } from "../src/core/shared/path-utils.ts";
 
 const runnerPath = fileURLToPath(new URL("../scripts/cross-agent-runner.mjs", import.meta.url));
 const utilsRunnerPath = fileURLToPath(new URL("../scripts/utils-runner.mjs", import.meta.url));

@@ -5,7 +5,7 @@ import { readFile as readFile3 } from "node:fs/promises";
 import { resolve as resolve2 } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// src/lib/cli-args.ts
+// src/core/shared/cli-args.ts
 function parseOptionValue(option, value, optionName) {
   return option.parse ? option.parse(value, optionName) : value;
 }
@@ -39,7 +39,7 @@ function parseOptionArgs(argv, optionDefinitions, { startIndex = 0, initialArgs 
   return args;
 }
 
-// src/lib/codex-adapter-cli.ts
+// src/core/codex-adapter/cli.ts
 var optionArgs = {
   "--request": { field: "requestFile" },
   "-r": { field: "requestFile" },
@@ -75,11 +75,11 @@ e.g. on Windows where codex is a Git Bash script. The agent decides per-platform
 to pass --launcher; the runner has no platform branch.`;
 }
 
-// src/lib/codex-adapter-state.ts
+// src/core/codex-adapter/state.ts
 import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-// src/lib/path-utils.ts
+// src/core/shared/path-utils.ts
 function normalizePath(value, platform = process.platform) {
   if (typeof value !== "string" || value.length === 0) return value;
   if (platform !== "win32") return value;
@@ -93,7 +93,7 @@ function normalizePathList(values, platform = process.platform) {
   return values.map((value) => normalizePath(value, platform));
 }
 
-// src/lib/codex-adapter-state.ts
+// src/core/codex-adapter/state.ts
 var OWNER = "codex-adapter";
 function effortForReviewDepth(reviewDepth) {
   if (reviewDepth === "low") return { effort: "medium", warning: null };
@@ -239,11 +239,11 @@ async function validateRequest(request) {
   return null;
 }
 
-// src/lib/codex-adapter-workflow.ts
+// src/core/codex-adapter/workflow.ts
 import { mkdir as mkdir3, readFile as readFile2 } from "node:fs/promises";
 import { dirname as dirname3 } from "node:path";
 
-// src/lib/codex-adapter-process.ts
+// src/core/codex-adapter/process.ts
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { mkdir as mkdir2 } from "node:fs/promises";
@@ -313,7 +313,7 @@ async function runCodex({
   });
 }
 
-// src/lib/codex-adapter-workflow.ts
+// src/core/codex-adapter/workflow.ts
 async function appendAgentArtifacts(agentState, artifacts) {
   agentState.artifacts ??= [];
   agentState.artifacts.push(...artifacts);
