@@ -2,7 +2,7 @@
 import { expect, test } from "vitest";
 import assert from "node:assert/strict";
 
-import { normalizePath, normalizePathList } from "../src/core/shared/path-utils.ts";
+import { normalizePath, normalizePathList } from "../../../src/core/shared/path-utils.ts";
 
 test("normalizePath converts MSYS drive notation to Windows drive on win32", () => {
   assert.equal(normalizePath("/c/Users/x", "win32"), "C:/Users/x");

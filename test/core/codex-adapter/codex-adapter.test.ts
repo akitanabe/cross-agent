@@ -24,10 +24,10 @@ import {
   extractThreadIdFromJsonl,
   sessionStateFileFor,
   shouldStartNewSession,
-} from "../src/core/codex-adapter/state.ts";
-import { parseArgs } from "../src/core/codex-adapter/cli.ts";
-import { wrapWithLauncher } from "../src/core/codex-adapter/process.ts";
-import { runAdapter } from "../src/core/codex-adapter/workflow.ts";
+} from "../../../src/core/codex-adapter/state.ts";
+import { parseArgs } from "../../../src/core/codex-adapter/cli.ts";
+import { wrapWithLauncher } from "../../../src/core/codex-adapter/process.ts";
+import { runAdapter } from "../../../src/core/codex-adapter/workflow.ts";
 
 async function writeFakeCodex(temp) {
   const fakeCodex = join(temp, "fake-codex.mjs");

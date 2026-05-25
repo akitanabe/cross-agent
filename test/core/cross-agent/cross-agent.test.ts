@@ -5,9 +5,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildAdapterRequest } from "../src/core/cross-agent/envelope.ts";
-import { buildInitialPrompt, buildNextRoundPrompt } from "../src/core/cross-agent/prompts.ts";
-import { normalizeOptions, sessionPaths } from "../src/core/cross-agent/state.ts";
+import { buildAdapterRequest } from "../../../src/core/cross-agent/envelope.ts";
+import { buildInitialPrompt, buildNextRoundPrompt } from "../../../src/core/cross-agent/prompts.ts";
+import { normalizeOptions, sessionPaths } from "../../../src/core/cross-agent/state.ts";
 import {
   completeRound,
   getRound,
@@ -15,8 +15,8 @@ import {
   prepareInitialRound,
   prepareNextRound,
   startSession,
-} from "../src/core/cross-agent/workflow.ts";
-import { normalizePath } from "../src/core/shared/path-utils.ts";
+} from "../../../src/core/cross-agent/workflow.ts";
+import { normalizePath } from "../../../src/core/shared/path-utils.ts";
 
 async function writeAdapterResponse(filePath, response) {
   await writeFile(filePath, `${JSON.stringify(response, null, 2)}\n`, "utf8");

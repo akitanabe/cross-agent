@@ -6,13 +6,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { sessionPaths } from "../src/core/cross-agent/state.ts";
-import { completeRound, prepareInitialRound, startSession } from "../src/core/cross-agent/workflow.ts";
-import { normalizePath } from "../src/core/shared/path-utils.ts";
-import { runNodeScript } from "./helpers/run-node-script.ts";
+import { sessionPaths } from "../../src/core/cross-agent/state.ts";
+import { completeRound, prepareInitialRound, startSession } from "../../src/core/cross-agent/workflow.ts";
+import { normalizePath } from "../../src/core/shared/path-utils.ts";
+import { runNodeScript } from "../helpers/run-node-script.ts";
 
-const runnerPath = fileURLToPath(new URL("../scripts/cross-agent-runner.mjs", import.meta.url));
-const utilsRunnerPath = fileURLToPath(new URL("../scripts/utils-runner.mjs", import.meta.url));
+const runnerPath = fileURLToPath(new URL("../../scripts/cross-agent-runner.mjs", import.meta.url));
+const utilsRunnerPath = fileURLToPath(new URL("../../scripts/utils-runner.mjs", import.meta.url));
 
 function runRunner(args, input = "") {
   return runNodeScript(runnerPath, args, input);

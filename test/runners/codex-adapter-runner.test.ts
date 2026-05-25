@@ -7,9 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { sessionStateFileFor } from "../src/core/codex-adapter/state.ts";
+import { sessionStateFileFor } from "../../src/core/codex-adapter/state.ts";
 
-const runnerPath = fileURLToPath(new URL("../scripts/codex-adapter-runner.mjs", import.meta.url));
+const runnerPath = fileURLToPath(new URL("../../scripts/codex-adapter-runner.mjs", import.meta.url));
 
 async function createRequestFixture(temp, { round = 1, prompt = "review this" } = {}) {
   const targetRoot = join(temp, "repo");
