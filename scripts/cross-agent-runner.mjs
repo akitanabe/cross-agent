@@ -546,11 +546,22 @@ async function resolveAdapterResponseInput(input, dataDir) {
   const response = await readJson(responseFile);
   return { response, responseFile };
 }
-async function completeRound(input) {
-  const dataDir = resolveDataDir(input.data_dir);
-  const { response: agentResponse, responseFile } = await resolveAdapterResponseInput(input, dataDir);
+async function completeResolvedRound({
+  dataDir,
+  agentResponse,
+  responseFile,
+  expected
+}) {
   const reviewSessionId = agentResponse.review_session_id;
   if (!reviewSessionId) throw new Error("review_session_id is required.");
+  if (expected) {
+    if (reviewSessionId !== expected.reviewSessionId) {
+      throw new Error("adapter response review_session_id does not match current round.");
+    }
+    if (agentResponse.round !== expected.round || agentResponse.agent !== expected.agent) {
+      throw new Error(`adapter response does not match current round: ${expected.round}/${expected.agent}`);
+    }
+  }
   const paths = sessionPaths(dataDir, reviewSessionId);
   await validateAdapterResponse(agentResponse, paths, responseFile);
   const state = await readJson(paths.stateFile);
@@ -577,6 +588,40 @@ async function completeRound(input) {
     status: agentResponse.status,
     response_file: responseFile
   };
+}
+async function completeRound(input) {
+  const dataDir = resolveDataDir(input.data_dir);
+  const { response: agentResponse, responseFile } = await resolveAdapterResponseInput(input, dataDir);
+  return completeResolvedRound({ dataDir, agentResponse, responseFile });
+}
+async function completeCurrentRound(input) {
+  const dataDir = resolveDataDir(input.data_dir);
+  const reviewSessionId = input.review_session_id;
+  if (!reviewSessionId) throw new Error("review_session_id is required.");
+  const { paths, state } = await readSession(dataDir, reviewSessionId);
+  validateRoundNumber(state.current_round);
+  const currentRounds = (state.rounds ?? []).filter((entry) => entry.round === state.current_round);
+  if (currentRounds.length !== 1) {
+    throw new Error(`current round is ambiguous or missing: ${state.current_round}`);
+  }
+  const currentRound = currentRounds[0];
+  const responseFile = normalizePath(
+    resolve2(paths.artifactDir, `round-${currentRound.round}-${currentRound.agent}-response.json`)
+  );
+  if (!isPathInside(paths.artifactDir, responseFile)) {
+    throw new Error(`invalid adapter response: derived response_file is outside artifact dir: ${responseFile}`);
+  }
+  const agentResponse = await readJson(responseFile);
+  return completeResolvedRound({
+    dataDir,
+    agentResponse,
+    responseFile,
+    expected: {
+      reviewSessionId,
+      round: currentRound.round,
+      agent: currentRound.agent
+    }
+  });
 }
 async function getRound(input) {
   const dataDir = resolveDataDir(input.data_dir);
@@ -710,6 +755,17 @@ var commandArgs = {
       response_file: requireOption(args, "responseFile", "--response-file")
     }),
     run: async (input) => commandOutput("json", await completeRound(input))
+  },
+  "complete-current-round": {
+    usage: "complete-current-round --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id>",
+    options: {
+      "--review-session-id": { field: "reviewSessionId" }
+    },
+    buildInput: async (args) => ({
+      ...commonInput(args),
+      review_session_id: requireOption(args, "reviewSessionId", "--review-session-id")
+    }),
+    run: async (input) => commandOutput("json", await completeCurrentRound(input))
   },
   "get-round-output": {
     usage: "get-round-output --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> [--round <n>]",

@@ -87,13 +87,12 @@ runner が返した adapter request envelope file path を使う。
 
 `claude-adapter` は未完成のため、v1 では `codex` のみを実行対象とする。
 
-subagent は adapter response envelope file path だけを返す。
-返ってきた response envelope file path を `--response-file` で渡し、round 完了処理を runner に任せる。
+subagent が完了したら、`review_session_id` から current round の完了処理を runner に任せる。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-round \
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-current-round \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
-  --response-file "<adapter_response_envelope.json>"
+  --review-session-id "<review_session_id>"
 ```
 
 その後、`get-round-output` で adapter の出力本文を取得し、ユーザーへ統合結果を提示する。
@@ -170,8 +169,8 @@ Round 3 以降は原則として自動継続しない。ユーザーの追加質
 `round_kind: "follow_up"` として扱い、明示的に深掘り継続を求められた場合だけ
 `max_rounds` の範囲内で `deep_dive` を追加する。
 
-Round 2 を実行した後は、Round 1 と同様に adapter response envelope file path を
-`complete-round` に渡し、`get-round-output` で出力本文を取得する。
+Round 2 を実行した後は、Round 1 と同様に `complete-current-round` で current round を閉じ、
+`get-round-output` で出力本文を取得する。
 
 統合表示では以下を簡潔に示す。
 

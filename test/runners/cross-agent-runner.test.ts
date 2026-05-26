@@ -258,6 +258,53 @@ test("complete-round command records adapter response from response file", async
   }
 });
 
+test("complete-current-round command derives current adapter response file", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      target_root: targetRoot,
+    });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
+    await writeFile(outputFile, "ok", "utf8");
+
+    const responseFile = join(paths.artifactDir, "round-1-codex-response.json");
+    await writeAdapterResponse(responseFile, {
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 1,
+      status: "completed",
+      output_file: outputFile,
+      artifacts: [],
+      error: null,
+    });
+
+    const result = await runRunner([
+      "complete-current-round",
+      "--data-dir",
+      dataDir,
+      "--review-session-id",
+      "session-1",
+    ]);
+
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "completed");
+    assert.equal(output.response_file, normalizePath(responseFile));
+    const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
+    assert.equal(state.rounds[0].agent_result.output_file, normalizePath(outputFile));
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 
 test("get-round-output command writes text by default", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));

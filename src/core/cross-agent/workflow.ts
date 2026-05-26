@@ -24,6 +24,7 @@ import type {
   AdapterResponseStatus,
   ArtifactRecord,
   CommandOutput,
+  CompleteCurrentRoundInput,
   CompleteRoundInput,
   GetRoundInput,
   OutputType,
@@ -381,13 +382,28 @@ async function resolveAdapterResponseInput(
   return { response, responseFile };
 }
 
-// adapter response を既存 state の rounds[].agent_result に反映し、round を完了させる。
-export async function completeRound(input: CompleteRoundInput): Promise<Record<string, unknown>> {
-  // adapter は artifacts/errors を自分で append する。ここでは round 結果だけを閉じる。
-  const dataDir = resolveDataDir(input.data_dir);
-  const { response: agentResponse, responseFile } = await resolveAdapterResponseInput(input, dataDir);
+async function completeResolvedRound({
+  dataDir,
+  agentResponse,
+  responseFile,
+  expected,
+}: {
+  dataDir: string;
+  agentResponse: AdapterResponseEnvelope;
+  responseFile: string;
+  expected?: { reviewSessionId: string; round: number; agent: string };
+}): Promise<Record<string, unknown>> {
   const reviewSessionId = agentResponse.review_session_id;
   if (!reviewSessionId) throw new Error("review_session_id is required.");
+
+  if (expected) {
+    if (reviewSessionId !== expected.reviewSessionId) {
+      throw new Error("adapter response review_session_id does not match current round.");
+    }
+    if (agentResponse.round !== expected.round || agentResponse.agent !== expected.agent) {
+      throw new Error(`adapter response does not match current round: ${expected.round}/${expected.agent}`);
+    }
+  }
 
   const paths = sessionPaths(dataDir, reviewSessionId);
   await validateAdapterResponse(agentResponse, paths, responseFile);
@@ -420,6 +436,47 @@ export async function completeRound(input: CompleteRoundInput): Promise<Record<s
     status: agentResponse.status,
     response_file: responseFile,
   };
+}
+
+// adapter response を既存 state の rounds[].agent_result に反映し、round を完了させる。
+export async function completeRound(input: CompleteRoundInput): Promise<Record<string, unknown>> {
+  // adapter は artifacts/errors を自分で append する。ここでは round 結果だけを閉じる。
+  const dataDir = resolveDataDir(input.data_dir);
+  const { response: agentResponse, responseFile } = await resolveAdapterResponseInput(input, dataDir);
+  return completeResolvedRound({ dataDir, agentResponse, responseFile });
+}
+
+// session state の current_round から response envelope file を導出して round を完了させる。
+export async function completeCurrentRound(input: CompleteCurrentRoundInput): Promise<Record<string, unknown>> {
+  const dataDir = resolveDataDir(input.data_dir);
+  const reviewSessionId = input.review_session_id;
+  if (!reviewSessionId) throw new Error("review_session_id is required.");
+
+  const { paths, state } = await readSession(dataDir, reviewSessionId);
+  validateRoundNumber(state.current_round);
+  const currentRounds = (state.rounds ?? []).filter((entry) => entry.round === state.current_round);
+  if (currentRounds.length !== 1) {
+    throw new Error(`current round is ambiguous or missing: ${state.current_round}`);
+  }
+
+  const currentRound = currentRounds[0];
+  const responseFile = normalizePath(
+    resolve(paths.artifactDir, `round-${currentRound.round}-${currentRound.agent}-response.json`),
+  ) as string;
+  if (!isPathInside(paths.artifactDir, responseFile)) {
+    throw new Error(`invalid adapter response: derived response_file is outside artifact dir: ${responseFile}`);
+  }
+  const agentResponse = await readJson<AdapterResponseEnvelope>(responseFile);
+  return completeResolvedRound({
+    dataDir,
+    agentResponse,
+    responseFile,
+    expected: {
+      reviewSessionId,
+      round: currentRound.round,
+      agent: currentRound.agent,
+    },
+  });
 }
 
 // state から対象 round の結果を取得する。

@@ -131,6 +131,11 @@ export type CompleteRoundInput = {
   response_file?: string | null;
 };
 
+export type CompleteCurrentRoundInput = {
+  data_dir?: string | null;
+  review_session_id?: string | null;
+};
+
 export type GetRoundInput = {
   data_dir?: string | null;
   review_session_id?: string | null;

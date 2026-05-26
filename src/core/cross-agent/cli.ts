@@ -5,6 +5,7 @@ import { parseCommandArgs, parseIntegerOption, requireOption } from "../shared/c
 import { sessionPaths } from "./state.ts";
 import {
   commandOutput,
+  completeCurrentRound,
   completeRound,
   getRoundOutput,
   prepareInitialRound,
@@ -13,6 +14,7 @@ import {
 } from "./workflow.ts";
 import type {
   CommandOutput,
+  CompleteCurrentRoundInput,
   CompleteRoundInput,
   CrossAgentOptions,
   GetRoundInput,
@@ -160,6 +162,17 @@ const commandArgs: Record<string, CommandDefinition> = {
       response_file: requireOption(args, "responseFile", "--response-file") as string,
     }),
     run: async (input) => commandOutput("json", await completeRound(input as CompleteRoundInput)),
+  },
+  "complete-current-round": {
+    usage: "complete-current-round --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id>",
+    options: {
+      "--review-session-id": { field: "reviewSessionId" },
+    },
+    buildInput: async (args) => ({
+      ...commonInput(args),
+      review_session_id: requireOption(args, "reviewSessionId", "--review-session-id") as string,
+    }),
+    run: async (input) => commandOutput("json", await completeCurrentRound(input as CompleteCurrentRoundInput)),
   },
   "get-round-output": {
     usage: "get-round-output --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> [--round <n>]",

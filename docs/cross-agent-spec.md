@@ -191,6 +191,37 @@ runner は対象 round の `completed_at` と `agent_result` だけを更新す�
 adapter 由来の artifacts/errors は各 adapter の agent state file に閉じるため、
 top-level session state へ重複 append しない。
 
+## Runner: complete-current-round
+
+通常の Skill フローでは、subagent 返却値に含まれる path を再利用せず、
+session state の `current_round` から adapter response envelope file を導出して round を閉じる。
+
+```bash
+node scripts/cross-agent-runner.mjs complete-current-round \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --review-session-id "<review_session_id>"
+```
+
+CLI input:
+
+- `--data-dir`: 必須
+- `--review-session-id`: 必須
+
+runner は `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json` を読み、`current_round`
+に一致する `rounds[]` entry を一意に特定する。その entry の `agent` と `round` から
+次の response envelope file path を組み立てる。
+
+```text
+${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-<current_round>-<agent>-response.json
+```
+
+その後の schema、path containment、`review_session_id` / `round` / `agent` の一致検証、
+top-level session state 更新は `complete-round` と同じ契約で行う。
+
+この command は Agent/subagent ハーネスが返却値末尾に metadata を付加する環境で、
+LLM が response file path を再タイプ・抽出する必要をなくすための高水準入口である。
+`complete-round --response-file` は、明示的な response file を指定したい低水準入口として残す。
+
 ## Runner: get-round-output
 
 完了済み round の agent output を読み、統合表示に必要な本文を返す処理は runner に任せる。
@@ -393,7 +424,7 @@ adapter request 作成は `prepare-next-round` で runner に任せる。
 
 Round 2 以降も adapter request / response envelope は Round 1 と同じ契約を使う。
 cross-agent は `prepare-next-round` で追加 round を作成し、adapter response を
-`complete-round` で閉じ、必要な出力本文を `get-round-output` で読む。
+通常は `complete-current-round` で閉じ、必要な出力本文を `get-round-output` で読む。
 
 `round_kind` は以下の意味で使い分ける。
 
