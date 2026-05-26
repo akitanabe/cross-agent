@@ -167,12 +167,15 @@ Round 2 の自動深掘り prompt には、Round 1 の繰り返しではなく�
 - 根拠が弱い指摘や言い過ぎに見える指摘の批判的検証
 - Round 1 で触れられていない重要観点の確認
 
-Round 3 以降は原則として自動継続しない。ユーザーの追加質問がある場合は
-`round_kind: "follow_up"` として扱い、明示的に深掘り継続を求められた場合だけ
-`max_rounds` の範囲内で `deep_dive` を追加する。
-
 Round 2 を実行した後は、Round 1 と同様に `complete-current-round` で current round を閉じ、
 `get-round-output` で出力本文を取得する。
+
+Round 2 終了後は、まず Round 1 と Round 2 の結果を統合して結論を返す。その回答の末尾で、
+追加質問があるかをユーザーに確認する。ユーザーから追加質問があった場合だけ、次の round を
+`round_kind: "follow_up"` として開始する。`follow_up` は `max_rounds` の対象外とする。
+
+Round 3 以降は原則として自動継続しない。ユーザーが明示的に深掘り継続を求めた場合だけ、
+`max_rounds` の範囲内で `deep_dive` を追加する。
 
 統合表示では以下を簡潔に示す。
 
