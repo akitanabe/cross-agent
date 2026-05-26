@@ -6,28 +6,36 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { agentStateFileFor, artifactDirFor, artifactPaths } from "../../../src/core/codex-adapter/state.ts";
-import { failComplete, failPrepare } from "../../../src/core/codex-adapter/workflow-failure.ts";
+import { CodexPrepareFailedError, failComplete, failPrepare } from "../../../src/core/codex-adapter/workflow-failure.ts";
 import { createRequestFixture } from "../../helpers/codex-adapter-fixtures.ts";
 
-test("failPrepare writes failed response and diagnostic without agent state", async () => {
+test("failPrepare writes failed response and diagnostic, then rejects", async () => {
   const temp = await mkdtemp(join(tmpdir(), "codex-failure-"));
   try {
     const { dataDir, request } = await createRequestFixture(temp);
     const paths = artifactPaths(artifactDirFor(dataDir, request.review_session_id), request.round);
 
-    const result = await failPrepare({
-      request: { ...request, data_dir: dataDir },
-      agentState: null,
-      paths,
-      code: "prompt_file_missing",
-      message: "prompt_file does not exist.",
-    });
+    let caught: CodexPrepareFailedError | null = null;
+    await assert.rejects(
+      async () => {
+        await failPrepare({
+          request: { ...request, data_dir: dataDir },
+          agentState: null,
+          paths,
+          code: "prompt_file_missing",
+          message: "prompt_file does not exist.",
+        });
+      },
+      (error) => {
+        caught = error as CodexPrepareFailedError;
+        return error instanceof CodexPrepareFailedError;
+      },
+    );
 
-    assert.equal(result.kind, "response");
-    assert.equal(result.path, result.response.error.details_file.replace("diagnostic.md", "response.json"));
-    assert.equal(result.response.status, "failed");
-    assert.equal(result.response.error.code, "prompt_file_missing");
-    assert.equal(result.response.artifacts[0].kind, "diagnostic");
+    assert.equal(caught?.path, caught?.response.error.details_file.replace("diagnostic.md", "response.json"));
+    assert.equal(caught?.response.status, "failed");
+    assert.equal(caught?.response.error.code, "prompt_file_missing");
+    assert.equal(caught?.response.artifacts[0].kind, "diagnostic");
 
     const diagnostic = await readFile(paths.diagnosticFile, "utf8");
     assert.match(diagnostic, /status: failed/);

@@ -92,13 +92,17 @@ function usage() {
   node scripts/codex-adapter-runner.mjs prepare --data-dir <CLAUDE_PLUGIN_DATA> --request <request-envelope.json>
   node scripts/codex-adapter-runner.mjs complete --data-dir <CLAUDE_PLUGIN_DATA> --run <round-N-codex-run.json>
 
-prepare validates the request/session state and writes a Codex exec run spec. stdout contains
-only either the run spec file path or, when preparation fails recoverably, the failed response
-envelope file path.
+prepare validates the request/session state and writes a Codex exec run spec. On success, stdout
+contains only the run spec file path. On recoverable failure, prepare writes the failed response
+envelope to the derived artifact path and exits with an error without printing that path to stdout.
 
 complete validates Codex CLI artifacts written by codex-agent, updates Codex agent state, and
 writes the adapter response envelope. stdout contains only the response envelope file path.`;
 }
+
+// src/core/codex-adapter/state.ts
+import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 
 // src/core/shared/path-utils.ts
 function normalizePath(value, platform = process.platform) {
@@ -117,36 +121,7 @@ function normalizePathList(values, platform = process.platform) {
   return values.map((value) => normalizePath(value, platform));
 }
 
-// src/core/codex-adapter/workflow-common.ts
-function isObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function normalizeRequest(request) {
-  return {
-    ...request,
-    target_root: normalizePath(request.target_root),
-    prompt_file: normalizePath(request.prompt_file),
-    context_file: normalizePath(request.context_file),
-    target_files: normalizePathList(request.target_files)
-  };
-}
-function responsePath(paths) {
-  return normalizePath(paths.responseFile);
-}
-function runPath(paths) {
-  return normalizePath(paths.runFile);
-}
-
-// src/core/codex-adapter/workflow-complete.ts
-import { readFile as readFile2 } from "node:fs/promises";
-
-// src/core/codex-adapter/agent-state.ts
-import { mkdir as mkdir2 } from "node:fs/promises";
-import { dirname as dirname2 } from "node:path";
-
 // src/core/codex-adapter/state.ts
-import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
 var OWNER = "codex-adapter";
 function effortForReviewDepth(reviewDepth) {
   if (reviewDepth === "low") return { effort: "medium", warning: null };
@@ -295,6 +270,8 @@ async function validateRequest(request) {
 }
 
 // src/core/codex-adapter/agent-state.ts
+import { mkdir as mkdir2 } from "node:fs/promises";
+import { dirname as dirname2 } from "node:path";
 async function appendAgentArtifacts(agentState, artifacts) {
   agentState.artifacts ??= [];
   agentState.artifacts.push(...artifacts);
@@ -366,7 +343,37 @@ async function markAgentCompleted({
   await saveAgentState(dataDir, runSpec.review_session_id, agentState);
 }
 
+// src/core/codex-adapter/workflow-common.ts
+function isObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function normalizeRequest(request) {
+  return {
+    ...request,
+    target_root: normalizePath(request.target_root),
+    prompt_file: normalizePath(request.prompt_file),
+    context_file: normalizePath(request.context_file),
+    target_files: normalizePathList(request.target_files)
+  };
+}
+function responsePath(paths) {
+  return normalizePath(paths.responseFile);
+}
+function runPath(paths) {
+  return normalizePath(paths.runFile);
+}
+
 // src/core/codex-adapter/workflow-failure.ts
+var CodexPrepareFailedError = class extends Error {
+  path;
+  response;
+  constructor(path, response) {
+    super(response.error?.message ?? "Codex prepare failed.");
+    this.name = "CodexPrepareFailedError";
+    this.path = path;
+    this.response = response;
+  }
+};
 async function writeFailureDiagnostic({
   request,
   paths,
@@ -420,12 +427,15 @@ async function handleFailure(input) {
 }
 async function failPrepare(input) {
   const response = await handleFailure(input);
-  return { kind: "response", path: responsePath(input.paths), response };
+  throw new CodexPrepareFailedError(responsePath(input.paths), response);
 }
 async function failComplete(input) {
   const response = await handleFailure(input);
   return { path: responsePath(input.paths), response };
 }
+
+// src/core/codex-adapter/workflow-complete.ts
+import { readFile as readFile2 } from "node:fs/promises";
 
 // src/core/codex-adapter/workflow-complete-helpers.ts
 async function loadAgentStateForComplete(dataDir, runSpec, request, paths) {
@@ -777,17 +787,12 @@ async function prepareCodexRun(request, options = {}) {
   const dataDir = options.dataDir ? normalizePath(options.dataDir) : null;
   request = normalizeRequest(request);
   if (!dataDir) {
-    const response = makeResponse(
-      { ...request, data_dir: dataDir },
-      "failed",
-      null,
-      [],
+    throw new Error(
       makeError(
         "invalid_request_envelope",
         '--data-dir is required. In plugin context, pass `--data-dir "${CLAUDE_PLUGIN_DATA}"` (Claude Code substitutes this in skill content).'
-      )
+      ).message
     );
-    return { kind: "response", path: "", response };
   }
   const requestWithDataDir = { ...request, data_dir: dataDir };
   const artifactDir = artifactDirFor(dataDir, request.review_session_id ?? "unknown");
@@ -867,11 +872,15 @@ async function main() {
     if (!args.requestFile) throw new Error("--request is required.");
     const input = await readFile3(args.requestFile, "utf8");
     const request = JSON.parse(input);
-    const result = await prepareCodexRun(request, { dataDir: args.dataDir });
-    process.stdout.write(`${result.path}
+    try {
+      const result = await prepareCodexRun(request, { dataDir: args.dataDir });
+      process.stdout.write(`${result.path}
 `);
-    if (result.kind === "response") {
-      process.exitCode = result.response.status === "completed" ? 0 : 1;
+    } catch (error) {
+      if (!(error instanceof CodexPrepareFailedError)) throw error;
+      process.stderr.write(`${error.name}: ${error.message}
+`);
+      process.exitCode = 1;
     }
     return;
   }

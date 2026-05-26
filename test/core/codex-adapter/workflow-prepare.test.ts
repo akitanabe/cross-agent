@@ -5,18 +5,16 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { artifactDirFor, artifactPaths } from "../../../src/core/codex-adapter/state.ts";
+import { CodexPrepareFailedError } from "../../../src/core/codex-adapter/workflow-failure.ts";
 import { prepareCodexRun } from "../../../src/core/codex-adapter/workflow-prepare.ts";
 import { createRequestFixture } from "../../helpers/codex-adapter-fixtures.ts";
 
-test("prepareCodexRun returns failed envelope when dataDir is missing (no env var fallback)", async () => {
+test("prepareCodexRun rejects when dataDir is missing (no env var fallback)", async () => {
   const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
   try {
     const { request } = await createRequestFixture(temp);
-    const result = await prepareCodexRun(request);
-    assert.equal(result.kind, "response");
-    assert.equal(result.response.status, "failed");
-    assert.equal(result.response.error.code, "invalid_request_envelope");
-    assert.match(result.response.error.message, /--data-dir is required/);
+    await assert.rejects(() => prepareCodexRun(request), /--data-dir is required/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -40,39 +38,60 @@ test("prepareCodexRun writes initial run spec", async () => {
   }
 });
 
-test("prepareCodexRun failure envelope normalizes error.details_file", async () => {
+test("prepareCodexRun writes failure envelope then rejects", async () => {
   const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
   try {
     const { dataDir, request } = await createRequestFixture(temp);
     await rm(request.prompt_file);
 
-    const result = await prepareCodexRun(request, { dataDir });
-
-    assert.equal(result.kind, "response");
-    assert.equal(result.response.status, "failed");
-    assert.equal(result.response.error.code, "prompt_file_missing");
-    assert.ok(
-      !result.response.error.details_file.includes("\\"),
-      `error.details_file has backslash: ${result.response.error.details_file}`,
+    const paths = artifactPaths(artifactDirFor(dataDir, request.review_session_id), request.round);
+    let caught: CodexPrepareFailedError | null = null;
+    await assert.rejects(
+      async () => {
+        await prepareCodexRun(request, { dataDir });
+      },
+      (error) => {
+        caught = error as CodexPrepareFailedError;
+        return error instanceof CodexPrepareFailedError;
+      },
     );
-    assert.doesNotThrow(() => JSON.parse(JSON.stringify(result.response)));
+
+    assert.equal(caught?.path, paths.responseFile.replaceAll("\\", "/"));
+    assert.equal(caught?.response.status, "failed");
+    assert.equal(caught?.response.error.code, "prompt_file_missing");
+    assert.ok(
+      !caught?.response.error.details_file.includes("\\"),
+      `error.details_file has backslash: ${caught?.response.error.details_file}`,
+    );
+    assert.doesNotThrow(() => JSON.parse(JSON.stringify(caught?.response)));
+
+    const savedResponse = JSON.parse(await readFile(paths.responseFile, "utf8"));
+    assert.equal(savedResponse.error.code, "prompt_file_missing");
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
 });
 
-test("prepareCodexRun returns failure when session state is missing", async () => {
+test("prepareCodexRun writes failure envelope when session state is missing", async () => {
   const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
   try {
     const { dataDir, request } = await createRequestFixture(temp);
     await rm(join(dataDir, "sessions", "session-1.json"));
     await mkdir(join(dataDir, "sessions"), { recursive: true });
 
-    const result = await prepareCodexRun(request, { dataDir });
+    let caught: CodexPrepareFailedError | null = null;
+    await assert.rejects(
+      async () => {
+        await prepareCodexRun(request, { dataDir });
+      },
+      (error) => {
+        caught = error as CodexPrepareFailedError;
+        return error instanceof CodexPrepareFailedError;
+      },
+    );
 
-    assert.equal(result.kind, "response");
-    assert.equal(result.response.status, "failed");
-    assert.equal(result.response.error.code, "state_file_missing");
+    assert.equal(caught?.response.status, "failed");
+    assert.equal(caught?.response.error.code, "state_file_missing");
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

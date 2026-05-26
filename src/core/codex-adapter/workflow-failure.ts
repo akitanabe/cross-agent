@@ -6,9 +6,20 @@ import type {
   ArtifactPathSet,
   CodexAgentState,
   CodexCompleteResult,
-  CodexPrepareResult,
 } from "./types.ts";
 import { responsePath } from "./workflow-common.ts";
+
+export class CodexPrepareFailedError extends Error {
+  path: string;
+  response: AdapterResponseEnvelope;
+
+  constructor(path: string, response: AdapterResponseEnvelope) {
+    super(response.error?.message ?? "Codex prepare failed.");
+    this.name = "CodexPrepareFailedError";
+    this.path = path;
+    this.response = response;
+  }
+}
 
 export type FailureInput = {
   request: AdapterRequestWithDataDir;
@@ -79,9 +90,9 @@ async function handleFailure(input: FailureInput): Promise<AdapterResponseEnvelo
   return response;
 }
 
-export async function failPrepare(input: FailureInput): Promise<CodexPrepareResult> {
+export async function failPrepare(input: FailureInput): Promise<never> {
   const response = await handleFailure(input);
-  return { kind: "response", path: responsePath(input.paths), response };
+  throw new CodexPrepareFailedError(responsePath(input.paths), response);
 }
 
 export async function failComplete(input: FailureInput): Promise<CodexCompleteResult> {

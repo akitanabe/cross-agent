@@ -38,7 +38,7 @@ test("codex adapter CLI prepare writes run spec file path to stdout", async () =
   }
 });
 
-test("codex adapter CLI prepare writes response file path to stdout on recoverable failure", async () => {
+test("codex adapter CLI prepare writes failed response and no stdout on recoverable failure", async () => {
   const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
   try {
     const { dataDir, request } = await createRequestFixture(temp);
@@ -56,8 +56,9 @@ test("codex adapter CLI prepare writes response file path to stdout on recoverab
     );
 
     assert.equal(result.status, 1, result.stderr);
-    const responseFile = result.stdout.trim();
-    assert.match(responseFile, /round-1-codex-response\.json$/);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /CodexPrepareFailedError/);
+    const responseFile = join(dataDir, "artifacts", request.review_session_id, "round-1-codex-response.json");
     const response = JSON.parse(await readFile(responseFile, "utf8"));
     assert.equal(response.status, "failed");
     assert.equal(response.error.code, "prompt_file_missing");

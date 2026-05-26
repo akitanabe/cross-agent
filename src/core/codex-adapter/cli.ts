@@ -40,9 +40,9 @@ export function usage(): string {
   node scripts/codex-adapter-runner.mjs prepare --data-dir <CLAUDE_PLUGIN_DATA> --request <request-envelope.json>
   node scripts/codex-adapter-runner.mjs complete --data-dir <CLAUDE_PLUGIN_DATA> --run <round-N-codex-run.json>
 
-prepare validates the request/session state and writes a Codex exec run spec. stdout contains
-only either the run spec file path or, when preparation fails recoverably, the failed response
-envelope file path.
+prepare validates the request/session state and writes a Codex exec run spec. On success, stdout
+contains only the run spec file path. On recoverable failure, prepare writes the failed response
+envelope to the derived artifact path and exits with an error without printing that path to stdout.
 
 complete validates Codex CLI artifacts written by codex-agent, updates Codex agent state, and
 writes the adapter response envelope. stdout contains only the response envelope file path.`;

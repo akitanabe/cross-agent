@@ -76,8 +76,7 @@ export type CodexPrepareOptions = {
 };
 
 export type CodexPrepareResult =
-  | { kind: "run"; path: string; status: "prepared" }
-  | { kind: "response"; path: string; response: AdapterResponseEnvelope };
+  | { kind: "run"; path: string; status: "prepared" };
 
 export type CodexCompleteResult = {
   path: string;

@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseArgs, usage } from "../core/codex-adapter/cli.ts";
+import { CodexPrepareFailedError } from "../core/codex-adapter/workflow-failure.ts";
 import { completeCodexRun, prepareCodexRun } from "../core/codex-adapter/workflow.ts";
 
 // CLI entrypoint。prepare / complete の結果 file path だけを stdout に出す。
@@ -22,10 +23,13 @@ async function main(): Promise<void> {
     if (!args.requestFile) throw new Error("--request is required.");
     const input = await readFile(args.requestFile, "utf8");
     const request = JSON.parse(input);
-    const result = await prepareCodexRun(request, { dataDir: args.dataDir });
-    process.stdout.write(`${result.path}\n`);
-    if (result.kind === "response") {
-      process.exitCode = result.response.status === "completed" ? 0 : 1;
+    try {
+      const result = await prepareCodexRun(request, { dataDir: args.dataDir });
+      process.stdout.write(`${result.path}\n`);
+    } catch (error) {
+      if (!(error instanceof CodexPrepareFailedError)) throw error;
+      process.stderr.write(`${error.name}: ${error.message}\n`);
+      process.exitCode = 1;
     }
     return;
   }

@@ -16,18 +16,13 @@ export async function prepareCodexRun(
   request = normalizeRequest(request);
 
   if (!dataDir) {
-    const response = makeResponse(
-      { ...request, data_dir: dataDir },
-      "failed",
-      null,
-      [],
+    throw new Error(
       makeError(
         "invalid_request_envelope",
         '--data-dir is required. In plugin context, pass `--data-dir "${CLAUDE_PLUGIN_DATA}"` ' +
           "(Claude Code substitutes this in skill content).",
-      ),
+      ).message,
     );
-    return { kind: "response", path: "", response };
   }
 
   const requestWithDataDir = { ...request, data_dir: dataDir };
