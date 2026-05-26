@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 // src/runners/cross-agent-runner.ts
-import { resolve as resolve4 } from "node:path";
+import { resolve as resolve5 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // src/core/cross-agent/cli.ts
 import { readFile as readFile3 } from "node:fs/promises";
-import { resolve as resolve3 } from "node:path";
+import { resolve as resolve4 } from "node:path";
 
 // src/core/shared/cli-args.ts
 function parseIntegerOption(value, optionName) {
@@ -181,100 +181,7 @@ function normalizeOptions(options = {}) {
   };
 }
 
-// src/core/cross-agent/workflow.ts
-import { randomUUID } from "node:crypto";
-import { mkdir as mkdir2, readFile as readFile2, stat as stat2, writeFile as writeFile2 } from "node:fs/promises";
-import { resolve as resolve2 } from "node:path";
-
-// src/core/cross-agent/envelope.ts
-function buildAdapterRequest({
-  reviewSessionId,
-  agent,
-  round,
-  roundKind,
-  targetRoot,
-  promptFile,
-  contextFile = null,
-  targetFiles = [],
-  focusQuestion = null,
-  options
-}) {
-  return {
-    contract_version: 1,
-    review_session_id: reviewSessionId,
-    agent,
-    round,
-    round_kind: roundKind,
-    target_root: normalizePath(targetRoot),
-    prompt_file: normalizePath(promptFile),
-    context_file: normalizePath(contextFile),
-    target_files: normalizePathList(targetFiles),
-    focus_question: focusQuestion,
-    options: {
-      review_depth: options.review_depth,
-      timeout_seconds: options.timeout_seconds ?? null
-    }
-  };
-}
-
-// src/core/cross-agent/prompts.ts
-function buildInitialPrompt({
-  focusQuestion,
-  contextFile,
-  targetFiles = []
-}) {
-  const sections = [
-    "\u3042\u306A\u305F\u306F\u72EC\u7ACB\u3057\u305F\u30B7\u30CB\u30A2\u30A8\u30F3\u30B8\u30CB\u30A2\u3067\u3059\u3002\u4EE5\u4E0B\u306E\u60C5\u5831\u3092\u8AAD\u307F\u3001\u6279\u5224\u7684\u30FB\u5EFA\u8A2D\u7684\u306A\u30BB\u30AB\u30F3\u30C9\u30AA\u30D4\u30CB\u30AA\u30F3\u3092\u63D0\u4F9B\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
-  ];
-  if (focusQuestion) {
-    sections.push(`## \u30D5\u30A9\u30FC\u30AB\u30B9\u8CEA\u554F
-${focusQuestion}`);
-  }
-  if (contextFile) {
-    sections.push(`## \u30B3\u30F3\u30C6\u30AD\u30B9\u30C8\u30D5\u30A1\u30A4\u30EB
-${contextFile}`);
-  }
-  if (targetFiles.length) {
-    sections.push(`## \u30EC\u30D3\u30E5\u30FC\u5BFE\u8C61\u30D5\u30A1\u30A4\u30EB
-${targetFiles.join("\n")}
-
-\u5FC5\u8981\u306B\u5FDC\u3058\u3066\u95A2\u9023\u30D5\u30A1\u30A4\u30EB\u3082\u53C2\u7167\u3057\u3066\u304F\u3060\u3055\u3044\u3002`);
-  }
-  sections.push(`## \u30EC\u30D3\u30E5\u30FC\u89B3\u70B9
-- \u898B\u843D\u3068\u3057\u3066\u3044\u308B\u30EA\u30B9\u30AF\u3084\u554F\u984C\u70B9
-- \u3088\u308A\u826F\u3044\u30A2\u30D7\u30ED\u30FC\u30C1\u3084\u4EE3\u66FF\u6848
-- \u5168\u4F53\u7684\u306A\u8A2D\u8A08\u30FB\u5224\u65AD\u306E\u59A5\u5F53\u6027
-- \u5B9F\u88C5\u4E0A\u306E\u6CE8\u610F\u70B9
-- \u30C6\u30B9\u30C8\u89B3\u70B9`);
-  return `${sections.join("\n\n")}
-`;
-}
-function buildNextRoundPrompt({
-  promptText,
-  previousOutputFile = null,
-  focusQuestion = null
-}) {
-  if (!promptText) throw new Error("prompt_text is required.");
-  const sections = ["\u3042\u306A\u305F\u306F\u540C\u3058\u30EC\u30D3\u30E5\u30FC\u30BB\u30C3\u30B7\u30E7\u30F3\u3092\u7D99\u7D9A\u3057\u3066\u3044\u307E\u3059\u3002\u4EE5\u4E0B\u306E\u8FFD\u52A0\u4F9D\u983C\u306B\u3060\u3051\u7B54\u3048\u3066\u304F\u3060\u3055\u3044\u3002"];
-  if (previousOutputFile) {
-    sections.push(`## \u524D\u56DE round \u306E\u51FA\u529B
-${previousOutputFile}`);
-  }
-  if (focusQuestion) {
-    sections.push(`## \u30D5\u30A9\u30FC\u30AB\u30B9\u8CEA\u554F
-${focusQuestion}`);
-  }
-  sections.push(`## \u8FFD\u52A0\u4F9D\u983C
-${promptText}`);
-  sections.push(`## \u51FA\u529B\u65B9\u91DD
-- \u524D\u56DE round \u306E\u5358\u306A\u308B\u7E70\u308A\u8FD4\u3057\u306F\u907F\u3051\u308B
-- \u65B0\u3057\u304F\u78BA\u4FE1\u5EA6\u304C\u4E0A\u304C\u3063\u305F\u70B9\u3001\u4E0B\u304C\u3063\u305F\u70B9\u3092\u660E\u793A\u3059\u308B
-- \u63A1\u7528\u3059\u3079\u304D\u5BFE\u5FDC\u3001\u4FDD\u7559\u3059\u3079\u304D\u5BFE\u5FDC\u3001\u8FFD\u52A0\u8ABF\u67FB\u304C\u5FC5\u8981\u306A\u70B9\u3092\u5206\u3051\u308B`);
-  return `${sections.join("\n\n")}
-`;
-}
-
-// src/core/cross-agent/workflow.ts
+// src/core/cross-agent/workflow-common.ts
 function commandOutput(outputType, content) {
   return { output_type: outputType, content };
 }
@@ -287,206 +194,24 @@ async function readSession(dataDir, reviewSessionId) {
   }
   return { paths, state };
 }
-async function prepareRound({
-  paths,
-  state,
-  reviewSessionId,
-  agent,
-  round,
-  roundKind,
-  promptText,
-  contextFile,
-  targetFiles,
-  focusQuestion,
-  resetRounds = false,
-  extraArtifacts = [],
-  updateState = null
-}) {
-  const promptFile = resolve2(paths.artifactDir, `round-${round}-prompt.md`);
-  const normalizedPromptFile = normalizePath(promptFile);
-  const normalizedContextFile = normalizePath(contextFile);
-  await writeFile2(promptFile, promptText, "utf8");
-  const adapterRequest = buildAdapterRequest({
-    reviewSessionId,
-    agent,
-    round,
-    roundKind,
-    targetRoot: state.target_root,
-    promptFile: normalizedPromptFile,
-    contextFile: normalizedContextFile,
-    targetFiles,
-    focusQuestion,
-    options: state.options
-  });
-  const adapterRequestFile = resolve2(paths.artifactDir, `round-${round}-adapter-request.json`);
-  const normalizedAdapterRequestFile = normalizePath(adapterRequestFile);
-  await writeJsonAtomic(adapterRequestFile, adapterRequest);
-  const now = nowIso();
-  state.updated_at = now;
-  state.current_round = round;
-  updateState?.({ promptFile: normalizedPromptFile, now });
-  const roundEntry = {
-    round,
-    kind: roundKind,
-    agent,
-    prompt_file: normalizedPromptFile,
-    started_at: now,
-    completed_at: null,
-    agent_result: null
-  };
-  if (resetRounds) {
-    state.rounds = [roundEntry];
-  } else {
-    state.rounds ??= [];
-    state.rounds.push(roundEntry);
-  }
-  state.artifacts ??= { files: [] };
-  state.artifacts.files ??= [];
-  state.artifacts.files.push(
-    ...extraArtifacts,
-    artifact(normalizedPromptFile, "prompt", round, agent),
-    artifact(normalizedAdapterRequestFile, "adapter_request", round, agent)
-  );
-  await writeJsonAtomic(paths.stateFile, state);
-  return {
-    ...commandOutput("text", normalizedAdapterRequestFile),
-    request_file: normalizedAdapterRequestFile,
-    envelope: adapterRequest
-  };
-}
-async function startSession(input) {
-  const dataDir = resolveDataDir(input.data_dir);
-  const targetRoot = normalizePath(input.target_root);
-  if (!targetRoot) throw new Error("target_root is required.");
-  await ensureDirectory(targetRoot, "target_root");
-  const reviewSessionId = input.review_session_id ?? randomUUID();
-  const paths = sessionPaths(dataDir, reviewSessionId);
-  await mkdir2(paths.sessionsDir, { recursive: true });
-  await mkdir2(paths.artifactDir, { recursive: true });
-  const options = normalizeOptions(input.options);
-  const createdAt = nowIso();
-  const state = {
-    schema_version: 1,
-    review_session_id: reviewSessionId,
-    created_at: createdAt,
-    updated_at: createdAt,
-    status: "active",
-    target_root: targetRoot,
-    current_round: 0,
-    options,
-    context: {
-      context_file: null,
-      initial_prompt_file: null,
-      focus_question: null,
-      target_files: [],
-      source: "files"
-    },
-    rounds: [],
-    artifacts: {
-      files: []
-    },
-    errors: []
-  };
-  await writeJsonAtomic(paths.stateFile, state);
-  return commandOutput("text", reviewSessionId);
-}
-async function prepareInitialRound(input) {
-  const dataDir = resolveDataDir(input.data_dir);
-  const reviewSessionId = input.review_session_id;
-  if (!reviewSessionId) throw new Error("review_session_id is required.");
-  const { paths, state } = await readSession(dataDir, reviewSessionId);
-  const agent = input.agent ?? "codex";
-  const targetFiles = normalizePathList(input.target_files ?? []);
-  const focusQuestion = input.focus_question ?? null;
-  const contextText = input.context_text ?? null;
-  const source = input.source ?? (contextText && targetFiles.length ? "mixed" : contextText ? "conversation" : "files");
-  let contextFile = null;
-  const artifacts = [];
-  if (contextText) {
-    contextFile = resolve2(paths.artifactDir, "context.md");
-    const normalizedContextFile = normalizePath(contextFile);
-    await writeFile2(contextFile, contextText.endsWith("\n") ? contextText : `${contextText}
-`, "utf8");
-    artifacts.push(artifact(normalizedContextFile, "context"));
-    contextFile = normalizedContextFile;
-  }
-  const promptText = buildInitialPrompt({ focusQuestion, contextFile, targetFiles });
-  return prepareRound({
-    paths,
-    state,
-    reviewSessionId,
-    agent,
-    round: 1,
-    roundKind: "initial_review",
-    promptText,
-    contextFile,
-    targetFiles,
-    focusQuestion,
-    resetRounds: true,
-    extraArtifacts: artifacts,
-    updateState: ({ promptFile }) => {
-      state.context = {
-        context_file: contextFile,
-        initial_prompt_file: promptFile,
-        focus_question: focusQuestion,
-        target_files: targetFiles,
-        source
-      };
+
+// src/core/cross-agent/workflow-complete.ts
+import { stat as stat2 } from "node:fs/promises";
+import { resolve as resolve2 } from "node:path";
+async function validateExistingFile(filePath, label) {
+  let entry;
+  try {
+    entry = await stat2(filePath);
+  } catch (error) {
+    const nodeError = error;
+    if (nodeError.code === "ENOENT") {
+      throw new Error(`invalid adapter response: ${label} does not exist: ${filePath}`);
     }
-  });
-}
-async function prepareNextRound(input) {
-  const dataDir = resolveDataDir(input.data_dir);
-  const reviewSessionId = input.review_session_id;
-  if (!reviewSessionId) throw new Error("review_session_id is required.");
-  const { paths, state } = await readSession(dataDir, reviewSessionId);
-  if (state.status !== "active") {
-    throw new Error(`session is not active: ${state.status}`);
+    throw error;
   }
-  const rounds = state.rounds ?? [];
-  if (input.previous_round !== void 0) validateRoundNumber(input.previous_round);
-  const previousRound = input.previous_round !== void 0 ? rounds.find((entry) => entry.round === input.previous_round) : rounds.slice().reverse()[0];
-  if (!previousRound) throw new Error("previous round not found.");
-  if (!previousRound.agent_result) {
-    throw new Error(`previous round is not completed: ${previousRound.round}/${previousRound.agent}`);
+  if (!entry.isFile()) {
+    throw new Error(`invalid adapter response: ${label} is not a file: ${filePath}`);
   }
-  const previousResult = previousRound.agent_result;
-  const agent = input.agent ?? previousRound.agent;
-  const roundKind = input.round_kind ?? "follow_up";
-  const focusQuestion = input.focus_question ?? state.context?.focus_question ?? null;
-  const targetFiles = normalizePathList(input.target_files ?? state.context?.target_files ?? []);
-  const contextFile = state.context?.context_file ?? null;
-  const nextRound = Math.max(0, ...rounds.map((entry) => entry.round)) + 1;
-  if (roundKind === "deep_dive" && previousResult.status !== "completed") {
-    throw new Error(`deep_dive requires previous round status=completed, got ${previousResult.status}`);
-  }
-  if (roundKind === "recovery" && previousResult.status !== "failed") {
-    throw new Error(`recovery requires previous round status=failed, got ${previousResult.status}`);
-  }
-  const maxRounds = state.options?.max_rounds ?? DEFAULT_OPTIONS.max_rounds;
-  if (roundKind !== "follow_up") {
-    const consumed = rounds.filter((entry) => entry.kind !== "follow_up").length;
-    if (consumed >= maxRounds) {
-      throw new Error(`max_rounds exceeded: ${consumed + 1} > ${maxRounds}`);
-    }
-  }
-  const promptText = buildNextRoundPrompt({
-    promptText: input.prompt_text,
-    previousOutputFile: previousResult.output_file ?? null,
-    focusQuestion
-  });
-  return prepareRound({
-    paths,
-    state,
-    reviewSessionId,
-    agent,
-    round: nextRound,
-    roundKind,
-    promptText,
-    contextFile,
-    targetFiles,
-    focusQuestion
-  });
 }
 async function validateAdapterResponse(response, paths, responseFile = null) {
   if (response.contract_version !== SUPPORTED_CONTRACT_VERSION) {
@@ -500,19 +225,7 @@ async function validateAdapterResponse(response, paths, responseFile = null) {
     if (!isPathInside(paths.artifactDir, responseFile)) {
       throw new Error(`invalid adapter response: response_file is outside artifact dir: ${responseFile}`);
     }
-    let responseEntry;
-    try {
-      responseEntry = await stat2(responseFile);
-    } catch (error) {
-      const nodeError = error;
-      if (nodeError.code === "ENOENT") {
-        throw new Error(`invalid adapter response: response_file does not exist: ${responseFile}`);
-      }
-      throw error;
-    }
-    if (!responseEntry.isFile()) {
-      throw new Error(`invalid adapter response: response_file is not a file: ${responseFile}`);
-    }
+    await validateExistingFile(responseFile, "response_file");
   }
   if (response.status === "completed") {
     if (typeof response.output_file !== "string" || response.output_file.length === 0) {
@@ -521,19 +234,7 @@ async function validateAdapterResponse(response, paths, responseFile = null) {
     if (!isPathInside(paths.artifactDir, response.output_file)) {
       throw new Error(`invalid adapter response: output_file is outside artifact dir: ${response.output_file}`);
     }
-    let entry;
-    try {
-      entry = await stat2(response.output_file);
-    } catch (error) {
-      const nodeError = error;
-      if (nodeError.code === "ENOENT") {
-        throw new Error(`invalid adapter response: output_file does not exist: ${response.output_file}`);
-      }
-      throw error;
-    }
-    if (!entry.isFile()) {
-      throw new Error(`invalid adapter response: output_file is not a file: ${response.output_file}`);
-    }
+    await validateExistingFile(response.output_file, "output_file");
   } else if (response.output_file != null) {
     throw new Error(`invalid adapter response: ${response.status} must not include output_file`);
   }
@@ -627,6 +328,268 @@ async function completeCurrentRound(input) {
     }
   });
 }
+
+// src/core/cross-agent/workflow-prepare.ts
+import { writeFile as writeFile2 } from "node:fs/promises";
+import { resolve as resolve3 } from "node:path";
+
+// src/core/cross-agent/envelope.ts
+function buildAdapterRequest({
+  reviewSessionId,
+  agent,
+  round,
+  roundKind,
+  targetRoot,
+  promptFile,
+  contextFile = null,
+  targetFiles = [],
+  focusQuestion = null,
+  options
+}) {
+  return {
+    contract_version: 1,
+    review_session_id: reviewSessionId,
+    agent,
+    round,
+    round_kind: roundKind,
+    target_root: normalizePath(targetRoot),
+    prompt_file: normalizePath(promptFile),
+    context_file: normalizePath(contextFile),
+    target_files: normalizePathList(targetFiles),
+    focus_question: focusQuestion,
+    options: {
+      review_depth: options.review_depth,
+      timeout_seconds: options.timeout_seconds ?? null
+    }
+  };
+}
+
+// src/core/cross-agent/prompts.ts
+function buildInitialPrompt({
+  focusQuestion,
+  contextFile,
+  targetFiles = []
+}) {
+  const sections = [
+    "\u3042\u306A\u305F\u306F\u72EC\u7ACB\u3057\u305F\u30B7\u30CB\u30A2\u30A8\u30F3\u30B8\u30CB\u30A2\u3067\u3059\u3002\u4EE5\u4E0B\u306E\u60C5\u5831\u3092\u8AAD\u307F\u3001\u6279\u5224\u7684\u30FB\u5EFA\u8A2D\u7684\u306A\u30BB\u30AB\u30F3\u30C9\u30AA\u30D4\u30CB\u30AA\u30F3\u3092\u63D0\u4F9B\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
+  ];
+  if (focusQuestion) {
+    sections.push(`## \u30D5\u30A9\u30FC\u30AB\u30B9\u8CEA\u554F
+${focusQuestion}`);
+  }
+  if (contextFile) {
+    sections.push(`## \u30B3\u30F3\u30C6\u30AD\u30B9\u30C8\u30D5\u30A1\u30A4\u30EB
+${contextFile}`);
+  }
+  if (targetFiles.length) {
+    sections.push(`## \u30EC\u30D3\u30E5\u30FC\u5BFE\u8C61\u30D5\u30A1\u30A4\u30EB
+${targetFiles.join("\n")}
+
+\u5FC5\u8981\u306B\u5FDC\u3058\u3066\u95A2\u9023\u30D5\u30A1\u30A4\u30EB\u3082\u53C2\u7167\u3057\u3066\u304F\u3060\u3055\u3044\u3002`);
+  }
+  sections.push(`## \u30EC\u30D3\u30E5\u30FC\u89B3\u70B9
+- \u898B\u843D\u3068\u3057\u3066\u3044\u308B\u30EA\u30B9\u30AF\u3084\u554F\u984C\u70B9
+- \u3088\u308A\u826F\u3044\u30A2\u30D7\u30ED\u30FC\u30C1\u3084\u4EE3\u66FF\u6848
+- \u5168\u4F53\u7684\u306A\u8A2D\u8A08\u30FB\u5224\u65AD\u306E\u59A5\u5F53\u6027
+- \u5B9F\u88C5\u4E0A\u306E\u6CE8\u610F\u70B9
+- \u30C6\u30B9\u30C8\u89B3\u70B9`);
+  return `${sections.join("\n\n")}
+`;
+}
+function buildNextRoundPrompt({
+  promptText,
+  previousOutputFile = null,
+  focusQuestion = null
+}) {
+  if (!promptText) throw new Error("prompt_text is required.");
+  const sections = ["\u3042\u306A\u305F\u306F\u540C\u3058\u30EC\u30D3\u30E5\u30FC\u30BB\u30C3\u30B7\u30E7\u30F3\u3092\u7D99\u7D9A\u3057\u3066\u3044\u307E\u3059\u3002\u4EE5\u4E0B\u306E\u8FFD\u52A0\u4F9D\u983C\u306B\u3060\u3051\u7B54\u3048\u3066\u304F\u3060\u3055\u3044\u3002"];
+  if (previousOutputFile) {
+    sections.push(`## \u524D\u56DE round \u306E\u51FA\u529B
+${previousOutputFile}`);
+  }
+  if (focusQuestion) {
+    sections.push(`## \u30D5\u30A9\u30FC\u30AB\u30B9\u8CEA\u554F
+${focusQuestion}`);
+  }
+  sections.push(`## \u8FFD\u52A0\u4F9D\u983C
+${promptText}`);
+  sections.push(`## \u51FA\u529B\u65B9\u91DD
+- \u524D\u56DE round \u306E\u5358\u306A\u308B\u7E70\u308A\u8FD4\u3057\u306F\u907F\u3051\u308B
+- \u65B0\u3057\u304F\u78BA\u4FE1\u5EA6\u304C\u4E0A\u304C\u3063\u305F\u70B9\u3001\u4E0B\u304C\u3063\u305F\u70B9\u3092\u660E\u793A\u3059\u308B
+- \u63A1\u7528\u3059\u3079\u304D\u5BFE\u5FDC\u3001\u4FDD\u7559\u3059\u3079\u304D\u5BFE\u5FDC\u3001\u8FFD\u52A0\u8ABF\u67FB\u304C\u5FC5\u8981\u306A\u70B9\u3092\u5206\u3051\u308B`);
+  return `${sections.join("\n\n")}
+`;
+}
+
+// src/core/cross-agent/workflow-prepare.ts
+async function prepareRound({
+  paths,
+  state,
+  reviewSessionId,
+  agent,
+  round,
+  roundKind,
+  promptText,
+  contextFile,
+  targetFiles,
+  focusQuestion,
+  resetRounds = false,
+  extraArtifacts = [],
+  updateState = null
+}) {
+  const promptFile = resolve3(paths.artifactDir, `round-${round}-prompt.md`);
+  const normalizedPromptFile = normalizePath(promptFile);
+  const normalizedContextFile = normalizePath(contextFile);
+  await writeFile2(promptFile, promptText, "utf8");
+  const adapterRequest = buildAdapterRequest({
+    reviewSessionId,
+    agent,
+    round,
+    roundKind,
+    targetRoot: state.target_root,
+    promptFile: normalizedPromptFile,
+    contextFile: normalizedContextFile,
+    targetFiles,
+    focusQuestion,
+    options: state.options
+  });
+  const adapterRequestFile = resolve3(paths.artifactDir, `round-${round}-adapter-request.json`);
+  const normalizedAdapterRequestFile = normalizePath(adapterRequestFile);
+  await writeJsonAtomic(adapterRequestFile, adapterRequest);
+  const now = nowIso();
+  state.updated_at = now;
+  state.current_round = round;
+  updateState?.({ promptFile: normalizedPromptFile, now });
+  const roundEntry = {
+    round,
+    kind: roundKind,
+    agent,
+    prompt_file: normalizedPromptFile,
+    started_at: now,
+    completed_at: null,
+    agent_result: null
+  };
+  if (resetRounds) {
+    state.rounds = [roundEntry];
+  } else {
+    state.rounds ??= [];
+    state.rounds.push(roundEntry);
+  }
+  state.artifacts ??= { files: [] };
+  state.artifacts.files ??= [];
+  state.artifacts.files.push(
+    ...extraArtifacts,
+    artifact(normalizedPromptFile, "prompt", round, agent),
+    artifact(normalizedAdapterRequestFile, "adapter_request", round, agent)
+  );
+  await writeJsonAtomic(paths.stateFile, state);
+  return {
+    ...commandOutput("text", normalizedAdapterRequestFile),
+    request_file: normalizedAdapterRequestFile,
+    envelope: adapterRequest
+  };
+}
+async function prepareInitialRound(input) {
+  const dataDir = resolveDataDir(input.data_dir);
+  const reviewSessionId = input.review_session_id;
+  if (!reviewSessionId) throw new Error("review_session_id is required.");
+  const { paths, state } = await readSession(dataDir, reviewSessionId);
+  const agent = input.agent ?? "codex";
+  const targetFiles = normalizePathList(input.target_files ?? []);
+  const focusQuestion = input.focus_question ?? null;
+  const contextText = input.context_text ?? null;
+  const source = input.source ?? (contextText && targetFiles.length ? "mixed" : contextText ? "conversation" : "files");
+  let contextFile = null;
+  const artifacts = [];
+  if (contextText) {
+    contextFile = resolve3(paths.artifactDir, "context.md");
+    const normalizedContextFile = normalizePath(contextFile);
+    await writeFile2(contextFile, contextText.endsWith("\n") ? contextText : `${contextText}
+`, "utf8");
+    artifacts.push(artifact(normalizedContextFile, "context"));
+    contextFile = normalizedContextFile;
+  }
+  const promptText = buildInitialPrompt({ focusQuestion, contextFile, targetFiles });
+  return prepareRound({
+    paths,
+    state,
+    reviewSessionId,
+    agent,
+    round: 1,
+    roundKind: "initial_review",
+    promptText,
+    contextFile,
+    targetFiles,
+    focusQuestion,
+    resetRounds: true,
+    extraArtifacts: artifacts,
+    updateState: ({ promptFile }) => {
+      state.context = {
+        context_file: contextFile,
+        initial_prompt_file: promptFile,
+        focus_question: focusQuestion,
+        target_files: targetFiles,
+        source
+      };
+    }
+  });
+}
+async function prepareNextRound(input) {
+  const dataDir = resolveDataDir(input.data_dir);
+  const reviewSessionId = input.review_session_id;
+  if (!reviewSessionId) throw new Error("review_session_id is required.");
+  const { paths, state } = await readSession(dataDir, reviewSessionId);
+  if (state.status !== "active") {
+    throw new Error(`session is not active: ${state.status}`);
+  }
+  const rounds = state.rounds ?? [];
+  if (input.previous_round !== void 0) validateRoundNumber(input.previous_round);
+  const previousRound = input.previous_round !== void 0 ? rounds.find((entry) => entry.round === input.previous_round) : rounds.slice().reverse()[0];
+  if (!previousRound) throw new Error("previous round not found.");
+  if (!previousRound.agent_result) {
+    throw new Error(`previous round is not completed: ${previousRound.round}/${previousRound.agent}`);
+  }
+  const previousResult = previousRound.agent_result;
+  const agent = input.agent ?? previousRound.agent;
+  const roundKind = input.round_kind ?? "follow_up";
+  const focusQuestion = input.focus_question ?? state.context?.focus_question ?? null;
+  const targetFiles = normalizePathList(input.target_files ?? state.context?.target_files ?? []);
+  const contextFile = state.context?.context_file ?? null;
+  const nextRound = Math.max(0, ...rounds.map((entry) => entry.round)) + 1;
+  if (roundKind === "deep_dive" && previousResult.status !== "completed") {
+    throw new Error(`deep_dive requires previous round status=completed, got ${previousResult.status}`);
+  }
+  if (roundKind === "recovery" && previousResult.status !== "failed") {
+    throw new Error(`recovery requires previous round status=failed, got ${previousResult.status}`);
+  }
+  const maxRounds = state.options?.max_rounds ?? DEFAULT_OPTIONS.max_rounds;
+  if (roundKind !== "follow_up") {
+    const consumed = rounds.filter((entry) => entry.kind !== "follow_up").length;
+    if (consumed >= maxRounds) {
+      throw new Error(`max_rounds exceeded: ${consumed + 1} > ${maxRounds}`);
+    }
+  }
+  const promptText = buildNextRoundPrompt({
+    promptText: input.prompt_text,
+    previousOutputFile: previousResult.output_file ?? null,
+    focusQuestion
+  });
+  return prepareRound({
+    paths,
+    state,
+    reviewSessionId,
+    agent,
+    round: nextRound,
+    roundKind,
+    promptText,
+    contextFile,
+    targetFiles,
+    focusQuestion
+  });
+}
+
+// src/core/cross-agent/workflow-round.ts
+import { readFile as readFile2 } from "node:fs/promises";
 async function getRound(input) {
   const dataDir = resolveDataDir(input.data_dir);
   const reviewSessionId = input.review_session_id;
@@ -657,6 +620,46 @@ async function getRoundOutput(input) {
   return commandOutput("text", await readFile2(round.output_file, "utf8"));
 }
 
+// src/core/cross-agent/workflow-session.ts
+import { randomUUID } from "node:crypto";
+import { mkdir as mkdir2 } from "node:fs/promises";
+async function startSession(input) {
+  const dataDir = resolveDataDir(input.data_dir);
+  const targetRoot = normalizePath(input.target_root);
+  if (!targetRoot) throw new Error("target_root is required.");
+  await ensureDirectory(targetRoot, "target_root");
+  const reviewSessionId = input.review_session_id ?? randomUUID();
+  const paths = sessionPaths(dataDir, reviewSessionId);
+  await mkdir2(paths.sessionsDir, { recursive: true });
+  await mkdir2(paths.artifactDir, { recursive: true });
+  const options = normalizeOptions(input.options);
+  const createdAt = nowIso();
+  const state = {
+    schema_version: 1,
+    review_session_id: reviewSessionId,
+    created_at: createdAt,
+    updated_at: createdAt,
+    status: "active",
+    target_root: targetRoot,
+    current_round: 0,
+    options,
+    context: {
+      context_file: null,
+      initial_prompt_file: null,
+      focus_question: null,
+      target_files: [],
+      source: "files"
+    },
+    rounds: [],
+    artifacts: {
+      files: []
+    },
+    errors: []
+  };
+  await writeJsonAtomic(paths.stateFile, state);
+  return commandOutput("text", reviewSessionId);
+}
+
 // src/core/cross-agent/cli.ts
 function optionInput(args) {
   const options = {};
@@ -684,7 +687,7 @@ async function readPrepareInitialContext(args) {
   if (args.contextFile) return readOptionalTextFile(args.contextFile);
   const dataDir = requireOption(args, "dataDir", "--data-dir");
   const reviewSessionId = requireOption(args, "reviewSessionId", "--review-session-id");
-  const defaultContextFile = resolve3(sessionPaths(dataDir, reviewSessionId).artifactDir, "context.md");
+  const defaultContextFile = resolve4(sessionPaths(dataDir, reviewSessionId).artifactDir, "context.md");
   return readTextFileIfExists(defaultContextFile);
 }
 var commonOptions = {
@@ -820,7 +823,7 @@ async function main() {
   const result = await command.run(input);
   writeCommandOutput(result);
 }
-var invokedPath = process.argv[1] ? resolve4(process.argv[1]) : null;
+var invokedPath = process.argv[1] ? resolve5(process.argv[1]) : null;
 if (invokedPath && invokedPath === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
     const caught = error;

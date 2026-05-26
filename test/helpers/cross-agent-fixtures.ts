@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { sessionPaths } from "../../src/core/cross-agent/state.ts";
-import { completeRound } from "../../src/core/cross-agent/workflow.ts";
+import { completeRound } from "../../src/core/cross-agent/workflow-complete.ts";
 
 export async function writeAdapterResponse(filePath, response) {
   await writeFile(filePath, `${JSON.stringify(response, null, 2)}\n`, "utf8");

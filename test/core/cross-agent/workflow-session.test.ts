@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { sessionPaths } from "../../../src/core/cross-agent/state.ts";
-import { prepareInitialRound, prepareNextRound, startSession } from "../../../src/core/cross-agent/workflow.ts";
+import { prepareInitialRound, prepareNextRound } from "../../../src/core/cross-agent/workflow-prepare.ts";
+import { startSession } from "../../../src/core/cross-agent/workflow-session.ts";
 import { normalizePath } from "../../../src/core/shared/path-utils.ts";
 import { completeRoundFromEnvelope } from "../../helpers/cross-agent-fixtures.ts";
 

@@ -6,13 +6,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { sessionPaths } from "../../../src/core/cross-agent/state.ts";
-import {
-  completeRound,
-  getRound,
-  getRoundOutput,
-  prepareInitialRound,
-  startSession,
-} from "../../../src/core/cross-agent/workflow.ts";
+import { completeCurrentRound, completeRound } from "../../../src/core/cross-agent/workflow-complete.ts";
+import { prepareInitialRound } from "../../../src/core/cross-agent/workflow-prepare.ts";
+import { getRound, getRoundOutput } from "../../../src/core/cross-agent/workflow-round.ts";
+import { startSession } from "../../../src/core/cross-agent/workflow-session.ts";
 import { normalizePath } from "../../../src/core/shared/path-utils.ts";
 import { completeRoundFromEnvelope, writeAdapterResponse } from "../../helpers/cross-agent-fixtures.ts";
 
@@ -58,6 +55,38 @@ test("completeRound records adapter response into state", async () => {
       state.artifacts.files.every((entry) => entry.owner === "cross-agent"),
       true,
     );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("completeCurrentRound derives the response file from current state", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({ data_dir: dataDir, review_session_id: "session-1", target_root: targetRoot });
+    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    const paths = sessionPaths(dataDir, "session-1");
+    const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
+    await writeFile(outputFile, "ok", "utf8");
+    await writeAdapterResponse(join(paths.artifactDir, "round-1-codex-response.json"), {
+      contract_version: 1,
+      review_session_id: "session-1",
+      agent: "codex",
+      round: 1,
+      status: "completed",
+      output_file: outputFile,
+      artifacts: [],
+      error: null,
+    });
+
+    const result = await completeCurrentRound({ data_dir: dataDir, review_session_id: "session-1" });
+
+    assert.equal(result.status, "completed");
+    assert.equal(result.response_file, normalizePath(join(paths.artifactDir, "round-1-codex-response.json")));
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
