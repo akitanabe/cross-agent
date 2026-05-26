@@ -81,9 +81,9 @@ runner が返した adapter request envelope file path を使う。
 
 返ってきた request envelope file path を依頼本文に含め、対応する subagent に委譲する。
 
-| Agent   | 委譲先                                                        |
-| ------- | ------------------------------------------------------------- |
-| `codex` | `codex-agent` subagent（内部で `codex-adapter` skill を使用） |
+| Agent    | 委譲先                                                          |
+| -------- | --------------------------------------------------------------- |
+| `codex`  | `codex-agent` subagent（内部で `codex-adapter` skill を使用）   |
 | `claude` | `claude-agent` subagent（内部で `claude-adapter` skill を使用） |
 
 `agent` が未指定の場合は `codex` を使う。ユーザーが Claude を明示した場合、または比較対象として Claude が必要な場合は
@@ -190,6 +190,13 @@ Round 2 を実行した後は、Round 1 と同様に `complete-current-round` �
 # context.md / round-*-prompt.md の Write
 Write(${CLAUDE_PLUGIN_DATA}/artifacts/*/context.md)
 Write(${CLAUDE_PLUGIN_DATA}/artifacts/*/round-*-prompt.md)
+
+# cross-agent runner（このスキル内の Bash）
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session **)
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-initial **)
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-next-round **)
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-current-round **)
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" get-round-output **)
 
 # codex-adapter（subagent 内の Bash）
 Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" prepare **)
