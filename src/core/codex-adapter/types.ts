@@ -2,6 +2,7 @@ import type {
   AdapterRequestEnvelope,
   AdapterResponseArtifact,
   AdapterResponseError,
+  AdapterResponseEnvelope,
 } from "../shared/adapter-envelope.ts";
 
 export type CodexEffort = "medium" | "high" | "xhigh";
@@ -72,6 +73,15 @@ export type CodexAdapterCommand = "prepare" | "complete";
 
 export type CodexPrepareOptions = {
   dataDir?: string | null;
+};
+
+export type CodexPrepareResult =
+  | { kind: "run"; path: string; status: "prepared" }
+  | { kind: "response"; path: string; response: AdapterResponseEnvelope };
+
+export type CodexCompleteResult = {
+  path: string;
+  response: AdapterResponseEnvelope;
 };
 
 export type ParsedCodexAdapterArgs = {

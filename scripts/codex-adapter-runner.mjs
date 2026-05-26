@@ -101,8 +101,7 @@ writes the adapter response envelope. stdout contains only the response envelope
 }
 
 // src/core/codex-adapter/workflow.ts
-import { mkdir as mkdir2, readFile as readFile2 } from "node:fs/promises";
-import { dirname as dirname2 } from "node:path";
+import { mkdir as mkdir3, readFile as readFile2 } from "node:fs/promises";
 
 // src/core/shared/path-utils.ts
 function normalizePath(value, platform = process.platform) {
@@ -120,6 +119,10 @@ function normalizePathList(values, platform = process.platform) {
   if (!Array.isArray(values)) return values;
   return values.map((value) => normalizePath(value, platform));
 }
+
+// src/core/codex-adapter/agent-state.ts
+import { mkdir as mkdir2 } from "node:fs/promises";
+import { dirname as dirname2 } from "node:path";
 
 // src/core/codex-adapter/state.ts
 import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
@@ -271,10 +274,81 @@ async function validateRequest(request) {
   return null;
 }
 
-// src/core/codex-adapter/workflow.ts
+// src/core/codex-adapter/agent-state.ts
 async function appendAgentArtifacts(agentState, artifacts) {
   agentState.artifacts ??= [];
   agentState.artifacts.push(...artifacts);
+}
+async function saveAgentState(dataDir, reviewSessionId, agentState) {
+  const agentStateFile = agentStateFileFor(dataDir, reviewSessionId);
+  await mkdir2(dirname2(agentStateFile), { recursive: true });
+  await writeJsonAtomic(agentStateFile, agentState);
+}
+async function readSessionState(dataDir, reviewSessionId) {
+  return await readJson(sessionStateFileFor(dataDir, reviewSessionId));
+}
+async function readOrCreateAgentState(dataDir, request) {
+  const agentStateFile = agentStateFileFor(dataDir, request.review_session_id);
+  return await readJsonIfExists(agentStateFile) ?? {
+    schema_version: 1,
+    review_session_id: request.review_session_id,
+    agent: "codex",
+    status: "pending",
+    thread_id: null,
+    target_root: null,
+    last_run_file: null,
+    last_output_file: null,
+    last_event_log: null,
+    last_exit_file: null,
+    last_error: null,
+    artifacts: [],
+    errors: []
+  };
+}
+async function markAgentPrepared(dataDir, request, paths, agentState) {
+  agentState.updated_at = nowIso();
+  Object.assign(agentState, {
+    schema_version: agentState.schema_version ?? 1,
+    review_session_id: request.review_session_id,
+    agent: "codex",
+    status: "prepared",
+    target_root: agentState.target_root ?? request.target_root,
+    last_run_file: paths.runFile,
+    last_event_log: paths.eventLog,
+    last_exit_file: paths.exitFile,
+    last_error: null
+  });
+  await saveAgentState(dataDir, request.review_session_id, agentState);
+}
+async function markAgentCompleted({
+  dataDir,
+  runSpec,
+  paths,
+  agentState,
+  threadId,
+  artifacts
+}) {
+  agentState.updated_at = nowIso();
+  Object.assign(agentState, {
+    schema_version: agentState.schema_version ?? 1,
+    review_session_id: runSpec.review_session_id,
+    agent: "codex",
+    status: "active",
+    thread_id: threadId,
+    target_root: runSpec.target_root,
+    last_run_file: paths.runFile,
+    last_output_file: runSpec.output_file,
+    last_event_log: runSpec.event_log,
+    last_exit_file: runSpec.exit_file,
+    last_error: null
+  });
+  await appendAgentArtifacts(agentState, artifacts);
+  await saveAgentState(dataDir, runSpec.review_session_id, agentState);
+}
+
+// src/core/codex-adapter/workflow-common.ts
+function isObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeRequest(request) {
   return {
@@ -285,6 +359,173 @@ function normalizeRequest(request) {
     target_files: normalizePathList(request.target_files)
   };
 }
+function responsePath(paths) {
+  return normalizePath(paths.responseFile);
+}
+function runPath(paths) {
+  return normalizePath(paths.runFile);
+}
+
+// src/core/codex-adapter/failure.ts
+async function writeFailureDiagnostic({
+  request,
+  paths,
+  code,
+  message,
+  exitCode = null,
+  extraDiagnostics = []
+}) {
+  await writeDiagnostic(paths.diagnosticFile, [
+    `# Codex adapter diagnostic`,
+    ``,
+    `- status: failed`,
+    `- code: ${code}`,
+    `- message: ${message}`,
+    `- round: ${request.round}`,
+    `- target_root: ${request.target_root}`,
+    exitCode !== null ? `- exit_code: ${exitCode}` : null,
+    ...extraDiagnostics
+  ]);
+}
+async function updateFailedAgentState({ request, agentState, paths, code, message }) {
+  if (!agentState) return;
+  const error = makeError(code, message, paths.diagnosticFile);
+  agentState.updated_at = nowIso();
+  Object.assign(agentState, {
+    schema_version: agentState.schema_version ?? 1,
+    review_session_id: request.review_session_id,
+    agent: "codex",
+    status: "failed",
+    thread_id: agentState.thread_id ?? null,
+    target_root: agentState.target_root ?? request.target_root,
+    last_run_file: agentState.last_run_file ?? paths.runFile,
+    last_output_file: agentState.last_output_file ?? null,
+    last_event_log: paths.eventLog,
+    last_exit_file: paths.exitFile,
+    last_error: error
+  });
+  await appendAgentArtifacts(agentState, [artifact(paths.diagnosticFile, "diagnostic", request.round)]);
+  agentState.errors ??= [];
+  agentState.errors.push({ ...error, agent: "codex", round: request.round, created_at: nowIso() });
+  await saveAgentState(request.data_dir ?? ".", request.review_session_id, agentState);
+}
+async function handleFailure(input) {
+  const diagnosticArtifact = artifact(input.paths.diagnosticFile, "diagnostic", input.request.round);
+  const error = makeError(input.code, input.message, input.paths.diagnosticFile);
+  const response = makeResponse(input.request, "failed", null, [diagnosticArtifact], error);
+  await writeFailureDiagnostic(input);
+  await updateFailedAgentState(input);
+  await writeJsonAtomic(input.paths.responseFile, response);
+  return response;
+}
+async function failPrepare(input) {
+  const response = await handleFailure(input);
+  return { kind: "response", path: responsePath(input.paths), response };
+}
+async function failComplete(input) {
+  const response = await handleFailure(input);
+  return { path: responsePath(input.paths), response };
+}
+
+// src/core/codex-adapter/complete-helpers.ts
+async function loadAgentStateForComplete(dataDir, runSpec, request, paths) {
+  let agentState;
+  try {
+    const sessionState = await readSessionState(dataDir, runSpec.review_session_id);
+    if (sessionState.review_session_id !== runSpec.review_session_id) {
+      return {
+        ok: false,
+        result: await failComplete({
+          request,
+          agentState: null,
+          paths,
+          code: "state_file_invalid",
+          message: "session state file review_session_id does not match run spec."
+        })
+      };
+    }
+    agentState = await readOrCreateAgentState(dataDir, request);
+  } catch (error) {
+    const caught = error;
+    return {
+      ok: false,
+      result: await failComplete({
+        request,
+        agentState: null,
+        paths,
+        code: caught.code === "ENOENT" ? "state_file_missing" : "state_file_invalid",
+        message: caught.code === "ENOENT" ? "session state file does not exist." : `state file is not valid JSON: ${caught.message}`
+      })
+    };
+  }
+  if (agentState.review_session_id !== runSpec.review_session_id || agentState.agent !== "codex") {
+    return {
+      ok: false,
+      result: await failComplete({
+        request,
+        agentState: null,
+        paths,
+        code: "state_file_invalid",
+        message: "Codex agent state file review_session_id or agent does not match run spec."
+      })
+    };
+  }
+  return { ok: true, agentState };
+}
+async function resolveCompletedThreadId(runSpec, request, paths, agentState, exitCode, eventLogText) {
+  if (runSpec.mode === "resume") {
+    return { ok: true, threadId: runSpec.thread_id };
+  }
+  const threadId = extractThreadIdFromJsonl(eventLogText);
+  if (threadId) return { ok: true, threadId };
+  return {
+    ok: false,
+    result: await failComplete({
+      request,
+      agentState,
+      paths,
+      code: "codex_thread_id_missing",
+      message: "thread.started event with thread_id was not found.",
+      exitCode,
+      extraDiagnostics: [
+        `- mode: initial`,
+        runSpec.decision_reason ? `- decision_reason: ${runSpec.decision_reason}` : null,
+        runSpec.previous_thread_id ? `- previous_thread_id: ${runSpec.previous_thread_id}` : null,
+        runSpec.previous_target_root ? `- previous_target_root: ${runSpec.previous_target_root}` : null
+      ]
+    })
+  };
+}
+
+// src/core/codex-adapter/completion-artifacts.ts
+function completedArtifacts(runSpec, paths) {
+  return [
+    artifact(paths.runFile, "run_spec", runSpec.round),
+    artifact(runSpec.output_file, "agent_output", runSpec.round),
+    artifact(runSpec.event_log, "event_log", runSpec.round),
+    artifact(runSpec.exit_file, "exit_status", runSpec.round)
+  ];
+}
+async function appendCompletionDiagnostic(runSpec, paths, threadId, artifacts) {
+  if (!runSpec.warning && runSpec.decision_reason !== "target_root_changed") return;
+  await writeDiagnostic(paths.diagnosticFile, [
+    `# Codex adapter diagnostic`,
+    ``,
+    `- status: completed`,
+    `- mode: ${runSpec.mode}`,
+    runSpec.decision_reason ? `- decision_reason: ${runSpec.decision_reason}` : null,
+    `- thread_id: ${threadId}`,
+    runSpec.warning ? `- warning: ${runSpec.warning}` : null,
+    runSpec.decision_reason === "target_root_changed" ? `- warning: target_root_changed` : null,
+    runSpec.previous_thread_id ? `- previous_thread_id: ${runSpec.previous_thread_id}` : null,
+    runSpec.previous_target_root ? `- previous_target_root: ${runSpec.previous_target_root}` : null,
+    `- target_root: ${runSpec.target_root}`
+  ]);
+  artifacts.push(artifact(paths.diagnosticFile, "diagnostic", runSpec.round));
+}
+
+// src/core/codex-adapter/run-spec.ts
+import { dirname as dirname3 } from "node:path";
 function makeRequestFromRunSpec(runSpec, dataDir) {
   return {
     contract_version: 1,
@@ -330,64 +571,7 @@ function fallbackPathsForRunSpec(value, runFile, dataDir) {
   if (typeof object.review_session_id === "string" && object.review_session_id) {
     return artifactPaths(artifactDirFor(dataDir, object.review_session_id), round);
   }
-  return artifactPaths(dirname2(runFile), round);
-}
-function responsePath(paths) {
-  return normalizePath(paths.responseFile);
-}
-function runPath(paths) {
-  return normalizePath(paths.runFile);
-}
-async function handleFailure({
-  request,
-  agentState,
-  paths,
-  code,
-  message,
-  exitCode = null,
-  extraDiagnostics = []
-}) {
-  const diagnosticArtifact = artifact(paths.diagnosticFile, "diagnostic", request.round);
-  const error = makeError(code, message, paths.diagnosticFile);
-  const response = makeResponse(request, "failed", null, [diagnosticArtifact], error);
-  await writeDiagnostic(paths.diagnosticFile, [
-    `# Codex adapter diagnostic`,
-    ``,
-    `- status: failed`,
-    `- code: ${code}`,
-    `- message: ${message}`,
-    `- round: ${request.round}`,
-    `- target_root: ${request.target_root}`,
-    exitCode !== null ? `- exit_code: ${exitCode}` : null,
-    ...extraDiagnostics
-  ]);
-  if (agentState) {
-    const agentStateFile = agentStateFileFor(request.data_dir ?? ".", request.review_session_id);
-    agentState.updated_at = nowIso();
-    Object.assign(agentState, {
-      schema_version: agentState.schema_version ?? 1,
-      review_session_id: request.review_session_id,
-      agent: "codex",
-      status: "failed",
-      thread_id: agentState.thread_id ?? null,
-      target_root: agentState.target_root ?? request.target_root,
-      last_run_file: agentState.last_run_file ?? paths.runFile,
-      last_output_file: agentState.last_output_file ?? null,
-      last_event_log: paths.eventLog,
-      last_exit_file: paths.exitFile,
-      last_error: error
-    });
-    await appendAgentArtifacts(agentState, [diagnosticArtifact]);
-    agentState.errors ??= [];
-    agentState.errors.push({ ...error, agent: "codex", round: request.round, created_at: nowIso() });
-    await mkdir2(dirname2(agentStateFile), { recursive: true });
-    await writeJsonAtomic(agentStateFile, agentState);
-  }
-  await writeJsonAtomic(paths.responseFile, response);
-  return response;
-}
-function isObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return artifactPaths(dirname3(runFile), round);
 }
 function validateRunSpec(value) {
   if (!isObject(value)) return { runSpec: null, message: "codex run spec must be an object." };
@@ -425,27 +609,89 @@ function validateRunSpec(value) {
   }
   return { runSpec: value, message: null };
 }
-async function readSessionState(dataDir, reviewSessionId) {
-  return await readJson(sessionStateFileFor(dataDir, reviewSessionId));
-}
-async function readOrCreateAgentState(dataDir, request) {
-  const agentStateFile = agentStateFileFor(dataDir, request.review_session_id);
-  return await readJsonIfExists(agentStateFile) ?? {
+function makeCodexRunSpec(request, paths, agentState) {
+  const { effort, warning } = effortForReviewDepth(request.options?.review_depth);
+  const decision = shouldStartNewSession(agentState, request.target_root);
+  return {
     schema_version: 1,
+    kind: "codex_exec",
     review_session_id: request.review_session_id,
-    agent: "codex",
-    status: "pending",
-    thread_id: null,
-    target_root: null,
-    last_run_file: null,
-    last_output_file: null,
-    last_event_log: null,
-    last_exit_file: null,
-    last_error: null,
-    artifacts: [],
-    errors: []
+    round: request.round,
+    mode: decision.startNew ? "initial" : "resume",
+    target_root: normalizePath(request.target_root),
+    thread_id: decision.startNew ? null : agentState.thread_id,
+    prompt_file: normalizePath(request.prompt_file),
+    output_file: normalizePath(paths.outputFile),
+    event_log: normalizePath(paths.eventLog),
+    exit_file: normalizePath(paths.exitFile),
+    model_reasoning_effort: effort,
+    skip_git_repo_check: true,
+    decision_reason: decision.reason,
+    previous_thread_id: agentState.thread_id ?? null,
+    previous_target_root: agentState.target_root ?? null,
+    warning
   };
 }
+async function readCodexExit(exitFile) {
+  const exitResult = await readJson(exitFile);
+  if (!isObject(exitResult) || !Number.isInteger(exitResult.code)) {
+    throw new Error("codex exit file must contain numeric code.");
+  }
+  return { code: exitResult.code };
+}
+async function loadRunSpecForComplete(runFile, dataDir) {
+  let rawRunSpec;
+  try {
+    rawRunSpec = await readJson(runFile);
+  } catch (error) {
+    const caught = error;
+    const request = makeFallbackRequestForRunSpec(null, runFile, dataDir);
+    const paths2 = fallbackPathsForRunSpec(null, runFile, dataDir);
+    return {
+      ok: false,
+      result: await failComplete({
+        request,
+        agentState: null,
+        paths: paths2,
+        code: "codex_run_spec_invalid",
+        message: `codex run spec is missing or invalid: ${caught.message}`
+      })
+    };
+  }
+  const { runSpec, message } = validateRunSpec(rawRunSpec);
+  if (!runSpec) {
+    const request = makeFallbackRequestForRunSpec(rawRunSpec, runFile, dataDir);
+    const paths2 = fallbackPathsForRunSpec(rawRunSpec, runFile, dataDir);
+    return {
+      ok: false,
+      result: await failComplete({
+        request,
+        agentState: null,
+        paths: paths2,
+        code: "codex_run_spec_invalid",
+        message: message ?? "invalid run spec."
+      })
+    };
+  }
+  const artifactDir = artifactDirFor(dataDir, runSpec.review_session_id);
+  const paths = artifactPaths(artifactDir, runSpec.round);
+  return { ok: true, value: { runSpec, request: makeRequestFromRunSpec(runSpec, dataDir), paths } };
+}
+function mismatchedRunSpecPath(runSpec, paths) {
+  const expectedPaths = {
+    output_file: paths.outputFile,
+    event_log: paths.eventLog,
+    exit_file: paths.exitFile
+  };
+  for (const [field, expectedPath] of Object.entries(expectedPaths)) {
+    if (normalizePath(runSpec[field]) !== normalizePath(expectedPath)) {
+      return field;
+    }
+  }
+  return null;
+}
+
+// src/core/codex-adapter/workflow.ts
 async function prepareCodexRun(request, options = {}) {
   const dataDir = options.dataDir ? normalizePath(options.dataDir) : null;
   request = normalizeRequest(request);
@@ -465,218 +711,104 @@ async function prepareCodexRun(request, options = {}) {
   const requestWithDataDir = { ...request, data_dir: dataDir };
   const artifactDir = artifactDirFor(dataDir, request.review_session_id ?? "unknown");
   const paths = artifactPaths(artifactDir, request.round ?? "unknown");
-  await mkdir2(artifactDir, { recursive: true });
+  await mkdir3(artifactDir, { recursive: true });
   const validationError = await validateRequest(request);
   if (validationError) {
-    const response = await handleFailure({
+    return failPrepare({
       request: requestWithDataDir,
       agentState: null,
       paths,
       code: validationError.code,
       message: validationError.message
     });
-    return { kind: "response", path: responsePath(paths), response };
   }
   let sessionState;
   try {
     sessionState = await readSessionState(dataDir, request.review_session_id);
   } catch (error) {
     const nodeError = error;
-    const response = await handleFailure({
+    return failPrepare({
       request: requestWithDataDir,
       agentState: null,
       paths,
       code: nodeError.code === "ENOENT" ? "state_file_missing" : "state_file_invalid",
       message: nodeError.code === "ENOENT" ? "session state file does not exist." : `session state file is not valid JSON: ${nodeError.message}`
     });
-    return { kind: "response", path: responsePath(paths), response };
   }
   if (sessionState.review_session_id !== request.review_session_id) {
-    const response = await handleFailure({
+    return failPrepare({
       request: requestWithDataDir,
       agentState: null,
       paths,
       code: "state_file_invalid",
       message: "session state file review_session_id does not match request."
     });
-    return { kind: "response", path: responsePath(paths), response };
   }
   let agentState;
   try {
     agentState = await readOrCreateAgentState(dataDir, request);
   } catch (error) {
     const caught = error;
-    const response = await handleFailure({
+    return failPrepare({
       request: requestWithDataDir,
       agentState: null,
       paths,
       code: "state_file_invalid",
       message: `Codex agent state file is not valid JSON: ${caught.message}`
     });
-    return { kind: "response", path: responsePath(paths), response };
   }
   if (agentState.review_session_id !== request.review_session_id || agentState.agent !== "codex") {
-    const response = await handleFailure({
+    return failPrepare({
       request: requestWithDataDir,
       agentState: null,
       paths,
       code: "state_file_invalid",
       message: "Codex agent state file review_session_id or agent does not match request."
     });
-    return { kind: "response", path: responsePath(paths), response };
   }
-  const { effort, warning } = effortForReviewDepth(request.options?.review_depth);
-  const decision = shouldStartNewSession(agentState, request.target_root);
-  const runSpec = {
-    schema_version: 1,
-    kind: "codex_exec",
-    review_session_id: request.review_session_id,
-    round: request.round,
-    mode: decision.startNew ? "initial" : "resume",
-    target_root: normalizePath(request.target_root),
-    thread_id: decision.startNew ? null : agentState.thread_id,
-    prompt_file: normalizePath(request.prompt_file),
-    output_file: normalizePath(paths.outputFile),
-    event_log: normalizePath(paths.eventLog),
-    exit_file: normalizePath(paths.exitFile),
-    model_reasoning_effort: effort,
-    skip_git_repo_check: true,
-    decision_reason: decision.reason,
-    previous_thread_id: agentState.thread_id ?? null,
-    previous_target_root: agentState.target_root ?? null,
-    warning
-  };
+  const runSpec = makeCodexRunSpec(request, paths, agentState);
   await writeJsonAtomic(paths.runFile, runSpec);
-  agentState.updated_at = nowIso();
-  Object.assign(agentState, {
-    schema_version: agentState.schema_version ?? 1,
-    review_session_id: request.review_session_id,
-    agent: "codex",
-    status: "prepared",
-    target_root: agentState.target_root ?? request.target_root,
-    last_run_file: paths.runFile,
-    last_event_log: paths.eventLog,
-    last_exit_file: paths.exitFile,
-    last_error: null
-  });
-  await mkdir2(dirname2(agentStateFileFor(dataDir, request.review_session_id)), { recursive: true });
-  await writeJsonAtomic(agentStateFileFor(dataDir, request.review_session_id), agentState);
+  await markAgentPrepared(dataDir, request, paths, agentState);
   return { kind: "run", path: runPath(paths), status: "prepared" };
-}
-async function readCodexExit(exitFile) {
-  const exitResult = await readJson(exitFile);
-  if (!isObject(exitResult) || !Number.isInteger(exitResult.code)) {
-    throw new Error("codex exit file must contain numeric code.");
-  }
-  return { code: exitResult.code };
 }
 async function completeCodexRun(runFile, options = {}) {
   const dataDir = options.dataDir ? normalizePath(options.dataDir) : null;
   if (!dataDir) {
     throw new Error("--data-dir is required.");
   }
-  let rawRunSpec;
-  try {
-    rawRunSpec = await readJson(runFile);
-  } catch (error) {
-    const caught = error;
-    const request2 = makeFallbackRequestForRunSpec(null, runFile, dataDir);
-    const paths2 = fallbackPathsForRunSpec(null, runFile, dataDir);
-    const response2 = await handleFailure({
-      request: request2,
-      agentState: null,
-      paths: paths2,
-      code: "codex_run_spec_invalid",
-      message: `codex run spec is missing or invalid: ${caught.message}`
-    });
-    return { path: responsePath(paths2), response: response2 };
-  }
-  const { runSpec, message } = validateRunSpec(rawRunSpec);
-  if (!runSpec) {
-    const request2 = makeFallbackRequestForRunSpec(rawRunSpec, runFile, dataDir);
-    const paths2 = fallbackPathsForRunSpec(rawRunSpec, runFile, dataDir);
-    const response2 = await handleFailure({
-      request: request2,
-      agentState: null,
-      paths: paths2,
-      code: "codex_run_spec_invalid",
-      message: message ?? "invalid run spec."
-    });
-    return { path: responsePath(paths2), response: response2 };
-  }
-  const artifactDir = artifactDirFor(dataDir, runSpec.review_session_id);
-  const paths = artifactPaths(artifactDir, runSpec.round);
-  const request = makeRequestFromRunSpec(runSpec, dataDir);
-  const expectedPaths = {
-    output_file: paths.outputFile,
-    event_log: paths.eventLog,
-    exit_file: paths.exitFile
-  };
-  for (const [field, expectedPath] of Object.entries(expectedPaths)) {
-    if (normalizePath(runSpec[field]) !== normalizePath(expectedPath)) {
-      const response2 = await handleFailure({
-        request,
-        agentState: null,
-        paths,
-        code: "codex_run_spec_invalid",
-        message: `${field} does not match derived artifact path.`
-      });
-      return { path: responsePath(paths), response: response2 };
-    }
-  }
-  let agentState;
-  try {
-    const sessionState = await readSessionState(dataDir, runSpec.review_session_id);
-    if (sessionState.review_session_id !== runSpec.review_session_id) {
-      const response2 = await handleFailure({
-        request,
-        agentState: null,
-        paths,
-        code: "state_file_invalid",
-        message: "session state file review_session_id does not match run spec."
-      });
-      return { path: responsePath(paths), response: response2 };
-    }
-    agentState = await readOrCreateAgentState(dataDir, request);
-  } catch (error) {
-    const caught = error;
-    const response2 = await handleFailure({
+  const loaded = await loadRunSpecForComplete(runFile, dataDir);
+  if (!loaded.ok) return loaded.result;
+  const { runSpec, request, paths } = loaded.value;
+  const mismatchedPath = mismatchedRunSpecPath(runSpec, paths);
+  if (mismatchedPath) {
+    return failComplete({
       request,
       agentState: null,
       paths,
-      code: caught.code === "ENOENT" ? "state_file_missing" : "state_file_invalid",
-      message: caught.code === "ENOENT" ? "session state file does not exist." : `state file is not valid JSON: ${caught.message}`
+      code: "codex_run_spec_invalid",
+      message: `${mismatchedPath} does not match derived artifact path.`
     });
-    return { path: responsePath(paths), response: response2 };
   }
-  if (agentState.review_session_id !== runSpec.review_session_id || agentState.agent !== "codex") {
-    const response2 = await handleFailure({
-      request,
-      agentState: null,
-      paths,
-      code: "state_file_invalid",
-      message: "Codex agent state file review_session_id or agent does not match run spec."
-    });
-    return { path: responsePath(paths), response: response2 };
-  }
+  const loadedAgentState = await loadAgentStateForComplete(dataDir, runSpec, request, paths);
+  if (!loadedAgentState.ok) return loadedAgentState.result;
+  const { agentState } = loadedAgentState;
   let exitResult;
   try {
     exitResult = await readCodexExit(runSpec.exit_file);
   } catch (error) {
     const caught = error;
-    const response2 = await handleFailure({
+    return failComplete({
       request,
       agentState,
       paths,
       code: "codex_exit_missing",
       message: `codex exit file is missing or invalid: ${caught.message}`
     });
-    return { path: responsePath(paths), response: response2 };
   }
   const eventLogText = await pathExists(runSpec.event_log) ? await readFile2(runSpec.event_log, "utf8") : "";
   if (exitResult.code !== 0) {
     const mode = runSpec.mode;
-    const response2 = await handleFailure({
+    return failComplete({
       request,
       agentState,
       paths,
@@ -689,31 +821,19 @@ async function completeCodexRun(runFile, options = {}) {
         runSpec.warning ? `- warning: ${runSpec.warning}` : null
       ]
     });
-    return { path: responsePath(paths), response: response2 };
   }
-  let threadId = runSpec.thread_id;
-  if (runSpec.mode === "initial") {
-    threadId = extractThreadIdFromJsonl(eventLogText);
-    if (!threadId) {
-      const response2 = await handleFailure({
-        request,
-        agentState,
-        paths,
-        code: "codex_thread_id_missing",
-        message: "thread.started event with thread_id was not found.",
-        exitCode: exitResult.code,
-        extraDiagnostics: [
-          `- mode: initial`,
-          runSpec.decision_reason ? `- decision_reason: ${runSpec.decision_reason}` : null,
-          runSpec.previous_thread_id ? `- previous_thread_id: ${runSpec.previous_thread_id}` : null,
-          runSpec.previous_target_root ? `- previous_target_root: ${runSpec.previous_target_root}` : null
-        ]
-      });
-      return { path: responsePath(paths), response: response2 };
-    }
-  }
+  const completedThread = await resolveCompletedThreadId(
+    runSpec,
+    request,
+    paths,
+    agentState,
+    exitResult.code,
+    eventLogText
+  );
+  if (!completedThread.ok) return completedThread.result;
+  const { threadId } = completedThread;
   if (!await pathExists(runSpec.output_file)) {
-    const response2 = await handleFailure({
+    return failComplete({
       request,
       agentState,
       paths,
@@ -721,47 +841,10 @@ async function completeCodexRun(runFile, options = {}) {
       message: "codex output file was not created.",
       exitCode: exitResult.code
     });
-    return { path: responsePath(paths), response: response2 };
   }
-  const artifacts = [
-    artifact(paths.runFile, "run_spec", runSpec.round),
-    artifact(runSpec.output_file, "agent_output", runSpec.round),
-    artifact(runSpec.event_log, "event_log", runSpec.round),
-    artifact(runSpec.exit_file, "exit_status", runSpec.round)
-  ];
-  if (runSpec.warning || runSpec.decision_reason === "target_root_changed") {
-    await writeDiagnostic(paths.diagnosticFile, [
-      `# Codex adapter diagnostic`,
-      ``,
-      `- status: completed`,
-      `- mode: ${runSpec.mode}`,
-      runSpec.decision_reason ? `- decision_reason: ${runSpec.decision_reason}` : null,
-      `- thread_id: ${threadId}`,
-      runSpec.warning ? `- warning: ${runSpec.warning}` : null,
-      runSpec.decision_reason === "target_root_changed" ? `- warning: target_root_changed` : null,
-      runSpec.previous_thread_id ? `- previous_thread_id: ${runSpec.previous_thread_id}` : null,
-      runSpec.previous_target_root ? `- previous_target_root: ${runSpec.previous_target_root}` : null,
-      `- target_root: ${runSpec.target_root}`
-    ]);
-    artifacts.push(artifact(paths.diagnosticFile, "diagnostic", runSpec.round));
-  }
-  agentState.updated_at = nowIso();
-  Object.assign(agentState, {
-    schema_version: agentState.schema_version ?? 1,
-    review_session_id: runSpec.review_session_id,
-    agent: "codex",
-    status: "active",
-    thread_id: threadId,
-    target_root: runSpec.target_root,
-    last_run_file: paths.runFile,
-    last_output_file: runSpec.output_file,
-    last_event_log: runSpec.event_log,
-    last_exit_file: runSpec.exit_file,
-    last_error: null
-  });
-  await appendAgentArtifacts(agentState, artifacts);
-  await mkdir2(dirname2(agentStateFileFor(dataDir, runSpec.review_session_id)), { recursive: true });
-  await writeJsonAtomic(agentStateFileFor(dataDir, runSpec.review_session_id), agentState);
+  const artifacts = completedArtifacts(runSpec, paths);
+  await appendCompletionDiagnostic(runSpec, paths, threadId, artifacts);
+  await markAgentCompleted({ dataDir, runSpec, paths, agentState, threadId, artifacts });
   const response = makeResponse(request, "completed", runSpec.output_file, artifacts, null);
   await writeJsonAtomic(paths.responseFile, response);
   return { path: responsePath(paths), response };
