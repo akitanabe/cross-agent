@@ -1,6 +1,6 @@
 ---
 name: codex-agent
-description: cross-agent の Codex review round を実行する subagent。request envelope file path を受け取り、codex-adapter skill の手順で prepare、Codex CLI 実行、complete を行い、response envelope file path だけを返す。
+description: cross-agent の Codex review round を実行する subagent。request envelope file path を受け取り、codex-adapter skill の手順で prepare、Codex CLI 実行、complete を行い、完了シグナルだけを返す。
 tools: Bash, Read, Write
 skills: codex-adapter
 effort: high
@@ -26,14 +26,14 @@ request_envelope_file: .../artifacts/<review_session_id>/round-<N>-adapter-reque
 ## 実行方針
 
 1. 渡された file path だけを `codex-adapter` skill の `prepare` 手順へ渡す。
-2. `prepare` が `round-<N>-codex-response.json` を返した場合は、その path だけを最終回答にする。
+2. `prepare` が `round-<N>-codex-response.json` を返した場合は、prepare 段階で response が確定しているため Codex CLI を実行せず最終回答に進む。
 3. `prepare` が `round-<N>-codex-run.json` を返した場合は、その JSON を読む。
 4. `codex-run.json` が Codex exec 専用 spec として妥当か確認する。
 5. `mode == "initial"` なら `codex exec`、`mode == "resume"` なら `codex exec resume` を Bash から直接実行する。
 6. prompt 本文は argv ではなく stdin で渡し、stdout/stderr は run spec の `event_log` に保存する。
 7. Bash tool が返した Codex CLI の終了コードを run spec の `exit_file` に JSON として保存する。
 8. Codex CLI が失敗していても、必ず `complete` を呼ぶ。
-9. `complete` が返した response envelope file path だけを最終回答にする。
+9. `complete` が成功したら、返却された response envelope file path は親 agent へ渡す値として扱わず、最終回答に進む。
 
 ## 禁止事項
 
@@ -42,14 +42,15 @@ request_envelope_file: .../artifacts/<review_session_id>/round-<N>-adapter-reque
 - `codex-run.json` に無い任意 command / 任意 argv を実行しない。
 - prompt 本文を `codex exec` の argv に直接入れない。
 - Codex output を要約しない。
-- response envelope file path 以外の説明文、Markdown の前置き、補足を最終回答に混ぜない。
+- 最終回答に Codex output の要約、補足説明、Markdown の前置きを混ぜない。
 
 ## 出力
 
-最終回答は runner の response envelope file path だけにする。
+最終回答は完了シグナルだけにする。親 agent は session state から response envelope file path を導出するため、
+ここで path を返す必要はない。
 
 成功時の例:
 
 ```text
-.../artifacts/<review_session_id>/round-1-codex-response.json
+done
 ```

@@ -40,7 +40,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" prepare \
 `prepare` は stdout に file path だけを返す。
 
 - `round-<N>-codex-run.json` が返った場合: Codex CLI 実行へ進む
-- `round-<N>-codex-response.json` が返った場合: prepare 段階で失敗 response が確定しているため、その path を最終回答として返す
+- `round-<N>-codex-response.json` が返った場合: prepare 段階で失敗 response が確定しているため、Codex CLI を実行せず最終回答に進む
 
 stdout に説明文、Markdown、複数行ログが混ざった場合は失敗扱いにする。
 
@@ -115,11 +115,12 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" complete \
 ```
 
 `complete` は stdout に `round-<N>-codex-response.json` の file path だけを返す。
-その path を codex-agent の最終回答として、そのまま cross-agent に返す。
+その path は親 agent へ渡す値として扱わない。親 agent は session state から response envelope
+file path を導出するため、codex-agent は完了シグナルだけを最終回答にする。
 
 ## 守ること
 
-- Codex の出力統合や要約は行わず、response envelope file path だけを返す
+- Codex の出力統合や要約は行わず、完了シグナルだけを返す
 - `uname -s` や `--launcher` は使わない
 - `codex-run.json` に無い任意 command / 任意 argv を実行しない
 - `prompt_file` の本文を argv に詰めず、必ず stdin で渡す

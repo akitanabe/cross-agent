@@ -4,7 +4,7 @@
 
 codex-adapter は Codex CLI 実行境界を担当する。cross-agent から request envelope file path を受け取り、
 Codex 専用の実行 spec を作成し、codex-agent が `codex exec` / `codex exec resume` を Bash から直接実行する。
-実行後、codex-adapter は Codex 固有 state を更新して response envelope file path を返す。
+実行後、codex-adapter は Codex 固有 state を更新して response envelope を保存する。
 
 runner は Codex CLI を `spawn` しない。runner の責務は request / state / artifact の検証、initial / resume
 判定、Codex exec 専用 run spec の作成、実行結果の検証、state 更新、response envelope 作成に限定する。
@@ -195,11 +195,11 @@ codex-adapter の実行は `prepare`、codex-agent による Codex CLI 実行、
 15. `[runner: complete]` 必要なら diagnostic artifact を作成する
 16. `[runner: complete]` Codex agent state file の state と artifacts/errors を更新する
 17. `[runner: complete]` response envelope を `round-<N>-codex-response.json` に保存し、その file path を stdout に返す
-18. `[codex-agent]` `complete` が返した response envelope file path だけを cross-agent に返す
+18. `[codex-agent]` `complete` が成功したら、完了シグナルだけを cross-agent に返す
 
 `prepare` が request / state 検証で失敗し、`codex-run.json` を作れない場合は、Codex CLI を実行しない。
 この場合も runner は可能な範囲で diagnostic artifact と failed response envelope を作成し、
-codex-agent はその response envelope file path だけを cross-agent に返す。
+codex-agent は完了シグナルだけを cross-agent に返す。
 
 ### runner commands
 
@@ -274,7 +274,7 @@ codex exec resume \
 ```
 
 実行後、agent は終了コードを `exit_file` に保存し、`complete` を呼ぶ。agent の最終回答は
-`complete` が返した response envelope file path だけにする。Codex output の要約や説明は返さない。
+完了シグナルだけにする。Codex output の要約や説明、response envelope file path は返さない。
 
 ## initial / resume 判定
 
