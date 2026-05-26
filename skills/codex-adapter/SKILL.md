@@ -1,65 +1,137 @@
 ---
 name: codex-adapter
-description: cross-agent から委譲される Codex CLI（codex exec）固有のアダプター。review_session_id を Codex の thread_id にマッピングしてセッションを継続し、レビューを実行する。通常はユーザーが直接呼ばず、cross-agent オーケストレーターから呼び出される。
+description: cross-agent から委譲される Codex CLI 固有のアダプター。review_session_id を Codex の thread_id にマッピングしてセッションを継続し、Codex exec 専用 run spec に従ってレビューを実行する。通常はユーザーが直接呼ばず、cross-agent オーケストレーターから呼び出される。
 user-invocable: false
-allowed-tools: Bash(uname -s) Bash(node "**/codex-adapter-runner.mjs"**)
+allowed-tools: Read Write Bash(node "**/codex-adapter-runner.mjs" prepare **) Bash(node "**/codex-adapter-runner.mjs" complete **) Bash(codex exec **)
 ---
 
 ## 役割
 
 codex-adapter は Codex CLI 実行境界を担当する。cross-agent から request envelope file path を受け取り、
-Node.js runner を実行して response envelope file path を返す。
+runner の `prepare` で Codex exec 専用 run spec を作成し、codex-agent が `codex exec` /
+`codex exec resume` を Bash から直接実行する。実行後は runner の `complete` で Codex 固有 state と
+response envelope を確定する。
+
+runner は Codex CLI を起動しない。codex-agent も任意 command は実行せず、`codex-run.json` に書かれた
+Codex exec 専用 spec を検証したうえで、許可された `codex exec` / `codex exec resume` だけを実行する。
+
+## 入力
+
+依頼本文には、adapter request envelope JSON の file path が含まれる。
+
+```text
+request_envelope_file: .../artifacts/<review_session_id>/round-<N>-adapter-request.json
+```
 
 ## 実行
 
-request envelope file path を `--request` で渡して以下を実行する。
-
 `--data-dir` は必須。plugin 文脈では `${CLAUDE_PLUGIN_DATA}` をそのまま渡す。
 
+### 1. prepare
+
+request envelope file path を `--request` で渡して runner の `prepare` を実行する。
+
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" \
+node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" prepare \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
-  --request "<request-envelope.json>" \
-  [--launcher <shell>]
+  --request "<request-envelope.json>"
 ```
 
-runner が返した response envelope file path を、そのまま cross-agent に返す。
+`prepare` は stdout に file path だけを返す。
 
-## --launcher の選択
+- `round-<N>-codex-run.json` が返った場合: Codex CLI 実行へ進む
+- `round-<N>-codex-response.json` が返った場合: prepare 段階で失敗 response が確定しているため、その path を最終回答として返す
 
-codex CLI を直接 `spawn` できない環境 (Windows の `.cmd` shim 等) では、POSIX shell 経由で
-起動する必要がある。runner には platform 分岐コードを置かず、**呼び出し側が `--launcher` で
-明示する** 契約。判定は次の手順で行う。
+stdout に説明文、Markdown、複数行ログが混ざった場合は失敗扱いにする。
+
+### 2. run spec 検証
+
+`round-<N>-codex-run.json` を読み、次を確認する。
+
+- `schema_version` は `1`
+- `kind` は `"codex_exec"`
+- `mode` は `"initial"` または `"resume"`
+- `review_session_id`, `round`, `target_root`, `prompt_file`, `output_file`, `event_log`, `exit_file` が存在する
+- `mode == "resume"` の場合は `thread_id` が非空
+- `model_reasoning_effort` は `medium`, `high`, `xhigh` のいずれか
+- `skip_git_repo_check` は `true`
+
+run spec が不正な場合は Codex CLI を実行しない。runner の `complete` で `codex_run_spec_invalid` として
+response envelope を確定できる場合は `complete` を呼び、確定できない場合は推測で続行しない。
+
+### 3. Codex CLI 実行
+
+prompt 本文は argv ではなく stdin で渡す。Codex CLI の `PROMPT` に `-` を指定し、
+`prompt_file` を stdin redirect する。stdout/stderr は `event_log` にまとめて保存する。
+
+initial:
 
 ```bash
-uname -s
+codex exec \
+  -C "<target_root>" \
+  --json \
+  --skip-git-repo-check \
+  -c "model_reasoning_effort=<model_reasoning_effort>" \
+  -o "<output_file>" \
+  - \
+  < "<prompt_file>" \
+  > "<event_log>" \
+  2>&1
 ```
 
-出力に応じて選ぶ。
+resume:
 
-| `uname -s` の出力                                    | 渡す `--launcher` |
-| ---------------------------------------------------- | ----------------- |
-| `MINGW*` / `MSYS*` / `CYGWIN*` (Git Bash on Windows) | `--launcher bash` |
-| `Linux` / `Darwin` / その他 POSIX                    | 渡さない (省略)   |
+```bash
+codex exec resume \
+  --json \
+  --skip-git-repo-check \
+  -c "model_reasoning_effort=<model_reasoning_effort>" \
+  -o "<output_file>" \
+  "<thread_id>" \
+  - \
+  < "<prompt_file>" \
+  > "<event_log>" \
+  2>&1
+```
 
-`bash` が PATH 上で解決されない環境では、絶対パス (POSIX 形式) を渡す。例:
-`--launcher /c/Program\ Files/Git/bin/bash.exe`
+実行後、Bash tool が返した終了コードを `exit_file` に JSON で保存する。
 
-runner は `--launcher` 指定時、`<launcher> -c 'exec "$@"' <launcher> codex ...` の形で wrap
-する。`exec "$@"` により shell の word splitting / 変数展開は完全に bypass され、prompt 等
-の argv は文字列として codex に届く。
+```json
+{
+  "code": 0
+}
+```
+
+Codex CLI が非 0 終了しても、そこで中断しない。必ず `exit_file` を保存し、`complete` を呼ぶ。
+
+### 4. complete
+
+Codex CLI 実行後、runner の `complete` を呼ぶ。
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" complete \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --run "<round-N-codex-run.json>"
+```
+
+`complete` は stdout に `round-<N>-codex-response.json` の file path だけを返す。
+その path を codex-agent の最終回答として、そのまま cross-agent に返す。
 
 ## 守ること
 
 - Codex の出力統合や要約は行わず、response envelope file path だけを返す
-- launcher 判定をスキップせず、起動前に必ず `uname -s` で観測する
+- `uname -s` や `--launcher` は使わない
+- `codex-run.json` に無い任意 command / 任意 argv を実行しない
+- `prompt_file` の本文を argv に詰めず、必ず stdin で渡す
+- `codex exec` が失敗しても、`codex-exit.json` を保存してから `complete` を呼ぶ
+- 最終回答に Codex output の要約、補足説明、Markdown の前置きを混ぜない
 
 ## 実装メモ
 
 - 実装本体: `src/runners/codex-adapter-runner.ts`
 - 配布 runner: `scripts/codex-adapter-runner.mjs`
 - 仕様: `docs/codex-adapter-spec.md`
-- テスト: `test/codex-adapter.test.ts`
+- テスト: `test/runners/codex-adapter-runner.test.ts`, `test/core/codex-adapter/*.test.ts`
 - Node.js: 24+
 
 詳細な入出力契約、state 更新範囲、artifact、エラーコード、Codex CLI の分岐条件は
