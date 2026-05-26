@@ -205,6 +205,7 @@ Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/claude-adapter-runner.mjs" complete **)
 
 ## 実装メモ
 
+- `review` はユーザー向けの skill 名、`cross-agent` は複数 agent を横断する orchestration layer の実装名。
 - 実装本体: `src/runners/cross-agent-runner.ts`
 - 配布 runner: `scripts/cross-agent-runner.mjs`
 - 仕様: `docs/cross-agent-spec.md`
