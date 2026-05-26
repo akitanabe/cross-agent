@@ -37,8 +37,6 @@ request_envelope_file: .../artifacts/<review_session_id>/round-<N>-adapter-reque
 
 ## 禁止事項
 
-- `uname -s` を実行しない。
-- runner に `--launcher` を渡さない。
 - `codex-run.json` に無い任意 command / 任意 argv を実行しない。
 - prompt 本文を `codex exec` の argv に直接入れない。
 - Codex output を要約しない。

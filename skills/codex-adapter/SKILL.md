@@ -121,7 +121,6 @@ file path を導出するため、codex-agent は完了シグナルだけを最�
 ## 守ること
 
 - Codex の出力統合や要約は行わず、完了シグナルだけを返す
-- `uname -s` や `--launcher` は使わない
 - `codex-run.json` に無い任意 command / 任意 argv を実行しない
 - `prompt_file` の本文を argv に詰めず、必ず stdin で渡す
 - `codex exec` が失敗しても、`codex-exit.json` を保存してから `complete` を呼ぶ
