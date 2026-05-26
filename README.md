@@ -60,7 +60,8 @@ runner は `src/runners/*.ts` を正本とし、`npm run build` で `scripts/*.m
 
 ```bash
 node scripts/cross-agent-runner.mjs prepare-initial --data-dir /path/to/data --review-session-id session-1
-node scripts/codex-adapter-runner.mjs --request /path/to/request-envelope.json
+node scripts/codex-adapter-runner.mjs prepare --data-dir /path/to/data --request /path/to/request-envelope.json
+node scripts/codex-adapter-runner.mjs complete --data-dir /path/to/data --run /path/to/round-1-codex-run.json
 node scripts/cross-agent-runner.mjs complete-round --data-dir /path/to/data --response-file /path/to/response-envelope.json
 ```
 

@@ -5,11 +5,9 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseArgs, usage } from "../core/codex-adapter/cli.ts";
-import { artifactDirFor, artifactPaths } from "../core/codex-adapter/state.ts";
-import { runAdapter } from "../core/codex-adapter/workflow.ts";
-import { normalizePath } from "../core/shared/path-utils.ts";
+import { completeCodexRun, prepareCodexRun } from "../core/codex-adapter/workflow.ts";
 
-// CLI entrypoint。request file を読み込み runner を実行して response file path を stdout に出す。
+// CLI entrypoint。prepare / complete の結果 file path だけを stdout に出す。
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -17,22 +15,28 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (!args.requestFile) throw new Error("--request is required.");
+  if (!args.command) throw new Error("command is required. Use prepare or complete.");
   if (!args.dataDir) throw new Error("--data-dir is required.");
 
-  const input = await readFile(args.requestFile, "utf8");
-  const request = JSON.parse(input);
-  const response = await runAdapter(request, {
-    codexBin: args.codexBin,
-    dataDir: args.dataDir,
-    launcher: args.launcher,
-  });
-  const responseFile = normalizePath(
-    artifactPaths(artifactDirFor(args.dataDir, request.review_session_id ?? "unknown"), request.round ?? "unknown")
-      .responseFile,
-  );
-  process.stdout.write(`${responseFile}\n`);
-  process.exitCode = response.status === "completed" ? 0 : 1;
+  if (args.command === "prepare") {
+    if (!args.requestFile) throw new Error("--request is required.");
+    const input = await readFile(args.requestFile, "utf8");
+    const request = JSON.parse(input);
+    const result = await prepareCodexRun(request, { dataDir: args.dataDir });
+    process.stdout.write(`${result.path}\n`);
+    if (result.kind === "response") {
+      process.exitCode = result.response.status === "completed" ? 0 : 1;
+    }
+    return;
+  }
+
+  if (args.command === "complete") {
+    if (!args.runFile) throw new Error("--run is required.");
+    const result = await completeCodexRun(args.runFile, { dataDir: args.dataDir });
+    process.stdout.write(`${result.path}\n`);
+    process.exitCode = result.response.status === "completed" ? 0 : 1;
+    return;
+  }
 }
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : null;

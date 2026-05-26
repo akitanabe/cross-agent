@@ -4,45 +4,45 @@ import assert from "node:assert/strict";
 
 import { parseArgs } from "../../../src/core/codex-adapter/cli.ts";
 
-test("parseArgs uses shared option parser for codex adapter CLI options", () => {
+test("parseArgs parses codex adapter prepare command", () => {
   assert.deepEqual(parseArgs([]), {
+    command: null,
     requestFile: null,
-    codexBin: "codex",
     dataDir: null,
-    launcher: null,
+    runFile: null,
+    help: undefined,
   });
 
-  assert.deepEqual(
-    parseArgs([
-      "-r",
-      "request.json",
-      "--codex-bin",
-      "codex-next",
-      "--data-dir",
-      "C:/data",
-      "--launcher",
-      "",
-    ]),
-    {
-      requestFile: "request.json",
-      codexBin: "codex-next",
-      dataDir: "C:/data",
-      launcher: null,
-    },
-  );
+  assert.deepEqual(parseArgs(["prepare", "--data-dir", "C:/data", "-r", "request.json"]), {
+    command: "prepare",
+    requestFile: "request.json",
+    dataDir: "C:/data",
+    runFile: null,
+    help: undefined,
+  });
 
   assert.deepEqual(parseArgs(["--help"]), {
+    command: null,
     requestFile: null,
-    codexBin: "codex",
     dataDir: null,
-    launcher: null,
+    runFile: null,
     help: true,
   });
 });
 
+test("parseArgs parses codex adapter complete command", () => {
+  assert.deepEqual(parseArgs(["complete", "--data-dir", "C:/data", "--run", "run.json"]), {
+    command: "complete",
+    requestFile: null,
+    dataDir: "C:/data",
+    runFile: "run.json",
+    help: undefined,
+  });
+});
 
-test("parseArgs rejects unknown codex adapter options and missing values", () => {
-  assert.throws(() => parseArgs(["--unknown"]), /Unknown argument: --unknown/);
-  assert.throws(() => parseArgs(["extra"]), /Unexpected positional argument: extra/);
-  assert.throws(() => parseArgs(["--request"]), /--request requires a value/);
+test("parseArgs rejects unknown codex adapter commands/options and missing values", () => {
+  assert.throws(() => parseArgs(["unknown"]), /Unknown command: unknown/);
+  assert.throws(() => parseArgs(["prepare", "--unknown"]), /Unknown argument: --unknown/);
+  assert.throws(() => parseArgs(["prepare", "--request"]), /--request requires a value/);
+  assert.throws(() => parseArgs(["prepare", "extra"]), /Unexpected positional argument: extra/);
 });

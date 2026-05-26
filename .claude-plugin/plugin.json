@@ -18,7 +18,12 @@
   ],
   "settings": {
     "permissions": {
-      "allow": ["Bash(node \"**/*-adapter-runner.mjs\"**)", "Bash(uname -s)"]
+      "allow": [
+        "Bash(node \"**/codex-adapter-runner.mjs\" prepare **)",
+        "Bash(node \"**/codex-adapter-runner.mjs\" complete **)",
+        "Bash(codex exec **)",
+        "Bash(node \"**/cross-agent-runner.mjs\" **)"
+      ]
     }
   }
 }

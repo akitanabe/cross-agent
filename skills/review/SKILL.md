@@ -190,8 +190,10 @@ Round 2 を実行した後は、Round 1 と同様に adapter response envelope f
 Write(${CLAUDE_PLUGIN_DATA}/artifacts/*/context.md)
 Write(${CLAUDE_PLUGIN_DATA}/artifacts/*/round-*-prompt.md)
 
-# <agent>-adapter runner（subagent 内の Bash）
-Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/*-adapter-runner.mjs"**)
+# codex-adapter（subagent 内の Bash）
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" prepare **)
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" complete **)
+Bash(codex exec **)
 ```
 
 `/update-config` スキルを使えばその場で追加できることも伝える。

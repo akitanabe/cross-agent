@@ -12,8 +12,10 @@ export type EffortDecision = {
 };
 
 export type ArtifactPathSet = {
+  runFile: string;
   outputFile: string;
   eventLog: string;
+  exitFile: string;
   diagnosticFile: string;
   responseFile: string;
 };
@@ -30,26 +32,53 @@ export type CodexAgentState = {
   status: string;
   thread_id: string | null;
   target_root: string | null;
+  last_run_file?: string | null;
   last_output_file: string | null;
   last_event_log: string | null;
+  last_exit_file?: string | null;
   last_error: AdapterResponseError;
   artifacts: AdapterResponseArtifact[];
   errors: Array<Record<string, unknown>>;
   updated_at?: string;
 };
 
-export type CodexRunOptions = {
-  codexBin?: string;
-  codexBinArgs?: string[];
+export type CodexRunSpecMode = "initial" | "resume";
+
+export type CodexRunSpec = {
+  schema_version: 1;
+  kind: "codex_exec";
+  review_session_id: string;
+  round: number;
+  mode: CodexRunSpecMode;
+  target_root: string;
+  thread_id: string | null;
+  prompt_file: string;
+  output_file: string;
+  event_log: string;
+  exit_file: string;
+  model_reasoning_effort: CodexEffort;
+  skip_git_repo_check: true;
+  decision_reason?: SessionDecision["reason"];
+  previous_thread_id?: string | null;
+  previous_target_root?: string | null;
+  warning?: string | null;
+};
+
+export type CodexExitResult = {
+  code: number;
+};
+
+export type CodexAdapterCommand = "prepare" | "complete";
+
+export type CodexPrepareOptions = {
   dataDir?: string | null;
-  launcher?: string | null;
 };
 
 export type ParsedCodexAdapterArgs = {
+  command: CodexAdapterCommand | null;
   requestFile: string | null;
-  codexBin: string;
   dataDir: string | null;
-  launcher: string | null;
+  runFile: string | null;
   help?: boolean;
 };
 
@@ -58,18 +87,6 @@ export type RecoverableError = NonNullable<AdapterResponseError> & {
   message: string;
   recoverable: true;
   details_file: string | null;
-};
-
-export type LaunchTarget = {
-  command: string;
-  args: string[];
-};
-
-export type CodexCommandResult = {
-  code: number | null;
-  signal: NodeJS.Signals | null;
-  error: Error | null;
-  args: string[];
 };
 
 export type AdapterRequestInput = AdapterRequestEnvelope & Record<string, unknown>;

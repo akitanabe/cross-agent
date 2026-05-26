@@ -51,8 +51,10 @@ export function agentStateFileFor(dataDir: string, reviewSessionId: string): str
 // round 番号から Codex adapter が生成する artifact 群のパスを組み立てる。
 export function artifactPaths(artifactDir: string, round: number | string): ArtifactPathSet {
   return {
+    runFile: resolve(artifactDir, `round-${round}-codex-run.json`),
     outputFile: resolve(artifactDir, `round-${round}-codex-output.md`),
     eventLog: resolve(artifactDir, `round-${round}-codex-events.jsonl`),
+    exitFile: resolve(artifactDir, `round-${round}-codex-exit.json`),
     diagnosticFile: resolve(artifactDir, `round-${round}-codex-diagnostic.md`),
     responseFile: resolve(artifactDir, `round-${round}-codex-response.json`),
   };
