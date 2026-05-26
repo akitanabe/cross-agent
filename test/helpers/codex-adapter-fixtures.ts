@@ -35,3 +35,17 @@ export async function createRequestFixture(temp, { round = 1, prompt = "review t
     },
   };
 }
+
+export async function writeCodexArtifacts(runSpec, { exitCode = 0, threadId = "thread-abc", output = null } = {}) {
+  await writeFile(
+    runSpec.output_file,
+    output ?? `mode:${runSpec.mode}\nthread:${threadId}\nprompt_file:${runSpec.prompt_file}\n`,
+    "utf8",
+  );
+  const event =
+    runSpec.mode === "initial"
+      ? { type: "thread.started", thread_id: threadId }
+      : { type: "thread.resumed", thread_id: threadId };
+  await writeFile(runSpec.event_log, `${JSON.stringify(event)}\n`, "utf8");
+  await writeFile(runSpec.exit_file, `${JSON.stringify({ code: exitCode }, null, 2)}\n`, "utf8");
+}

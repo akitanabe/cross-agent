@@ -8,10 +8,10 @@ import { join } from "node:path";
 import {
   completedArtifacts,
   appendCompletionDiagnostic,
-} from "../../../src/core/codex-adapter/completion-artifacts.ts";
-import { resolveCompletedThreadId } from "../../../src/core/codex-adapter/complete-helpers.ts";
+} from "../../../src/core/codex-adapter/workflow-completion-artifacts.ts";
+import { resolveCompletedThreadId } from "../../../src/core/codex-adapter/workflow-complete-helpers.ts";
 import { artifactDirFor, artifactPaths } from "../../../src/core/codex-adapter/state.ts";
-import { makeCodexRunSpec } from "../../../src/core/codex-adapter/run-spec.ts";
+import { makeCodexRunSpec } from "../../../src/core/codex-adapter/workflow-run-spec.ts";
 import { createRequestFixture } from "../../helpers/codex-adapter-fixtures.ts";
 
 function agentStateFor(request) {

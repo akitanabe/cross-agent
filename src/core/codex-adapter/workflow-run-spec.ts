@@ -2,7 +2,7 @@ import { dirname } from "node:path";
 
 import { normalizePath } from "../shared/path-utils.ts";
 import { artifactDirFor, artifactPaths, effortForReviewDepth, readJson, shouldStartNewSession } from "./state.ts";
-import { failComplete } from "./failure.ts";
+import { failComplete } from "./workflow-failure.ts";
 import { isObject } from "./workflow-common.ts";
 import type {
   AdapterRequestInput,

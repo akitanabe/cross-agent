@@ -1,6 +1,6 @@
 import { extractThreadIdFromJsonl } from "./state.ts";
 import { readOrCreateAgentState, readSessionState } from "./agent-state.ts";
-import { failComplete } from "./failure.ts";
+import { failComplete } from "./workflow-failure.ts";
 import type {
   AdapterRequestWithDataDir,
   ArtifactPathSet,

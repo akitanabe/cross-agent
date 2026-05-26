@@ -11,7 +11,7 @@ import {
   makeCodexRunSpec,
   mismatchedRunSpecPath,
   readCodexExit,
-} from "../../../src/core/codex-adapter/run-spec.ts";
+} from "../../../src/core/codex-adapter/workflow-run-spec.ts";
 import { createRequestFixture } from "../../helpers/codex-adapter-fixtures.ts";
 
 test("makeCodexRunSpec creates initial spec when agent has no thread", async () => {

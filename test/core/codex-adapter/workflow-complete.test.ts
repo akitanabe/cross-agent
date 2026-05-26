@@ -6,52 +6,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { agentStateFileFor, artifactDirFor, artifactPaths } from "../../../src/core/codex-adapter/state.ts";
-import { completeCodexRun, prepareCodexRun } from "../../../src/core/codex-adapter/workflow.ts";
-import { createRequestFixture } from "../../helpers/codex-adapter-fixtures.ts";
+import { completeCodexRun } from "../../../src/core/codex-adapter/workflow-complete.ts";
+import { prepareCodexRun } from "../../../src/core/codex-adapter/workflow-prepare.ts";
+import { createRequestFixture, writeCodexArtifacts } from "../../helpers/codex-adapter-fixtures.ts";
 
-async function writeCodexArtifacts(runSpec, { exitCode = 0, threadId = "thread-abc", output = null } = {}) {
-  await writeFile(
-    runSpec.output_file,
-    output ?? `mode:${runSpec.mode}\nthread:${threadId}\nprompt_file:${runSpec.prompt_file}\n`,
-    "utf8",
-  );
-  const event =
-    runSpec.mode === "initial"
-      ? { type: "thread.started", thread_id: threadId }
-      : { type: "thread.resumed", thread_id: threadId };
-  await writeFile(runSpec.event_log, `${JSON.stringify(event)}\n`, "utf8");
-  await writeFile(runSpec.exit_file, `${JSON.stringify({ code: exitCode }, null, 2)}\n`, "utf8");
-}
-
-test("prepareCodexRun returns failed envelope when dataDir is missing (no env var fallback)", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
-  try {
-    const { request } = await createRequestFixture(temp);
-    const result = await prepareCodexRun(request);
-    assert.equal(result.kind, "response");
-    assert.equal(result.response.status, "failed");
-    assert.equal(result.response.error.code, "invalid_request_envelope");
-    assert.match(result.response.error.message, /--data-dir is required/);
-  } finally {
-    await rm(temp, { recursive: true, force: true });
-  }
-});
-
-test("prepareCodexRun writes initial run spec and completeCodexRun persists thread mapping", async () => {
+test("completeCodexRun persists thread mapping after a prepared initial run", async () => {
   const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
   try {
     const { dataDir, request } = await createRequestFixture(temp);
-
     const prepared = await prepareCodexRun(request, { dataDir });
-    assert.equal(prepared.kind, "run");
-    assert.match(prepared.path, /round-1-codex-run\.json$/);
-
     const runSpec = JSON.parse(await readFile(prepared.path, "utf8"));
-    assert.equal(runSpec.mode, "initial");
-    assert.equal(runSpec.thread_id, null);
-    assert.equal(runSpec.model_reasoning_effort, "high");
-
     await writeCodexArtifacts(runSpec);
+
     const completed = await completeCodexRun(prepared.path, { dataDir });
 
     assert.equal(completed.response.status, "completed");
@@ -93,28 +59,7 @@ test("completeCodexRun response envelope path fields are forward-slash normalize
   }
 });
 
-test("prepareCodexRun failure envelope normalizes error.details_file", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
-  try {
-    const { dataDir, request } = await createRequestFixture(temp);
-    await rm(request.prompt_file);
-
-    const result = await prepareCodexRun(request, { dataDir });
-
-    assert.equal(result.kind, "response");
-    assert.equal(result.response.status, "failed");
-    assert.equal(result.response.error.code, "prompt_file_missing");
-    assert.ok(
-      !result.response.error.details_file.includes("\\"),
-      `error.details_file has backslash: ${result.response.error.details_file}`,
-    );
-    assert.doesNotThrow(() => JSON.parse(JSON.stringify(result.response)));
-  } finally {
-    await rm(temp, { recursive: true, force: true });
-  }
-});
-
-test("prepareCodexRun resumes an existing Codex session when target root matches", async () => {
+test("completeCodexRun resumes an existing Codex session when target root matches", async () => {
   const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
   try {
     const first = await createRequestFixture(temp, { round: 1 });

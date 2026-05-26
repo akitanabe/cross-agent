@@ -100,9 +100,6 @@ complete validates Codex CLI artifacts written by codex-agent, updates Codex age
 writes the adapter response envelope. stdout contains only the response envelope file path.`;
 }
 
-// src/core/codex-adapter/workflow.ts
-import { mkdir as mkdir3, readFile as readFile2 } from "node:fs/promises";
-
 // src/core/shared/path-utils.ts
 function normalizePath(value, platform = process.platform) {
   if (typeof value !== "string" || value.length === 0) return value;
@@ -119,6 +116,29 @@ function normalizePathList(values, platform = process.platform) {
   if (!Array.isArray(values)) return values;
   return values.map((value) => normalizePath(value, platform));
 }
+
+// src/core/codex-adapter/workflow-common.ts
+function isObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function normalizeRequest(request) {
+  return {
+    ...request,
+    target_root: normalizePath(request.target_root),
+    prompt_file: normalizePath(request.prompt_file),
+    context_file: normalizePath(request.context_file),
+    target_files: normalizePathList(request.target_files)
+  };
+}
+function responsePath(paths) {
+  return normalizePath(paths.responseFile);
+}
+function runPath(paths) {
+  return normalizePath(paths.runFile);
+}
+
+// src/core/codex-adapter/workflow-complete.ts
+import { readFile as readFile2 } from "node:fs/promises";
 
 // src/core/codex-adapter/agent-state.ts
 import { mkdir as mkdir2 } from "node:fs/promises";
@@ -346,27 +366,7 @@ async function markAgentCompleted({
   await saveAgentState(dataDir, runSpec.review_session_id, agentState);
 }
 
-// src/core/codex-adapter/workflow-common.ts
-function isObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function normalizeRequest(request) {
-  return {
-    ...request,
-    target_root: normalizePath(request.target_root),
-    prompt_file: normalizePath(request.prompt_file),
-    context_file: normalizePath(request.context_file),
-    target_files: normalizePathList(request.target_files)
-  };
-}
-function responsePath(paths) {
-  return normalizePath(paths.responseFile);
-}
-function runPath(paths) {
-  return normalizePath(paths.runFile);
-}
-
-// src/core/codex-adapter/failure.ts
+// src/core/codex-adapter/workflow-failure.ts
 async function writeFailureDiagnostic({
   request,
   paths,
@@ -427,7 +427,7 @@ async function failComplete(input) {
   return { path: responsePath(input.paths), response };
 }
 
-// src/core/codex-adapter/complete-helpers.ts
+// src/core/codex-adapter/workflow-complete-helpers.ts
 async function loadAgentStateForComplete(dataDir, runSpec, request, paths) {
   let agentState;
   try {
@@ -497,7 +497,7 @@ async function resolveCompletedThreadId(runSpec, request, paths, agentState, exi
   };
 }
 
-// src/core/codex-adapter/completion-artifacts.ts
+// src/core/codex-adapter/workflow-completion-artifacts.ts
 function completedArtifacts(runSpec, paths) {
   return [
     artifact(paths.runFile, "run_spec", runSpec.round),
@@ -524,7 +524,7 @@ async function appendCompletionDiagnostic(runSpec, paths, threadId, artifacts) {
   artifacts.push(artifact(paths.diagnosticFile, "diagnostic", runSpec.round));
 }
 
-// src/core/codex-adapter/run-spec.ts
+// src/core/codex-adapter/workflow-run-spec.ts
 import { dirname as dirname3 } from "node:path";
 function makeRequestFromRunSpec(runSpec, dataDir) {
   return {
@@ -691,7 +691,88 @@ function mismatchedRunSpecPath(runSpec, paths) {
   return null;
 }
 
-// src/core/codex-adapter/workflow.ts
+// src/core/codex-adapter/workflow-complete.ts
+async function completeCodexRun(runFile, options = {}) {
+  const dataDir = options.dataDir ? normalizePath(options.dataDir) : null;
+  if (!dataDir) {
+    throw new Error("--data-dir is required.");
+  }
+  const loaded = await loadRunSpecForComplete(runFile, dataDir);
+  if (!loaded.ok) return loaded.result;
+  const { runSpec, request, paths } = loaded.value;
+  const mismatchedPath = mismatchedRunSpecPath(runSpec, paths);
+  if (mismatchedPath) {
+    return failComplete({
+      request,
+      agentState: null,
+      paths,
+      code: "codex_run_spec_invalid",
+      message: `${mismatchedPath} does not match derived artifact path.`
+    });
+  }
+  const loadedAgentState = await loadAgentStateForComplete(dataDir, runSpec, request, paths);
+  if (!loadedAgentState.ok) return loadedAgentState.result;
+  const { agentState } = loadedAgentState;
+  let exitResult;
+  try {
+    exitResult = await readCodexExit(runSpec.exit_file);
+  } catch (error) {
+    const caught = error;
+    return failComplete({
+      request,
+      agentState,
+      paths,
+      code: "codex_exit_missing",
+      message: `codex exit file is missing or invalid: ${caught.message}`
+    });
+  }
+  const eventLogText = await pathExists(runSpec.event_log) ? await readFile2(runSpec.event_log, "utf8") : "";
+  if (exitResult.code !== 0) {
+    const mode = runSpec.mode;
+    return failComplete({
+      request,
+      agentState,
+      paths,
+      code: mode === "initial" ? "codex_exec_failed" : "codex_resume_failed",
+      message: mode === "initial" ? "codex exec failed." : "codex exec resume failed.",
+      exitCode: exitResult.code,
+      extraDiagnostics: [
+        `- mode: ${mode}`,
+        runSpec.decision_reason ? `- decision_reason: ${runSpec.decision_reason}` : null,
+        runSpec.warning ? `- warning: ${runSpec.warning}` : null
+      ]
+    });
+  }
+  const completedThread = await resolveCompletedThreadId(
+    runSpec,
+    request,
+    paths,
+    agentState,
+    exitResult.code,
+    eventLogText
+  );
+  if (!completedThread.ok) return completedThread.result;
+  const { threadId } = completedThread;
+  if (!await pathExists(runSpec.output_file)) {
+    return failComplete({
+      request,
+      agentState,
+      paths,
+      code: "codex_output_missing",
+      message: "codex output file was not created.",
+      exitCode: exitResult.code
+    });
+  }
+  const artifacts = completedArtifacts(runSpec, paths);
+  await appendCompletionDiagnostic(runSpec, paths, threadId, artifacts);
+  await markAgentCompleted({ dataDir, runSpec, paths, agentState, threadId, artifacts });
+  const response = makeResponse(request, "completed", runSpec.output_file, artifacts, null);
+  await writeJsonAtomic(paths.responseFile, response);
+  return { path: responsePath(paths), response };
+}
+
+// src/core/codex-adapter/workflow-prepare.ts
+import { mkdir as mkdir3 } from "node:fs/promises";
 async function prepareCodexRun(request, options = {}) {
   const dataDir = options.dataDir ? normalizePath(options.dataDir) : null;
   request = normalizeRequest(request);
@@ -770,84 +851,6 @@ async function prepareCodexRun(request, options = {}) {
   await writeJsonAtomic(paths.runFile, runSpec);
   await markAgentPrepared(dataDir, request, paths, agentState);
   return { kind: "run", path: runPath(paths), status: "prepared" };
-}
-async function completeCodexRun(runFile, options = {}) {
-  const dataDir = options.dataDir ? normalizePath(options.dataDir) : null;
-  if (!dataDir) {
-    throw new Error("--data-dir is required.");
-  }
-  const loaded = await loadRunSpecForComplete(runFile, dataDir);
-  if (!loaded.ok) return loaded.result;
-  const { runSpec, request, paths } = loaded.value;
-  const mismatchedPath = mismatchedRunSpecPath(runSpec, paths);
-  if (mismatchedPath) {
-    return failComplete({
-      request,
-      agentState: null,
-      paths,
-      code: "codex_run_spec_invalid",
-      message: `${mismatchedPath} does not match derived artifact path.`
-    });
-  }
-  const loadedAgentState = await loadAgentStateForComplete(dataDir, runSpec, request, paths);
-  if (!loadedAgentState.ok) return loadedAgentState.result;
-  const { agentState } = loadedAgentState;
-  let exitResult;
-  try {
-    exitResult = await readCodexExit(runSpec.exit_file);
-  } catch (error) {
-    const caught = error;
-    return failComplete({
-      request,
-      agentState,
-      paths,
-      code: "codex_exit_missing",
-      message: `codex exit file is missing or invalid: ${caught.message}`
-    });
-  }
-  const eventLogText = await pathExists(runSpec.event_log) ? await readFile2(runSpec.event_log, "utf8") : "";
-  if (exitResult.code !== 0) {
-    const mode = runSpec.mode;
-    return failComplete({
-      request,
-      agentState,
-      paths,
-      code: mode === "initial" ? "codex_exec_failed" : "codex_resume_failed",
-      message: mode === "initial" ? "codex exec failed." : "codex exec resume failed.",
-      exitCode: exitResult.code,
-      extraDiagnostics: [
-        `- mode: ${mode}`,
-        runSpec.decision_reason ? `- decision_reason: ${runSpec.decision_reason}` : null,
-        runSpec.warning ? `- warning: ${runSpec.warning}` : null
-      ]
-    });
-  }
-  const completedThread = await resolveCompletedThreadId(
-    runSpec,
-    request,
-    paths,
-    agentState,
-    exitResult.code,
-    eventLogText
-  );
-  if (!completedThread.ok) return completedThread.result;
-  const { threadId } = completedThread;
-  if (!await pathExists(runSpec.output_file)) {
-    return failComplete({
-      request,
-      agentState,
-      paths,
-      code: "codex_output_missing",
-      message: "codex output file was not created.",
-      exitCode: exitResult.code
-    });
-  }
-  const artifacts = completedArtifacts(runSpec, paths);
-  await appendCompletionDiagnostic(runSpec, paths, threadId, artifacts);
-  await markAgentCompleted({ dataDir, runSpec, paths, agentState, threadId, artifacts });
-  const response = makeResponse(request, "completed", runSpec.output_file, artifacts, null);
-  await writeJsonAtomic(paths.responseFile, response);
-  return { path: responsePath(paths), response };
 }
 
 // src/runners/codex-adapter-runner.ts
