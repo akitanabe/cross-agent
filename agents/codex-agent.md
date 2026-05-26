@@ -26,7 +26,7 @@ request_envelope_file: .../artifacts/<review_session_id>/round-<N>-adapter-reque
 ## 実行方針
 
 1. 渡された file path だけを `codex-adapter` skill の `prepare` 手順へ渡す。
-2. `prepare` が `round-<N>-codex-response.json` を返した場合は、prepare 段階で response が確定しているため Codex CLI を実行せず最終回答に進む。
+2. `prepare` が失敗した場合は runner が failed response envelope を保存済みとみなし、runner / Bash tool のエラーとして扱って Codex CLI 実行や `complete` へ進まない。
 3. `prepare` が `round-<N>-codex-run.json` を返した場合は、その JSON を読む。
 4. `codex-run.json` が Codex exec 専用 spec として妥当か確認する。
 5. `mode == "initial"` なら `codex exec`、`mode == "resume"` なら `codex exec resume` を Bash から直接実行する。

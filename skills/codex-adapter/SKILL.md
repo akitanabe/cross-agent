@@ -40,9 +40,10 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" prepare \
 `prepare` は stdout に file path だけを返す。
 
 - `round-<N>-codex-run.json` が返った場合: Codex CLI 実行へ進む
-- `round-<N>-codex-response.json` が返った場合: prepare 段階で失敗 response が確定しているため、Codex CLI を実行せず最終回答に進む
 
-stdout に説明文、Markdown、複数行ログが混ざった場合は失敗扱いにする。
+`prepare` が失敗した場合、runner は可能な範囲で failed response envelope を保存したうえでエラー終了する。
+codex-agent は runner / Bash tool のエラーとして扱い、Codex CLI 実行や `complete` へ進まない。
+stdout に説明文、Markdown、複数行ログ、response envelope file path が混ざった場合も失敗扱いにする。
 
 ### 2. run spec 検証
 

@@ -198,8 +198,11 @@ codex-adapter の実行は `prepare`、codex-agent による Codex CLI 実行、
 18. `[codex-agent]` `complete` が成功したら、完了シグナルだけを cross-agent に返す
 
 `prepare` が request / state 検証で失敗し、`codex-run.json` を作れない場合は、Codex CLI を実行しない。
-この場合も runner は可能な範囲で diagnostic artifact と failed response envelope を作成し、
-codex-agent は完了シグナルだけを cross-agent に返す。
+この場合も runner は可能な範囲で diagnostic artifact と failed response envelope を作成する。
+ただし `prepare` の stdout に response envelope file path は返さず、runner command はエラーとして終了する。
+codex-agent はこのエラーを受けたら Codex CLI 実行や `complete` へ進まない。cross-agent は subagent 返却値に
+含まれる path を再利用せず、session state の `current_round` から adapter response envelope file を導出して
+round を閉じる。
 
 ### runner commands
 
@@ -222,6 +225,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" complete \
 `prepare` は Codex CLI を起動しない。state file も最終結果としては更新しない。必要な場合でも、
 作成途中の run spec と diagnostic artifact だけに留める。`complete` は Codex CLI を起動せず、
 保存済み artifact と終了結果だけを検証して response envelope を確定する。
+
+`prepare` が request / state 検証で失敗した場合は、diagnostic artifact と failed response envelope を
+保存してからエラー終了する。stdout には `round-<N>-codex-response.json` の path を返さない。
 
 `codex-exit.json` が存在しない、JSON として壊れている、または `code` が number でない場合は
 `codex_exit_missing` として失敗扱いにする。`code` が 0 以外の場合は、initial では
