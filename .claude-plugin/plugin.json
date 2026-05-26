@@ -21,6 +21,8 @@
       "allow": [
         "Bash(node \"**/codex-adapter-runner.mjs\" prepare **)",
         "Bash(node \"**/codex-adapter-runner.mjs\" complete **)",
+        "Bash(node \"**/claude-adapter-runner.mjs\" prepare **)",
+        "Bash(node \"**/claude-adapter-runner.mjs\" complete **)",
         "Bash(codex exec **)",
         "Bash(node \"**/cross-agent-runner.mjs\" **)"
       ]

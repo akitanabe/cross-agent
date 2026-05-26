@@ -72,7 +72,7 @@ runner が `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/context.md` を�
 node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-initial \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --review-session-id "<review_session_id>" \
-  --agent "codex" \
+  --agent "<agent>" \
   --focus-question "<focus_question>" \
   --target-files "<target_file_1>" "<target_file_2>"
 ```
@@ -84,8 +84,10 @@ runner が返した adapter request envelope file path を使う。
 | Agent   | 委譲先                                                        |
 | ------- | ------------------------------------------------------------- |
 | `codex` | `codex-agent` subagent（内部で `codex-adapter` skill を使用） |
+| `claude` | `claude-agent` subagent（内部で `claude-adapter` skill を使用） |
 
-`claude-adapter` は未完成のため、v1 では `codex` のみを実行対象とする。
+`agent` が未指定の場合は `codex` を使う。ユーザーが Claude を明示した場合、または比較対象として Claude が必要な場合は
+`claude` を指定する。Claude 側の実行境界、蓄積 context、state 更新は `claude-adapter` が扱う。
 
 subagent が完了したら、`review_session_id` から current round の完了処理を runner に任せる。
 
@@ -144,7 +146,7 @@ Round 2 を実行する条件:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-next-round \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --review-session-id "<review_session_id>" \
-  --agent "codex" \
+  --agent "<agent>" \
   --round-kind "deep_dive" \
   --prompt-file "${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-2-prompt.md"
 ```
@@ -193,6 +195,10 @@ Write(${CLAUDE_PLUGIN_DATA}/artifacts/*/round-*-prompt.md)
 Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" prepare **)
 Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" complete **)
 Bash(codex exec **)
+
+# claude-adapter（subagent 内の Bash）
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/claude-adapter-runner.mjs" prepare **)
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/claude-adapter-runner.mjs" complete **)
 ```
 
 `/update-config` スキルを使えばその場で追加できることも伝える。

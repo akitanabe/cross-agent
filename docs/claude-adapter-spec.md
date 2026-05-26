@@ -255,7 +255,8 @@ Claude subagent には、親会話の結論や cross-agent の統合方針を前
 
 `prepare` が request / state 検証で失敗し、`round-<N>-claude-input.md` を作れない場合は、
 Claude subagent の本文生成を続行しない。この場合も runner は可能な範囲で diagnostic artifact と
-failed response envelope を作成し、`claude-agent` は完了シグナルだけを cross-agent に返す。
+failed response envelope を作成する。ただし `prepare` の stdout に response envelope file path は返さず、
+runner command はエラーとして終了する。`claude-agent` はこのエラーを受けたら本文生成や `complete` へ進まない。
 cross-agent は subagent 返却値に含まれる path を再利用せず、session state の `current_round` から
 adapter response envelope file を導出して round を閉じる。
 
@@ -284,6 +285,8 @@ node scripts/claude-adapter-runner.mjs prepare \
 ```
 
 `prepare` は `round-<N>-claude-input.md` の file path と、保存すべき output file path を含む実行情報を返す。
+`prepare` が request / state 検証で失敗した場合は、diagnostic artifact と failed response envelope を
+保存してからエラー終了する。stdout には `round-<N>-claude-response.json` の path を返さない。
 
 ```bash
 node scripts/claude-adapter-runner.mjs complete \
