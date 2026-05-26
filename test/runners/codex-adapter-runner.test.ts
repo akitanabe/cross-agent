@@ -18,10 +18,14 @@ test("codex adapter CLI prepare writes run spec file path to stdout", async () =
     const requestFile = join(temp, "request-envelope.json");
     await writeFile(requestFile, `${JSON.stringify(request, null, 2)}\n`, "utf8");
 
-    const result = spawnSync(process.execPath, [runnerPath, "prepare", "--data-dir", dataDir, "--request", requestFile], {
-      encoding: "utf8",
-      windowsHide: true,
-    });
+    const result = spawnSync(
+      process.execPath,
+      [runnerPath, "prepare", "--data-dir", dataDir, "--request", requestFile],
+      {
+        encoding: "utf8",
+        windowsHide: true,
+      },
+    );
 
     assert.equal(result.status, 0, result.stderr);
     const runFile = result.stdout.trim();
@@ -42,10 +46,14 @@ test("codex adapter CLI prepare writes response file path to stdout on recoverab
     const requestFile = join(temp, "request-envelope.json");
     await writeFile(requestFile, `${JSON.stringify(request, null, 2)}\n`, "utf8");
 
-    const result = spawnSync(process.execPath, [runnerPath, "prepare", "--data-dir", dataDir, "--request", requestFile], {
-      encoding: "utf8",
-      windowsHide: true,
-    });
+    const result = spawnSync(
+      process.execPath,
+      [runnerPath, "prepare", "--data-dir", dataDir, "--request", requestFile],
+      {
+        encoding: "utf8",
+        windowsHide: true,
+      },
+    );
 
     assert.equal(result.status, 1, result.stderr);
     const responseFile = result.stdout.trim();
@@ -78,7 +86,11 @@ test("codex adapter CLI complete writes response file path to stdout", async () 
     const runFile = prepared.stdout.trim();
     const runSpec = JSON.parse(await readFile(runFile, "utf8"));
     await writeFile(runSpec.output_file, "review body\n", "utf8");
-    await writeFile(runSpec.event_log, `${JSON.stringify({ type: "thread.started", thread_id: "thread-abc" })}\n`, "utf8");
+    await writeFile(
+      runSpec.event_log,
+      `${JSON.stringify({ type: "thread.started", thread_id: "thread-abc" })}\n`,
+      "utf8",
+    );
     await writeFile(runSpec.exit_file, `${JSON.stringify({ code: 0 }, null, 2)}\n`, "utf8");
 
     const completed = spawnSync(process.execPath, [runnerPath, "complete", "--data-dir", dataDir, "--run", runFile], {

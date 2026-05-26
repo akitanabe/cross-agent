@@ -26,18 +26,13 @@ test("requireOption returns present values and rejects missing values", () => {
 });
 
 test("parseOptionArgs parses scalar and repeated multi-value options", () => {
-  const args = parseOptionArgs([
-    "--data-dir",
-    "C:/data",
-    "--target-files",
-    "src/a.ts",
-    "src/b.ts",
-    "--target-files",
-    "src/c.ts",
-  ], {
-    "--data-dir": { field: "dataDir" },
-    "--target-files": { field: "targetFiles", multiple: true },
-  });
+  const args = parseOptionArgs(
+    ["--data-dir", "C:/data", "--target-files", "src/a.ts", "src/b.ts", "--target-files", "src/c.ts"],
+    {
+      "--data-dir": { field: "dataDir" },
+      "--target-files": { field: "targetFiles", multiple: true },
+    },
+  );
 
   assert.deepEqual(args, {
     dataDir: "C:/data",
@@ -62,10 +57,14 @@ test("parseOptionArgs preserves parse callback return values", () => {
 });
 
 test("parseOptionArgs preserves initial args and supports help", () => {
-  const args = parseOptionArgs(["command", "--help"], {}, {
-    startIndex: 1,
-    initialArgs: { command: "command" },
-  });
+  const args = parseOptionArgs(
+    ["command", "--help"],
+    {},
+    {
+      startIndex: 1,
+      initialArgs: { command: "command" },
+    },
+  );
 
   assert.deepEqual(args, { command: "command", help: true });
 });
@@ -84,13 +83,7 @@ test("parseOptionArgs rejects unknown, positional, and missing values", () => {
 });
 
 test("parseCommandArgs parses command-specific and common options", () => {
-  const args = parseCommandArgs([
-    "prepare",
-    "--data-dir",
-    "C:/data",
-    "--round",
-    "2",
-  ], {
+  const args = parseCommandArgs(["prepare", "--data-dir", "C:/data", "--round", "2"], {
     commonOptions: {
       "--data-dir": { field: "dataDir" },
     },

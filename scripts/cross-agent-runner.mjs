@@ -59,10 +59,14 @@ function parseCommandArgs(argv, {
     return { command: null, help: true };
   }
   if (command && !commands[command]) throw new Error(`Unknown command: ${command}`);
-  return parseOptionArgs(argv, { ...commonOptions2, ...commands[command]?.options ?? {} }, {
-    startIndex: 1,
-    initialArgs: { command }
-  });
+  return parseOptionArgs(
+    argv,
+    { ...commonOptions2, ...commands[command]?.options ?? {} },
+    {
+      startIndex: 1,
+      initialArgs: { command }
+    }
+  );
 }
 
 // src/core/cross-agent/state.ts
@@ -251,9 +255,7 @@ function buildNextRoundPrompt({
   focusQuestion = null
 }) {
   if (!promptText) throw new Error("prompt_text is required.");
-  const sections = [
-    "\u3042\u306A\u305F\u306F\u540C\u3058\u30EC\u30D3\u30E5\u30FC\u30BB\u30C3\u30B7\u30E7\u30F3\u3092\u7D99\u7D9A\u3057\u3066\u3044\u307E\u3059\u3002\u4EE5\u4E0B\u306E\u8FFD\u52A0\u4F9D\u983C\u306B\u3060\u3051\u7B54\u3048\u3066\u304F\u3060\u3055\u3044\u3002"
-  ];
+  const sections = ["\u3042\u306A\u305F\u306F\u540C\u3058\u30EC\u30D3\u30E5\u30FC\u30BB\u30C3\u30B7\u30E7\u30F3\u3092\u7D99\u7D9A\u3057\u3066\u3044\u307E\u3059\u3002\u4EE5\u4E0B\u306E\u8FFD\u52A0\u4F9D\u983C\u306B\u3060\u3051\u7B54\u3048\u3066\u304F\u3060\u3055\u3044\u3002"];
   if (previousOutputFile) {
     sections.push(`## \u524D\u56DE round \u306E\u51FA\u529B
 ${previousOutputFile}`);
@@ -568,7 +570,9 @@ async function completeResolvedRound({
   if (state.review_session_id !== reviewSessionId) {
     throw new Error("state review_session_id does not match input review_session_id.");
   }
-  const round = state.rounds?.find((entry) => entry.round === agentResponse.round && entry.agent === agentResponse.agent);
+  const round = state.rounds?.find(
+    (entry) => entry.round === agentResponse.round && entry.agent === agentResponse.agent
+  );
   if (!round) throw new Error(`round not found: ${agentResponse.round}/${agentResponse.agent}`);
   round.completed_at = nowIso();
   round.agent_result = {

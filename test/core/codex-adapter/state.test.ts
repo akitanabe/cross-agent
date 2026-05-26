@@ -2,7 +2,15 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { agentStateFileFor, artifactDirFor, artifactPaths, effortForReviewDepth, extractThreadIdFromJsonl, sessionStateFileFor, shouldStartNewSession } from "../../../src/core/codex-adapter/state.ts";
+import {
+  agentStateFileFor,
+  artifactDirFor,
+  artifactPaths,
+  effortForReviewDepth,
+  extractThreadIdFromJsonl,
+  sessionStateFileFor,
+  shouldStartNewSession,
+} from "../../../src/core/codex-adapter/state.ts";
 
 test("effortForReviewDepth maps abstract depth to Codex effort", () => {
   assert.deepEqual(effortForReviewDepth("low"), { effort: "medium", warning: null });
@@ -11,7 +19,6 @@ test("effortForReviewDepth maps abstract depth to Codex effort", () => {
   assert.equal(effortForReviewDepth("surprise").effort, "high");
   assert.match(effortForReviewDepth("surprise").warning, /Unknown review_depth/);
 });
-
 
 test("extractThreadIdFromJsonl ignores non-json lines and returns thread.started id", () => {
   const text = [
@@ -23,11 +30,9 @@ test("extractThreadIdFromJsonl ignores non-json lines and returns thread.started
   assert.equal(extractThreadIdFromJsonl(text), "thread-123");
 });
 
-
 test("extractThreadIdFromJsonl returns null when no thread id exists", () => {
   assert.equal(extractThreadIdFromJsonl('{"type":"other.event"}\nnot json'), null);
 });
-
 
 test("shouldStartNewSession starts when thread id is missing", () => {
   assert.deepEqual(shouldStartNewSession({}, "C:/repo"), {
@@ -36,7 +41,6 @@ test("shouldStartNewSession starts when thread id is missing", () => {
   });
 });
 
-
 test("shouldStartNewSession starts when target root changed", () => {
   assert.deepEqual(shouldStartNewSession({ thread_id: "t1", target_root: "C:/old" }, "C:/new"), {
     startNew: true,
@@ -44,14 +48,12 @@ test("shouldStartNewSession starts when target root changed", () => {
   });
 });
 
-
 test("shouldStartNewSession resumes when thread id and target root match", () => {
   assert.deepEqual(shouldStartNewSession({ thread_id: "t1", target_root: "C:/repo" }, "C:/repo"), {
     startNew: false,
     reason: "resume",
   });
 });
-
 
 test("artifact path helpers use data directory layout", () => {
   const artifactDir = artifactDirFor("C:/data", "session-1");

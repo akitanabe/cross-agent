@@ -13,7 +13,6 @@ test("normalizeOptions fills defaults", () => {
   });
 });
 
-
 test("sessionPaths rejects review_session_id with path traversal", () => {
   assert.throws(() => sessionPaths("/tmp/data", "../escape"), /invalid review_session_id/);
   assert.throws(() => sessionPaths("/tmp/data", "foo/bar"), /invalid review_session_id/);
@@ -21,7 +20,6 @@ test("sessionPaths rejects review_session_id with path traversal", () => {
   assert.throws(() => sessionPaths("/tmp/data", ".."), /invalid review_session_id/);
   assert.throws(() => sessionPaths("/tmp/data", ""), /non-empty string/);
 });
-
 
 test("sessionPaths accepts UUID and other safe ids", () => {
   assert.doesNotThrow(() => sessionPaths("/tmp/data", "829c6ad2-d23e-4bd3-9b81-44dfce08e9a8"));

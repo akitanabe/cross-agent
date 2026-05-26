@@ -267,7 +267,7 @@ export async function prepareCodexRun(
       [],
       makeError(
         "invalid_request_envelope",
-        "--data-dir is required. In plugin context, pass `--data-dir \"${CLAUDE_PLUGIN_DATA}\"` " +
+        '--data-dir is required. In plugin context, pass `--data-dir "${CLAUDE_PLUGIN_DATA}"` ' +
           "(Claude Code substitutes this in skill content).",
       ),
     );
@@ -397,7 +397,10 @@ async function readCodexExit(exitFile: string): Promise<CodexExitResult> {
 }
 
 // Codex CLI 実行後の artifact を検証し、state と response envelope を確定する。
-export async function completeCodexRun(runFile: string, options: CodexPrepareOptions = {}): Promise<CodexCompleteResult> {
+export async function completeCodexRun(
+  runFile: string,
+  options: CodexPrepareOptions = {},
+): Promise<CodexCompleteResult> {
   const dataDir = options.dataDir ? (normalizePath(options.dataDir) as string) : null;
   if (!dataDir) {
     throw new Error("--data-dir is required.");

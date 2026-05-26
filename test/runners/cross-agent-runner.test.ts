@@ -50,7 +50,6 @@ test("start-session command writes review session id as text", async () => {
   }
 });
 
-
 test("start-session command accepts raw Windows path from argv", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
@@ -75,7 +74,6 @@ test("start-session command accepts raw Windows path from argv", async () => {
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("prepare-next-round command writes adapter request JSON", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
@@ -130,7 +128,6 @@ test("prepare-next-round command writes adapter request JSON", async () => {
   }
 });
 
-
 test("prepare-initial command reads context file and target files from argv", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
@@ -175,7 +172,6 @@ test("prepare-initial command reads context file and target files from argv", as
   }
 });
 
-
 test("prepare-initial command auto reads session context file", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
@@ -211,7 +207,6 @@ test("prepare-initial command auto reads session context file", async () => {
   }
 });
 
-
 test("complete-round command records adapter response from response file", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
@@ -241,13 +236,7 @@ test("complete-round command records adapter response from response file", async
       error: null,
     });
 
-    const result = await runRunner([
-      "complete-round",
-      "--data-dir",
-      dataDir,
-      "--response-file",
-      responseFile,
-    ]);
+    const result = await runRunner(["complete-round", "--data-dir", dataDir, "--response-file", responseFile]);
 
     const output = JSON.parse(result.stdout);
     assert.equal(output.status, "completed");
@@ -304,7 +293,6 @@ test("complete-current-round command derives current adapter response file", asy
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("get-round-output command writes text by default", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));

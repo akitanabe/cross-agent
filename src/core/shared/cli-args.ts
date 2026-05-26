@@ -80,8 +80,12 @@ export function parseCommandArgs<TArgs extends Record<string, unknown> = Record<
   }
   if (command && !commands[command]) throw new Error(`Unknown command: ${command}`);
 
-  return parseOptionArgs(argv, { ...commonOptions, ...(commands[command]?.options ?? {}) }, {
-    startIndex: 1,
-    initialArgs: { command } as unknown as Partial<TArgs>,
-  }) as TArgs & { command: string | null; help?: boolean };
+  return parseOptionArgs(
+    argv,
+    { ...commonOptions, ...(commands[command]?.options ?? {}) },
+    {
+      startIndex: 1,
+      initialArgs: { command } as unknown as Partial<TArgs>,
+    },
+  ) as TArgs & { command: string | null; help?: boolean };
 }

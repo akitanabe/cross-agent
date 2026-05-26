@@ -413,7 +413,9 @@ async function completeResolvedRound({
     throw new Error("state review_session_id does not match input review_session_id.");
   }
 
-  const round = state.rounds?.find((entry) => entry.round === agentResponse.round && entry.agent === agentResponse.agent);
+  const round = state.rounds?.find(
+    (entry) => entry.round === agentResponse.round && entry.agent === agentResponse.agent,
+  );
   if (!round) throw new Error(`round not found: ${agentResponse.round}/${agentResponse.agent}`);
 
   round.completed_at = nowIso();

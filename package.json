@@ -9,9 +9,12 @@
   "scripts": {
     "build": "node tools/build.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "test": "npm run build && vitest run"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
     "@types/node": "^25.9.1",
     "esbuild": "^0.28.0",
     "typescript": "^6.0.3",

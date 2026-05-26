@@ -20,7 +20,6 @@ test("startSession throws when data_dir is missing (no env var fallback)", async
   );
 });
 
-
 test("startSession creates empty state", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
@@ -48,7 +47,6 @@ test("startSession creates empty state", async () => {
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("prepareInitialRound creates prompt and adapter request", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
@@ -105,7 +103,6 @@ test("prepareInitialRound creates prompt and adapter request", async () => {
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("prepareNextRound appends a deep dive round and adapter request", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
@@ -177,7 +174,6 @@ test("prepareNextRound appends a deep dive round and adapter request", async () 
   }
 });
 
-
 test("prepareNextRound rejects deep_dive when previous round failed", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
@@ -213,7 +209,6 @@ test("prepareNextRound rejects deep_dive when previous round failed", async () =
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("prepareNextRound rejects recovery when previous round completed", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
@@ -254,7 +249,6 @@ test("prepareNextRound rejects recovery when previous round completed", async ()
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("prepareNextRound max_rounds does not count follow_up rounds", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
@@ -312,7 +306,6 @@ test("prepareNextRound max_rounds does not count follow_up rounds", async () => 
   }
 });
 
-
 test("prepareNextRound max_rounds blocks deep_dive when budget exhausted", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
@@ -352,7 +345,6 @@ test("prepareNextRound max_rounds blocks deep_dive when budget exhausted", async
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("startSession rejects unsafe review_session_id input", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));

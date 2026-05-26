@@ -48,10 +48,7 @@ test("normalizePath passes through non-string and empty values", () => {
 });
 
 test("normalizePathList normalizes each element and passes through non-arrays", () => {
-  assert.deepEqual(
-    normalizePathList(["/c/a", "x\\y"], "win32"),
-    ["C:/a", "x/y"],
-  );
+  assert.deepEqual(normalizePathList(["/c/a", "x\\y"], "win32"), ["C:/a", "x/y"]);
   assert.equal(normalizePathList(null, "win32"), null);
   assert.equal(normalizePathList(undefined, "win32"), undefined);
 });

@@ -47,9 +47,7 @@ export function buildNextRoundPrompt({
 }): string {
   if (!promptText) throw new Error("prompt_text is required.");
 
-  const sections = [
-    "あなたは同じレビューセッションを継続しています。以下の追加依頼にだけ答えてください。",
-  ];
+  const sections = ["あなたは同じレビューセッションを継続しています。以下の追加依頼にだけ答えてください。"];
 
   if (previousOutputFile) {
     sections.push(`## 前回 round の出力\n${previousOutputFile}`);

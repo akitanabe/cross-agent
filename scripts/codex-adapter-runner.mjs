@@ -47,10 +47,14 @@ function parseCommandArgs(argv, {
     return { command: null, help: true };
   }
   if (command && !commands2[command]) throw new Error(`Unknown command: ${command}`);
-  return parseOptionArgs(argv, { ...commonOptions2, ...commands2[command]?.options ?? {} }, {
-    startIndex: 1,
-    initialArgs: { command }
-  });
+  return parseOptionArgs(
+    argv,
+    { ...commonOptions2, ...commands2[command]?.options ?? {} },
+    {
+      startIndex: 1,
+      initialArgs: { command }
+    }
+  );
 }
 
 // src/core/codex-adapter/cli.ts

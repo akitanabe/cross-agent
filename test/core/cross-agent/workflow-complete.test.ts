@@ -6,7 +6,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { sessionPaths } from "../../../src/core/cross-agent/state.ts";
-import { completeRound, getRound, getRoundOutput, prepareInitialRound, startSession } from "../../../src/core/cross-agent/workflow.ts";
+import {
+  completeRound,
+  getRound,
+  getRoundOutput,
+  prepareInitialRound,
+  startSession,
+} from "../../../src/core/cross-agent/workflow.ts";
 import { normalizePath } from "../../../src/core/shared/path-utils.ts";
 import { completeRoundFromEnvelope, writeAdapterResponse } from "../../helpers/cross-agent-fixtures.ts";
 
@@ -48,12 +54,14 @@ test("completeRound records adapter response into state", async () => {
     const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
     assert.equal(state.rounds[0].agent_result.output_file, normalizePath(outputFile));
     assert.equal(state.rounds[0].agent_result.agent_state_file, undefined);
-    assert.equal(state.artifacts.files.every((entry) => entry.owner === "cross-agent"), true);
+    assert.equal(
+      state.artifacts.files.every((entry) => entry.owner === "cross-agent"),
+      true,
+    );
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("completeRound rejects response_file outside artifact root", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
@@ -80,15 +88,11 @@ test("completeRound rejects response_file outside artifact root", async () => {
       error: { message: "outside" },
     });
 
-    await assert.rejects(
-      completeRound({ data_dir: dataDir, response_file: responseFile }),
-      /outside artifact root/,
-    );
+    await assert.rejects(completeRound({ data_dir: dataDir, response_file: responseFile }), /outside artifact root/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("completeRound rejects non-integer round number", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
@@ -117,7 +121,6 @@ test("completeRound rejects non-integer round number", async () => {
   }
 });
 
-
 test("getRound rejects non-integer round number", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
@@ -127,15 +130,11 @@ test("getRound rejects non-integer round number", async () => {
     await startSession({ data_dir: dataDir, review_session_id: "session-1", target_root: targetRoot });
     await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
 
-    await assert.rejects(
-      getRound({ data_dir: dataDir, review_session_id: "session-1", round: "1" }),
-      /invalid round/,
-    );
+    await assert.rejects(getRound({ data_dir: dataDir, review_session_id: "session-1", round: "1" }), /invalid round/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("completeRound rejects unsupported contract_version", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
@@ -166,7 +165,6 @@ test("completeRound rejects unsupported contract_version", async () => {
   }
 });
 
-
 test("completeRound rejects unknown status", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
@@ -190,7 +188,6 @@ test("completeRound rejects unknown status", async () => {
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("completeRound rejects output_file outside artifact dir", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
@@ -220,7 +217,6 @@ test("completeRound rejects output_file outside artifact dir", async () => {
   }
 });
 
-
 test("completeRound rejects completed status without output_file", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
@@ -244,7 +240,6 @@ test("completeRound rejects completed status without output_file", async () => {
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("completeRound rejects failed status carrying output_file", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
@@ -275,7 +270,6 @@ test("completeRound rejects failed status carrying output_file", async () => {
   }
 });
 
-
 test("completeRound rejects missing output_file", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
@@ -303,7 +297,6 @@ test("completeRound rejects missing output_file", async () => {
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("getRound returns round state", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
@@ -348,7 +341,6 @@ test("getRound returns round state", async () => {
     await rm(temp, { recursive: true, force: true });
   }
 });
-
 
 test("getRoundOutput returns text command output by default", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));

@@ -46,7 +46,10 @@ type CliArgs = Record<string, unknown> & {
 
 type CommandDefinition = {
   usage: string;
-  options: Record<string, { field: string; multiple?: boolean; parse?: (value: string, optionName: string) => unknown }>;
+  options: Record<
+    string,
+    { field: string; multiple?: boolean; parse?: (value: string, optionName: string) => unknown }
+  >;
   buildInput: (args: CliArgs) => Promise<unknown>;
   run: (input: unknown) => Promise<CommandOutput>;
 };
@@ -199,5 +202,7 @@ export function commandFor(name: string): CommandDefinition | undefined {
 
 export function usage(): string {
   return `Usage:
-${Object.values(commandArgs).map((command) => `  node scripts/cross-agent-runner.mjs ${command.usage}`).join("\n")}`;
+${Object.values(commandArgs)
+  .map((command) => `  node scripts/cross-agent-runner.mjs ${command.usage}`)
+  .join("\n")}`;
 }

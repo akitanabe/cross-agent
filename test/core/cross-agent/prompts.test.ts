@@ -17,7 +17,6 @@ test("buildInitialPrompt includes focus, context, target files, and review viewp
   assert.match(prompt, /見落としているリスク/);
 });
 
-
 test("buildNextRoundPrompt includes previous output, focus, and follow-up directions", () => {
   const prompt = buildNextRoundPrompt({
     promptText: "根拠が弱い指摘を検証して",

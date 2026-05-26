@@ -74,7 +74,7 @@ export function resolveDataDir(inputDataDir: string | null | undefined): string 
   // されないことが公式仕様なので、env var フォールバックは持たない。
   if (!inputDataDir) {
     throw new Error(
-      "data_dir is required. In plugin context, pass `--data-dir \"${CLAUDE_PLUGIN_DATA}\"` " +
+      'data_dir is required. In plugin context, pass `--data-dir "${CLAUDE_PLUGIN_DATA}"` ' +
         "(Claude Code substitutes this in skill content).",
     );
   }
@@ -110,7 +110,12 @@ export function sessionPaths(dataDir: string, reviewSessionId: string): SessionP
 }
 
 // state に append する cross-agent 生成 artifact metadata を作る。
-export function artifact(path: string, kind: string, round: number | null = null, agent: string | null = null): ArtifactRecord {
+export function artifact(
+  path: string,
+  kind: string,
+  round: number | null = null,
+  agent: string | null = null,
+): ArtifactRecord {
   // cross-agent が作った artifact だけ owner=cross-agent として記録する。
   return {
     path,
