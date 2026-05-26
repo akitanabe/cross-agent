@@ -4,7 +4,7 @@
 
 claude-adapter は Claude subagent 実行境界を担当する。cross-agent から request envelope file path を受け取り、
 Claude Code の専用 subagent (`claude-agent`) でレビュー本文を生成し、Claude 固有 state を更新して
-response envelope file path を返す。
+response envelope を保存する。
 
 Codex と異なり、Claude subagent は adapter 側で永続的な CLI session や thread を直接 resume しない。
 そのため、`review_session_id` から Claude 用の蓄積 context file へマッピングし、現在 round の input から
@@ -52,14 +52,15 @@ cross-agent が作成する `prompt_file` 内に必要な参照情報として�
 ## 実行境界
 
 Claude subagent は Claude Code ランタイム内の機能であり、Node runner から外部 CLI として spawn しない。
-そのため claude-adapter は次の二段階で動く。
+そのため claude-adapter は次の三段階で動く。
 
 1. runner が request を検証し、artifact path、蓄積 context、Claude agent に読ませる実行 input を準備する
 2. `claude-agent` が実行 input を読み、レビュー本文を生成して output file に保存する
 3. runner が output file を検証し、agent state と response envelope を確定する
 
-`claude-agent` の最終回答は response envelope file path だけにする。レビュー本文の要約、Markdown の前置き、
-追加説明は返さない。
+runner の `complete` は response envelope file path を stdout に返すが、これは `claude-agent` 内部の
+低水準出力である。`claude-agent` の最終回答は完了シグナルだけにする。
+レビュー本文の要約、Markdown の前置き、追加説明、response envelope file path は返さない。
 
 ## Artifact パス
 
@@ -250,6 +251,13 @@ Claude subagent には、親会話の結論や cross-agent の統合方針を前
 11. `[runner: complete]` 蓄積 context file に今回 round の `prompt_file`, `output_file`, `response_file`, `diagnostic_file` への参照を追記する
 12. `[runner: complete]` Claude agent state file の state と artifacts/errors を更新する
 13. `[runner: complete]` response envelope を `round-<N>-claude-response.json` に保存し、その file path を stdout に返す
+14. `[claude-agent]` `complete` が成功したら、完了シグナルだけを cross-agent に返す
+
+`prepare` が request / state 検証で失敗し、`round-<N>-claude-input.md` を作れない場合は、
+Claude subagent の本文生成を続行しない。この場合も runner は可能な範囲で diagnostic artifact と
+failed response envelope を作成し、`claude-agent` は完了シグナルだけを cross-agent に返す。
+cross-agent は subagent 返却値に含まれる path を再利用せず、session state の `current_round` から
+adapter response envelope file を導出して round を閉じる。
 
 ### claude-agent の責務
 
@@ -261,8 +269,9 @@ Claude subagent には、親会話の結論や cross-agent の統合方針を前
 - `claude-context.md` の Required Reading に列挙された全ファイルを回答前に読む
 - `claude-context.md` または Required Reading のいずれかを読めない場合は、内容を推測せず adapter failure として扱う
 - `round-<N>-claude-output.md` に本文を保存する
-- response envelope file path だけを最終回答にする
-- output 本文の要約、補足説明、独自の artifact 整理を最終回答に混ぜない
+- `complete` を呼び、response envelope を確定させる
+- 完了シグナルだけを最終回答にする
+- output 本文の要約、補足説明、response envelope file path、独自の artifact 整理を最終回答に混ぜない
 
 ### runner command 分割
 
@@ -284,7 +293,8 @@ node scripts/claude-adapter-runner.mjs complete \
 ```
 
 `complete` は output file を検証し、state と response envelope を更新し、stdout に
-`round-<N>-claude-response.json` の file path だけを返す。
+`round-<N>-claude-response.json` の file path だけを返す。`claude-agent` はこの stdout を
+内部処理の結果確認にだけ使い、cross-agent への最終回答には含めない。
 
 ## Response envelope
 
