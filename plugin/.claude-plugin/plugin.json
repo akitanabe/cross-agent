@@ -3,7 +3,7 @@
   "name": "cross-agent",
   "displayName": "Cross-Agent Review",
   "description": "複数の外部エージェント（Codex / Claude Subagent など）に横断的にセカンドオピニオン・批判的レビューを依頼するプラグイン。",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": {
     "name": "akitanabe"
   },

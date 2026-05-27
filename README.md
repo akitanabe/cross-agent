@@ -3,7 +3,7 @@
 外部エージェント（Codex、Claude など）を選んでセカンドオピニオン・
 批判的レビューを依頼する Claude Code プラグイン。
 
-> **ステータス**: v1.0.0 としてリリース済み。v1 runner と adapter 契約、実機 Codex / Claude フローは検証済みです。
+> **ステータス**: v1.0.1 としてリリース済み。v1 runner と adapter 契約、実機 Codex / Claude フローは検証済みです。
 
 ## 構成
 

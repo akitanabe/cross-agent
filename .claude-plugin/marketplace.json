@@ -10,7 +10,7 @@
       "name": "cross-agent",
       "source": "./plugin",
       "description": "複数の外部エージェントにセカンドオピニオン・批判的レビューを依頼する Claude Code プラグイン。",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": {
         "name": "akitanabe"
       }
