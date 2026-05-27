@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { buildAdapterRequest } from "./envelope.ts";
-import { buildInitialPrompt, buildNextRoundPrompt } from "./prompts.ts";
+import { addCodexSandboxGuidance, buildInitialPrompt, buildNextRoundPrompt } from "./prompts.ts";
 import { artifact, nowIso, resolveDataDir, validateRoundNumber, writeJsonAtomic } from "./state.ts";
 import type {
   ArtifactRecord,
@@ -48,7 +48,8 @@ async function prepareRound({
   const promptFile = resolve(paths.artifactDir, `round-${round}-prompt.md`);
   const normalizedPromptFile = normalizePath(promptFile) as string;
   const normalizedContextFile = normalizePath(contextFile) as string | null;
-  await writeFile(promptFile, promptText, "utf8");
+  const canonicalPromptText = agent === "codex" ? addCodexSandboxGuidance(promptText) : promptText;
+  await writeFile(promptFile, canonicalPromptText, "utf8");
 
   const adapterRequest = buildAdapterRequest({
     reviewSessionId,

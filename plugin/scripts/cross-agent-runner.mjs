@@ -369,6 +369,16 @@ function buildAdapterRequest({
 }
 
 // src/core/cross-agent/prompts.ts
+var CODEX_SANDBOX_GUIDANCE = `## Codex sandbox / permission handling
+- sandbox\u3001\u6A29\u9650\u3001\u30CD\u30C3\u30C8\u30EF\u30FC\u30AF\u5236\u7D04\u306B\u3088\u308A\u3001\u5FC5\u8981\u306A\u30D5\u30A1\u30A4\u30EB\u306E\u8AAD\u307F\u53D6\u308A\u3001workspace \u306E\u78BA\u8A8D\u3001\u307E\u305F\u306F\u5FC5\u8981\u306A\u30CD\u30C3\u30C8\u30EF\u30FC\u30AF\u30A2\u30AF\u30BB\u30B9\u304C\u3067\u304D\u306A\u3044\u5834\u5408\u3001\u4E0D\u8DB3\u60C5\u5831\u3092\u63A8\u6E2C\u3057\u306A\u3044\u3067\u304F\u3060\u3055\u3044\u3002
+- \u7D9A\u884C\u524D\u306B\u30E6\u30FC\u30B6\u30FC\u78BA\u8A8D\u307E\u305F\u306F\u6A29\u9650\u6607\u683C\u304C\u5FC5\u8981\u3067\u3042\u308B\u3053\u3068\u3092\u660E\u8A18\u3057\u3001\u30D6\u30ED\u30C3\u30AF\u3055\u308C\u305F file\u3001directory\u3001command\u3001network access \u3092\u5177\u4F53\u7684\u306B\u5217\u6319\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+- \u30D6\u30ED\u30C3\u30AF\u3055\u308C\u305F\u30A2\u30AF\u30BB\u30B9\u306A\u3057\u3067\u3082\u5341\u5206\u306A\u60C5\u5831\u304C\u3042\u308B\u5834\u5408\u306F\u30EC\u30D3\u30E5\u30FC\u3092\u7D9A\u3051\u3066\u69CB\u3044\u307E\u305B\u3093\u304C\u3001\u305D\u306E\u5236\u7D04\u306E\u5F71\u97FF\u3092\u53D7\u3051\u308B\u6307\u6458\u306B\u306F\u5236\u9650\u4ED8\u304D\u3067\u3042\u308B\u3053\u3068\u3092\u660E\u793A\u3057\u3066\u304F\u3060\u3055\u3044\u3002`;
+function addCodexSandboxGuidance(promptText) {
+  return `${promptText.trimEnd()}
+
+${CODEX_SANDBOX_GUIDANCE}
+`;
+}
 function buildInitialPrompt({
   focusQuestion,
   contextFile,
@@ -444,7 +454,8 @@ async function prepareRound({
   const promptFile = resolve3(paths.artifactDir, `round-${round}-prompt.md`);
   const normalizedPromptFile = normalizePath(promptFile);
   const normalizedContextFile = normalizePath(contextFile);
-  await writeFile2(promptFile, promptText, "utf8");
+  const canonicalPromptText = agent === "codex" ? addCodexSandboxGuidance(promptText) : promptText;
+  await writeFile2(promptFile, canonicalPromptText, "utf8");
   const adapterRequest = buildAdapterRequest({
     reviewSessionId,
     agent,

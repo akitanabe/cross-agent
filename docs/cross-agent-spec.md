@@ -424,6 +424,15 @@ Round 2 以降も adapter request / response envelope は Round 1 と同じ契�
 cross-agent は `prepare-next-round` で追加 round を作成し、adapter response を
 通常は `complete-current-round` で閉じ、必要な出力本文を `get-round-output` で読む。
 
+## Codex prompt の sandbox 方針
+
+`agent === "codex"` の round prompt には、sandbox / permission / network 制約で必要なファイルや情報を
+読めない場合の扱いを明示する。Codex は不足情報を推測せず、ユーザー確認または権限昇格が必要であること、
+ブロックされた file / directory / command / network access を出力に書く。
+
+この判断は Codex のレビュー本文側の契約として扱う。runner は Codex CLI の event log を機械分類して
+sandbox 起因の専用 response code へ変換しない。
+
 `round_kind` は以下の意味で使い分ける。
 
 | kind | 意味 |
