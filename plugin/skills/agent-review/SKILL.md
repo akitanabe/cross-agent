@@ -1,5 +1,5 @@
 ---
-name: review
+name: agent-review
 description: 外部エージェント（Codex、Claude など）を選んでセカンドオピニオン・批判的レビューを依頼するスキル。プランや設計案のレビュー、コードの問題点洗い出し、判断の妥当性確認など、独立した視点が欲しいときに使用する。「セカンドオピニオンが欲しい」「別のAIに聞いてみて」「第三者の目で見て」「クロスでレビューして」「cross-agent して」などの言葉が出たら使用する。
 user-invocable: true
 allowed-tools: Bash(node "**/cross-agent-runner.mjs"**) Glob Write
@@ -215,7 +215,7 @@ Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/claude-adapter-runner.mjs" complete **)
 
 ## 実装メモ
 
-- `review` はユーザー向けの skill 名、`cross-agent` は複数 agent を横断する orchestration layer の実装名。
+- `agent-review` はユーザー向けの skill 名、`cross-agent` は複数 agent を横断する orchestration layer の実装名。
 - 開発 repo の実装本体: `src/runners/cross-agent-runner.ts`
 - 配布 runner: `scripts/cross-agent-runner.mjs`
 - 仕様: https://github.com/akitanabe/cross-agent/blob/main/docs/cross-agent-spec.md
