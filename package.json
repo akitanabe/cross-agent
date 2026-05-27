@@ -12,6 +12,7 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "format": "biome format --write .",
     "format:check": "biome format .",
+    "version:set": "node tools/set-version.mjs",
     "test": "npm run build && vitest run"
   },
   "devDependencies": {
