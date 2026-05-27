@@ -2,11 +2,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import {
-  addCodexSandboxGuidance,
-  buildInitialPrompt,
-  buildNextRoundPrompt,
-} from "../../../src/core/cross-agent/prompts.ts";
+import { buildInitialPrompt, buildNextRoundPrompt } from "../../../src/core/cross-agent/prompts.ts";
 
 test("buildInitialPrompt includes focus, context, target files, and review viewpoints", () => {
   const prompt = buildInitialPrompt({
@@ -32,12 +28,4 @@ test("buildNextRoundPrompt includes previous output, focus, and follow-up direct
   assert.match(prompt, /C:\/data\/round-1-output\.md/);
   assert.match(prompt, /根拠が弱い指摘を検証して/);
   assert.match(prompt, /確信度が上がった点/);
-});
-
-test("addCodexSandboxGuidance asks Codex to request confirmation instead of inferring blocked access", () => {
-  const prompt = addCodexSandboxGuidance("レビューして\n");
-
-  assert.match(prompt, /sandbox \/ permission handling/);
-  assert.match(prompt, /不足情報を推測しない/);
-  assert.match(prompt, /ユーザー確認または権限昇格が必要/);
 });

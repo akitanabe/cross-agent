@@ -1,12 +1,3 @@
-const CODEX_SANDBOX_GUIDANCE = `## Codex sandbox / permission handling
-- sandbox、権限、ネットワーク制約により、必要なファイルの読み取り、workspace の確認、または必要なネットワークアクセスができない場合、不足情報を推測しないでください。
-- 続行前にユーザー確認または権限昇格が必要であることを明記し、ブロックされた file、directory、command、network access を具体的に列挙してください。
-- ブロックされたアクセスなしでも十分な情報がある場合はレビューを続けて構いませんが、その制約の影響を受ける指摘には制限付きであることを明示してください。`;
-
-export function addCodexSandboxGuidance(promptText: string): string {
-  return `${promptText.trimEnd()}\n\n${CODEX_SANDBOX_GUIDANCE}\n`;
-}
-
 // 初回レビュー用の定型 prompt 本文を組み立てる。
 export function buildInitialPrompt({
   focusQuestion,

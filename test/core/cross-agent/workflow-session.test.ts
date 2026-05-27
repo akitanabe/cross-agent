@@ -100,7 +100,6 @@ test("prepareInitialRound creates prompt and adapter request", async () => {
     const prompt = await readFile(adapterRequest.prompt_file, "utf8");
     assert.match(prompt, /レビューして/);
     assert.match(prompt, /README\.md/);
-    assert.match(prompt, /Codex sandbox \/ permission handling/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -171,7 +170,6 @@ test("prepareNextRound appends a deep dive round and adapter request", async () 
     assert.match(prompt, /Round 1 の重要指摘/);
     assert.match(prompt, /round-1-codex-output\.md/);
     assert.match(prompt, /設計判断を確認して/);
-    assert.match(prompt, /Codex sandbox \/ permission handling/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
