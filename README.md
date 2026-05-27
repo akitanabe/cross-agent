@@ -21,14 +21,14 @@ cross-agent/
 │   │   ├── review/SKILL.md          # オーケストレーター（cross-agent:review）
 │   │   ├── codex-adapter/SKILL.md   # Codex CLI 固有の実装
 │   │   └── claude-adapter/SKILL.md  # Claude 固有の実装
-│   ├── docs/
-│   │   ├── cross-agent-spec.md      # cross-agent 詳細仕様
-│   │   ├── codex-adapter-spec.md    # codex-adapter 詳細仕様
-│   │   └── claude-adapter-spec.md   # claude-adapter 詳細仕様
 │   └── scripts/
 │       ├── cross-agent-runner.mjs   # cross-agent runner
 │       ├── codex-adapter-runner.mjs # Codex adapter runner
 │       └── claude-adapter-runner.mjs # Claude adapter runner
+├── docs/
+│   ├── cross-agent-spec.md          # cross-agent 詳細仕様
+│   ├── codex-adapter-spec.md        # codex-adapter 詳細仕様
+│   └── claude-adapter-spec.md       # claude-adapter 詳細仕様
 ├── src/
 │   ├── runners/                     # runner の TypeScript 正本
 │   └── core/                        # 責務別の共有実装

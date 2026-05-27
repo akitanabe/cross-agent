@@ -131,12 +131,12 @@ file path を導出するため、codex-agent は完了シグナルだけを最�
 
 - 開発 repo の実装本体: `src/runners/codex-adapter-runner.ts`
 - 配布 runner: `scripts/codex-adapter-runner.mjs`
-- 仕様: `docs/codex-adapter-spec.md`
+- 仕様: https://github.com/akitanabe/cross-agent/blob/main/docs/codex-adapter-spec.md
 - 開発 repo のテスト: `test/runners/codex-adapter-runner.test.ts`, `test/core/codex-adapter/*.test.ts`
 - Node.js: 24+
 
 詳細な入出力契約、state 更新範囲、artifact、エラーコード、Codex CLI の分岐条件は
-[docs/codex-adapter-spec.md](../../docs/codex-adapter-spec.md) を正とする。
+https://github.com/akitanabe/cross-agent/blob/main/docs/codex-adapter-spec.md を正とする。
 
 開発 repo で runner を変更したら、少なくとも以下を実行する。
 
