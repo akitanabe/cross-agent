@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import { createClaudeRequestFixture } from "../helpers/claude-adapter-fixtures.ts";
 
-const runnerPath = fileURLToPath(new URL("../../scripts/claude-adapter-runner.mjs", import.meta.url));
+const runnerPath = fileURLToPath(new URL("../../plugin/scripts/claude-adapter-runner.mjs", import.meta.url));
 
 test("claude adapter CLI prepare writes input file path to stdout", async () => {
   const temp = await mkdtemp(join(tmpdir(), "claude-adapter-"));

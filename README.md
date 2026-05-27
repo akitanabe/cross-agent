@@ -10,22 +10,25 @@
 ```
 cross-agent/
 ├── .claude-plugin/
-│   └── plugin.json                  # プラグインマニフェスト
-├── agents/
-│   ├── codex-agent.md               # Codex adapter を実行する subagent
-│   └── claude-agent.md              # Claude adapter を実行する subagent
-├── skills/
-│   ├── review/SKILL.md              # オーケストレーター（cross-agent:review）
-│   ├── codex-adapter/SKILL.md       # Codex CLI 固有の実装
-│   └── claude-adapter/SKILL.md      # Claude 固有の実装
-├── docs/
-│   ├── cross-agent-spec.md          # cross-agent 詳細仕様
-│   ├── codex-adapter-spec.md        # codex-adapter 詳細仕様
-│   └── claude-adapter-spec.md       # claude-adapter 詳細仕様
-├── scripts/
-│   ├── cross-agent-runner.mjs       # cross-agent runner
-│   ├── codex-adapter-runner.mjs     # Codex adapter runner
-│   └── claude-adapter-runner.mjs    # Claude adapter runner
+│   └── marketplace.json             # Claude Code marketplace catalog
+├── plugin/                          # Claude Code plugin package
+│   ├── .claude-plugin/
+│   │   └── plugin.json              # プラグインマニフェスト
+│   ├── agents/
+│   │   ├── codex-agent.md           # Codex adapter を実行する subagent
+│   │   └── claude-agent.md          # Claude adapter を実行する subagent
+│   ├── skills/
+│   │   ├── review/SKILL.md          # オーケストレーター（cross-agent:review）
+│   │   ├── codex-adapter/SKILL.md   # Codex CLI 固有の実装
+│   │   └── claude-adapter/SKILL.md  # Claude 固有の実装
+│   ├── docs/
+│   │   ├── cross-agent-spec.md      # cross-agent 詳細仕様
+│   │   ├── codex-adapter-spec.md    # codex-adapter 詳細仕様
+│   │   └── claude-adapter-spec.md   # claude-adapter 詳細仕様
+│   └── scripts/
+│       ├── cross-agent-runner.mjs   # cross-agent runner
+│       ├── codex-adapter-runner.mjs # Codex adapter runner
+│       └── claude-adapter-runner.mjs # Claude adapter runner
 ├── src/
 │   ├── runners/                     # runner の TypeScript 正本
 │   └── core/                        # 責務別の共有実装
@@ -60,18 +63,18 @@ cross-agent/
 npm install
 npm run check
 npm test
-claude --plugin-dir /path/to/cross-agent
-claude plugin validate /path/to/cross-agent
+claude --plugin-dir /path/to/cross-agent/plugin
+claude plugin validate /path/to/cross-agent/plugin
 ```
 
-runner は `src/runners/*.ts` を正本とし、`npm run build` で `scripts/*.mjs` に bundle する。
+runner は `src/runners/*.ts` を正本とし、`npm run build` で `plugin/scripts/*.mjs` に bundle する。
 
 ```bash
-node scripts/cross-agent-runner.mjs start-session --data-dir /path/to/data --target-root /path/to/repo
-node scripts/cross-agent-runner.mjs prepare-initial --data-dir /path/to/data --review-session-id <id> --agent codex --focus-question "..." --target-files /path/to/file
-node scripts/codex-adapter-runner.mjs prepare --data-dir /path/to/data --request /path/to/data/artifacts/<id>/round-1-adapter-request.json
-node scripts/codex-adapter-runner.mjs complete --data-dir /path/to/data --run /path/to/round-1-codex-run.json
-node scripts/cross-agent-runner.mjs complete-current-round --data-dir /path/to/data --review-session-id <id>
+node plugin/scripts/cross-agent-runner.mjs start-session --data-dir /path/to/data --target-root /path/to/repo
+node plugin/scripts/cross-agent-runner.mjs prepare-initial --data-dir /path/to/data --review-session-id <id> --agent codex --focus-question "..." --target-files /path/to/file
+node plugin/scripts/codex-adapter-runner.mjs prepare --data-dir /path/to/data --request /path/to/data/artifacts/<id>/round-1-adapter-request.json
+node plugin/scripts/codex-adapter-runner.mjs complete --data-dir /path/to/data --run /path/to/round-1-codex-run.json
+node plugin/scripts/cross-agent-runner.mjs complete-current-round --data-dir /path/to/data --review-session-id <id>
 ```
 
 Windows では adapter 境界の安定表現として forward slash を使う。例では `/path/to/...` と書いているが、
@@ -79,5 +82,10 @@ Windows の実パスは `C:/path/to/data` のように渡す。
 
 ## 配布
 
-marketplace 経由で配布する場合は `.claude-plugin/marketplace.json` を持つ
-リポジトリにこのプラグインを登録する（別途用意）。
+marketplace catalog は `.claude-plugin/marketplace.json` に置き、plugin 本体は `plugin/` にまとめている。
+GitHub から追加する場合は次を使う。
+
+```text
+/plugin marketplace add akitanabe/cross-agent
+/plugin install cross-agent@cross-agent
+```

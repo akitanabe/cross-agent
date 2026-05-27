@@ -12,7 +12,7 @@ import { normalizePath } from "../../src/core/shared/path-utils.ts";
 import { completeRoundFromEnvelope, writeAdapterResponse } from "../helpers/cross-agent-fixtures.ts";
 import { runNodeScript } from "../helpers/run-node-script.ts";
 
-const runnerPath = fileURLToPath(new URL("../../scripts/cross-agent-runner.mjs", import.meta.url));
+const runnerPath = fileURLToPath(new URL("../../plugin/scripts/cross-agent-runner.mjs", import.meta.url));
 
 function runRunner(args, input = "") {
   return runNodeScript(runnerPath, args, input);

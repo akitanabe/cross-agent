@@ -1,6 +1,7 @@
 {
-  "name": "local-cross-agent-marketplace",
-  "description": "Cross-agent review plugin marketplace for local development and private distribution.",
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "cross-agent",
+  "description": "Cross-Agent Review plugin marketplace.",
   "owner": {
     "name": "akitanabe",
     "email": "tanabe@determaind.biz"
@@ -8,7 +9,7 @@
   "plugins": [
     {
       "name": "cross-agent",
-      "source": "./",
+      "source": "./plugin",
       "description": "複数の外部エージェントにセカンドオピニオン・批判的レビューを依頼する Claude Code プラグイン。",
       "version": "1.0.0",
       "author": {

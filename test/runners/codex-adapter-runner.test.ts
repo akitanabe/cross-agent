@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import { createRequestFixture } from "../helpers/codex-adapter-fixtures.ts";
 
-const runnerPath = fileURLToPath(new URL("../../scripts/codex-adapter-runner.mjs", import.meta.url));
+const runnerPath = fileURLToPath(new URL("../../plugin/scripts/codex-adapter-runner.mjs", import.meta.url));
 
 test("codex adapter CLI prepare writes run spec file path to stdout", async () => {
   const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));

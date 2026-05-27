@@ -155,7 +155,7 @@ done
 
 ## 実装メモ
 
-- 実装本体: `src/runners/claude-adapter-runner.ts`
+- 開発 repo の実装本体: `src/runners/claude-adapter-runner.ts`
 - 配布 runner: `scripts/claude-adapter-runner.mjs`
 - 仕様: `docs/claude-adapter-spec.md`
 - Node.js: 24+
@@ -163,10 +163,10 @@ done
 詳細な入出力契約、state 更新範囲、artifact、エラーコード、蓄積 context の形式は
 [docs/claude-adapter-spec.md](../../docs/claude-adapter-spec.md) を正とする。
 
-runner を変更したら、少なくとも以下を実行する。
+開発 repo で runner を変更したら、少なくとも以下を実行する。
 
 ```bash
 npm run check
 npm test
-claude plugin validate .
+claude plugin validate plugin
 ```
