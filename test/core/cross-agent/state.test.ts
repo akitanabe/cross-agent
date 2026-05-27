@@ -6,7 +6,6 @@ import { normalizeOptions, sessionPaths } from "../../../src/core/cross-agent/st
 
 test("normalizeOptions fills defaults", () => {
   assert.deepEqual(normalizeOptions({ review_depth: "high" }), {
-    max_rounds: 2,
     auto_deep_dive: true,
     review_depth: "high",
     keep_artifacts: false,

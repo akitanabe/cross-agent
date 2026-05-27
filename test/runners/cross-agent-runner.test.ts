@@ -35,8 +35,8 @@ test("start-session command writes review session id as text", async () => {
       targetRoot,
       "--review-depth",
       "low",
-      "--max-rounds",
-      "1",
+      "--auto-deep-dive",
+      "false",
     ]);
 
     assert.equal(result.stdout, "session-1\n");
@@ -44,7 +44,7 @@ test("start-session command writes review session id as text", async () => {
     const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
     assert.equal(state.review_session_id, "session-1");
     assert.equal(state.options.review_depth, "low");
-    assert.equal(state.options.max_rounds, 1);
+    assert.equal(state.options.auto_deep_dive, false);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

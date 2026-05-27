@@ -14,6 +14,11 @@ function parseIntegerOption(value, optionName) {
   if (!Number.isSafeInteger(number)) throw new Error(`${optionName} must be an integer.`);
   return number;
 }
+function parseBooleanOption(value, optionName) {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new Error(`${optionName} must be true or false.`);
+}
 function requireOption(args, field, optionName) {
   if (args[field] == null || args[field] === "") throw new Error(`${optionName} is required.`);
   return args[field];
@@ -93,7 +98,6 @@ function normalizePathList(values, platform = process.platform) {
 // src/core/cross-agent/state.ts
 var OWNER = "cross-agent";
 var DEFAULT_OPTIONS = {
-  max_rounds: 2,
   auto_deep_dive: true,
   review_depth: "medium",
   keep_artifacts: false
@@ -562,13 +566,6 @@ async function prepareNextRound(input) {
   if (roundKind === "recovery" && previousResult.status !== "failed") {
     throw new Error(`recovery requires previous round status=failed, got ${previousResult.status}`);
   }
-  const maxRounds = state.options?.max_rounds ?? DEFAULT_OPTIONS.max_rounds;
-  if (roundKind !== "follow_up") {
-    const consumed = rounds.filter((entry) => entry.kind !== "follow_up").length;
-    if (consumed >= maxRounds) {
-      throw new Error(`max_rounds exceeded: ${consumed + 1} > ${maxRounds}`);
-    }
-  }
   const promptText = buildNextRoundPrompt({
     promptText: input.prompt_text,
     previousOutputFile: previousResult.output_file ?? null,
@@ -664,7 +661,7 @@ async function startSession(input) {
 function optionInput(args) {
   const options = {};
   if (args.reviewDepth != null) options.review_depth = args.reviewDepth;
-  if (args.maxRounds != null) options.max_rounds = args.maxRounds;
+  if (args.autoDeepDive != null) options.auto_deep_dive = args.autoDeepDive;
   return Object.keys(options).length ? options : void 0;
 }
 async function readOptionalTextFile(filePath) {
@@ -695,12 +692,12 @@ var commonOptions = {
 };
 var commandArgs = {
   "start-session": {
-    usage: "start-session --data-dir <CLAUDE_PLUGIN_DATA> --target-root <root> [--review-session-id <id>] [--review-depth <level>] [--max-rounds <n>]",
+    usage: "start-session --data-dir <CLAUDE_PLUGIN_DATA> --target-root <root> [--review-session-id <id>] [--review-depth <level>] [--auto-deep-dive <true|false>]",
     options: {
       "--target-root": { field: "targetRoot" },
       "--review-session-id": { field: "reviewSessionId" },
       "--review-depth": { field: "reviewDepth" },
-      "--max-rounds": { field: "maxRounds", parse: parseIntegerOption }
+      "--auto-deep-dive": { field: "autoDeepDive", parse: parseBooleanOption }
     },
     buildInput: async (args) => ({
       ...commonInput(args),

@@ -32,7 +32,7 @@ test("startSession creates empty state", async () => {
       data_dir: dataDir,
       review_session_id: "session-1",
       target_root: targetRoot,
-      options: { review_depth: "low", max_rounds: 1 },
+      options: { review_depth: "low" },
     });
 
     const paths = sessionPaths(dataDir, "session-1");
@@ -59,7 +59,7 @@ test("prepareInitialRound creates prompt and adapter request", async () => {
       data_dir: dataDir,
       review_session_id: "session-1",
       target_root: targetRoot,
-      options: { review_depth: "low", max_rounds: 1 },
+      options: { review_depth: "low" },
     });
 
     const result = await prepareInitialRound({
@@ -115,7 +115,7 @@ test("prepareNextRound appends a deep dive round and adapter request", async () 
       data_dir: dataDir,
       review_session_id: "session-1",
       target_root: targetRoot,
-      options: { review_depth: "high", max_rounds: 2 },
+      options: { review_depth: "high" },
     });
     await prepareInitialRound({
       data_dir: dataDir,
@@ -185,7 +185,6 @@ test("prepareNextRound rejects deep_dive when previous round failed", async () =
       data_dir: dataDir,
       review_session_id: "session-1",
       target_root: targetRoot,
-      options: { max_rounds: 2 },
     });
     await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
     await completeRoundFromEnvelope(dataDir, {
@@ -221,7 +220,6 @@ test("prepareNextRound rejects recovery when previous round completed", async ()
       data_dir: dataDir,
       review_session_id: "session-1",
       target_root: targetRoot,
-      options: { max_rounds: 2 },
     });
     await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
 
@@ -251,7 +249,7 @@ test("prepareNextRound rejects recovery when previous round completed", async ()
   }
 });
 
-test("prepareNextRound max_rounds does not count follow_up rounds", async () => {
+test("prepareNextRound allows explicit deep_dive after follow_up", async () => {
   const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
   try {
     const targetRoot = join(temp, "repo");
@@ -261,7 +259,6 @@ test("prepareNextRound max_rounds does not count follow_up rounds", async () => 
       data_dir: dataDir,
       review_session_id: "session-1",
       target_root: targetRoot,
-      options: { max_rounds: 2 },
     });
     await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
 
@@ -281,7 +278,7 @@ test("prepareNextRound max_rounds does not count follow_up rounds", async () => 
       data_dir: dataDir,
       review_session_id: "session-1",
       round_kind: "follow_up",
-      prompt_text: "ユーザー追加質問 (consumed=1 のまま残る想定)",
+      prompt_text: "ユーザー追加質問",
     });
     const round2Output = join(paths.artifactDir, "round-2-codex-output.md");
     await writeFile(round2Output, "round 2", "utf8");
@@ -298,50 +295,10 @@ test("prepareNextRound max_rounds does not count follow_up rounds", async () => 
       data_dir: dataDir,
       review_session_id: "session-1",
       round_kind: "deep_dive",
-      prompt_text: "follow_up 後の deep_dive は通る (consumed=1, max=2)",
+      prompt_text: "ユーザーが明示した追加 deep_dive は通る",
     });
     assert.equal(result.envelope.round, 3);
     assert.equal(result.envelope.round_kind, "deep_dive");
-  } finally {
-    await rm(temp, { recursive: true, force: true });
-  }
-});
-
-test("prepareNextRound max_rounds blocks deep_dive when budget exhausted", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
-  try {
-    const targetRoot = join(temp, "repo");
-    const dataDir = join(temp, "data");
-    await mkdir(targetRoot, { recursive: true });
-    await startSession({
-      data_dir: dataDir,
-      review_session_id: "session-1",
-      target_root: targetRoot,
-      options: { max_rounds: 1 },
-    });
-    await prepareInitialRound({ data_dir: dataDir, review_session_id: "session-1" });
-
-    const paths = sessionPaths(dataDir, "session-1");
-    const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
-    await writeFile(outputFile, "ok", "utf8");
-    await completeRoundFromEnvelope(dataDir, {
-      contract_version: 1,
-      review_session_id: "session-1",
-      agent: "codex",
-      round: 1,
-      status: "completed",
-      output_file: outputFile,
-    });
-
-    await assert.rejects(
-      prepareNextRound({
-        data_dir: dataDir,
-        review_session_id: "session-1",
-        round_kind: "deep_dive",
-        prompt_text: "max_rounds=1 では deep_dive は通らない",
-      }),
-      /max_rounds exceeded/,
-    );
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

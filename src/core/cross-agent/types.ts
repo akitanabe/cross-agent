@@ -20,7 +20,6 @@ import type {
 export type OutputType = "text" | "json";
 
 export type CrossAgentOptions = {
-  max_rounds: number;
   auto_deep_dive: boolean;
   review_depth: ReviewDepth;
   keep_artifacts: boolean;

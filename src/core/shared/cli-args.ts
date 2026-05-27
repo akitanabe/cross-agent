@@ -12,6 +12,12 @@ export function parseIntegerOption(value: string, optionName: string): number {
   return number;
 }
 
+export function parseBooleanOption(value: string, optionName: string): boolean {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new Error(`${optionName} must be true or false.`);
+}
+
 export function requireOption<TArgs extends Record<string, unknown>>(
   args: TArgs,
   field: string,

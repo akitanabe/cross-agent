@@ -20,7 +20,7 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 - `target_files`: レビュー対象として指定されたファイル
 - `target_root`: レビュー対象の作業 root
 - `review_depth`: 既定 `medium`
-- `max_rounds`: 既定 `2`
+- `auto_deep_dive`: 既定 `true`
 
 対象や質問が特定できない場合は、adapter を呼ぶ前に通常会話で確認する。
 
@@ -37,6 +37,7 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 複数候補があり自動決定できない場合はユーザーへ確認する。
 
 機械的にできる session state の作成は `cross-agent-runner.mjs` に任せる。
+ユーザーが自動深掘りを不要と明示した場合は `--auto-deep-dive "false"` を渡す。
 
 `--data-dir` は全 runner 呼び出しで必須。plugin 文脈では `${CLAUDE_PLUGIN_DATA}` をそのまま渡す。
 
@@ -50,7 +51,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --target-root "<target_root>" \
   --review-depth "medium" \
-  --max-rounds "2"
+  --auto-deep-dive "true"
 ```
 
 Git Bash から Windows UNC を渡す場合は `"//Server/Share/path"` の形式にする。
@@ -113,14 +114,14 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" get-round-output \
 
 ## 深掘りと統合
 
-`max_rounds <= 1` の場合は深掘りしない。
+`auto_deep_dive` が `false` の場合は自動深掘りしない。
 
 Round 1 の結果（`get-round-output` で取得した出力）を確認して追加確認が必要な場合は、Round 2 の prompt を作り、同じ
 adapter request 形式で原則同じ agent に送る。
 
 Round 2 を実行しない条件:
 
-- `max_rounds <= 1`
+- `auto_deep_dive` が `false`
 - Round 1 が失敗しており、深掘りより復旧やユーザー確認が必要
 - Round 1 が短く、明確に問題なしと結論している
 - ユーザー質問が単純で、Round 1 だけで十分に回答されている
@@ -134,12 +135,45 @@ Round 2 を実行する条件:
 
 ## 2回目以降
 
-追加 round の prompt 保存、state への round 登録、adapter request 作成は runner に任せる。
+追加 round は必ず以下の順序で進める。
+
+1. 追加依頼の目的と `round_kind` を決める
+2. 追加依頼本文を prompt draft file に **Write** する
+3. その prompt draft file を `--prompt-file` に渡して `prepare-next-round` を実行する
+4. runner が返した adapter request envelope file path を使って subagent に委譲する
+5. subagent 完了後に `complete-current-round` と `get-round-output` を実行する
+
+`prepare-next-round` は `--prompt-file` が必須。ユーザーから follow-up 指示を受けた直後に、prompt draft file を
+まだ書いていない状態で runner を起動してはいけない。
+
+追加 round は、前の round が完了済みであることを前提にする。直前の subagent 実行後に `complete-current-round` を
+まだ実行していない場合は、follow-up prompt を書く前に current round を閉じ、`get-round-output` で出力本文を取得する。
+
+prompt draft file は `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-<next_round>-prompt.md` に書く。
+`<next_round>` は既存 session の最後の round の次の番号。runner はこの draft を読み込み、前回出力への参照や
+出力方針を足した canonical prompt として同じ round の prompt artifact を作成する。同じ path を渡した場合、
+draft file は canonical prompt で上書きされる。
+
+`round_kind` は用途で使い分ける。
+
+| kind        | 用途                                                          |
+| ----------- | ------------------------------------------------------------- |
+| `deep_dive` | Round 1 の重要指摘を深掘り・反証・見落とし確認する自動深掘り  |
+| `follow_up` | 統合表示後のユーザー追加質問                                 |
+| `recovery`  | adapter 失敗後に、同じ session を使って復旧・再試行する round |
+
+### 自動深掘り
+
+自動深掘りは `round_kind: "deep_dive"` として実行する。Round 2 の自動深掘り prompt には、Round 1 の繰り返しではなく以下を含める。
+
+- 具体性に欠ける重要指摘の掘り下げ
+- 根拠が弱い指摘や言い過ぎに見える指摘の批判的検証
+- Round 1 で触れられていない重要観点の確認
 
 **Write** `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-2-prompt.md`:
 
 ```md
-<round 2 prompt>
+<deep dive prompt>
 ```
 
 ```bash
@@ -151,31 +185,44 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-next-round \
   --prompt-file "${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-2-prompt.md"
 ```
 
-runner が返した adapter request envelope file path を使う。
-
-`round_kind` は用途で使い分ける。
-
-| kind        | 用途                                                          |
-| ----------- | ------------------------------------------------------------- |
-| `deep_dive` | Round 1 の重要指摘を深掘り・反証・見落とし確認する自動深掘り  |
-| `follow_up` | 統合表示後のユーザー追加質問。`max_rounds` の対象外           |
-| `recovery`  | adapter 失敗後に、同じ session を使って復旧・再試行する round |
-
-Round 2 の自動深掘り prompt には、Round 1 の繰り返しではなく以下を含める。
-
-- 具体性に欠ける重要指摘の掘り下げ
-- 根拠が弱い指摘や言い過ぎに見える指摘の批判的検証
-- Round 1 で触れられていない重要観点の確認
-
-Round 2 を実行した後は、Round 1 と同様に `complete-current-round` で current round を閉じ、
-`get-round-output` で出力本文を取得する。
+Round 2 を実行した後は、Round 1 と同様に `complete-current-round` で current round を閉じ、`get-round-output` で出力本文を取得する。
 
 Round 2 終了後は、まず Round 1 と Round 2 の結果を統合して結論を返す。その回答の末尾で、
 追加質問があるかをユーザーに確認する。ユーザーから追加質問があった場合だけ、次の round を
-`round_kind: "follow_up"` として開始する。`follow_up` は `max_rounds` の対象外とする。
+`round_kind: "follow_up"` として開始する。
+
+### ユーザーフォローアップ
+
+follow-up はユーザーが追加質問、反論、別観点の確認、特定指摘の深掘りを明示した場合だけ実行する。
+自動では開始しない。
+
+follow-up の prompt draft には、最低限以下を含める。
+
+- ユーザーの追加質問を、意味を変えずにそのまま近い形で書く
+- どの既存回答や指摘に対する follow-up かを明示する
+- 追加で見てほしいファイル、制約、期待する出力形式があれば書く
+- 既存レビュー全体の再実行ではなく、追加質問に集中するよう指示する
+
+**Write** `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-<next_round>-prompt.md`:
+
+```md
+<user follow-up request>
+```
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-next-round \
+  --data-dir "${CLAUDE_PLUGIN_DATA}" \
+  --review-session-id "<review_session_id>" \
+  --agent "<agent>" \
+  --round-kind "follow_up" \
+  --prompt-file "${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-<next_round>-prompt.md"
+```
+
+follow-up の `agent` は原則として前回 round と同じ agent にする。ユーザーが別 agent を指定した場合だけ変更する。
+`previous_round` は通常指定しない。特定 round への追加質問だと明確な場合だけ `--previous-round "<round>"` を付ける。
 
 Round 3 以降は原則として自動継続しない。ユーザーが明示的に深掘り継続を求めた場合だけ、
-`max_rounds` の範囲内で `deep_dive` を追加する。
+`deep_dive` を追加する。
 
 統合表示では以下を簡潔に示す。
 

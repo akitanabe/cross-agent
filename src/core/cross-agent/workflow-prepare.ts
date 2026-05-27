@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { buildAdapterRequest } from "./envelope.ts";
 import { buildInitialPrompt, buildNextRoundPrompt } from "./prompts.ts";
-import { DEFAULT_OPTIONS, artifact, nowIso, resolveDataDir, validateRoundNumber, writeJsonAtomic } from "./state.ts";
+import { artifact, nowIso, resolveDataDir, validateRoundNumber, writeJsonAtomic } from "./state.ts";
 import type {
   ArtifactRecord,
   PrepareInitialRoundInput,
@@ -186,14 +186,6 @@ export async function prepareNextRound(input: PrepareNextRoundInput): Promise<Pr
   }
   if (roundKind === "recovery" && previousResult.status !== "failed") {
     throw new Error(`recovery requires previous round status=failed, got ${previousResult.status}`);
-  }
-
-  const maxRounds = state.options?.max_rounds ?? DEFAULT_OPTIONS.max_rounds;
-  if (roundKind !== "follow_up") {
-    const consumed = rounds.filter((entry) => entry.kind !== "follow_up").length;
-    if (consumed >= maxRounds) {
-      throw new Error(`max_rounds exceeded: ${consumed + 1} > ${maxRounds}`);
-    }
   }
 
   const promptText = buildNextRoundPrompt({

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { parseCommandArgs, parseIntegerOption, requireOption } from "../shared/cli-args.ts";
+import { parseBooleanOption, parseCommandArgs, parseIntegerOption, requireOption } from "../shared/cli-args.ts";
 import { sessionPaths } from "./state.ts";
 import {
   commandOutput,
@@ -32,7 +32,7 @@ type CliArgs = Record<string, unknown> & {
   targetRoot?: string;
   reviewSessionId?: string;
   reviewDepth?: ReviewDepth;
-  maxRounds?: number;
+  autoDeepDive?: boolean;
   agent?: string;
   focusQuestion?: string;
   contextFile?: string;
@@ -57,7 +57,7 @@ type CommandDefinition = {
 function optionInput(args: CliArgs): Partial<CrossAgentOptions> | undefined {
   const options: Partial<CrossAgentOptions> = {};
   if (args.reviewDepth != null) options.review_depth = args.reviewDepth;
-  if (args.maxRounds != null) options.max_rounds = args.maxRounds;
+  if (args.autoDeepDive != null) options.auto_deep_dive = args.autoDeepDive;
   return Object.keys(options).length ? options : undefined;
 }
 
@@ -96,12 +96,12 @@ const commonOptions: Record<string, { field: string }> = {
 const commandArgs: Record<string, CommandDefinition> = {
   "start-session": {
     usage:
-      "start-session --data-dir <CLAUDE_PLUGIN_DATA> --target-root <root> [--review-session-id <id>] [--review-depth <level>] [--max-rounds <n>]",
+      "start-session --data-dir <CLAUDE_PLUGIN_DATA> --target-root <root> [--review-session-id <id>] [--review-depth <level>] [--auto-deep-dive <true|false>]",
     options: {
       "--target-root": { field: "targetRoot" },
       "--review-session-id": { field: "reviewSessionId" },
       "--review-depth": { field: "reviewDepth" },
-      "--max-rounds": { field: "maxRounds", parse: parseIntegerOption },
+      "--auto-deep-dive": { field: "autoDeepDive", parse: parseBooleanOption },
     },
     buildInput: async (args) => ({
       ...commonInput(args),

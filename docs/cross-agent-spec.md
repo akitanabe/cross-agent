@@ -20,7 +20,7 @@ Skill はユーザー依頼から以下を構造化する。
 - `target_root`: レビュー対象の作業 root
 - `context_text`: 会話、プラン、設計案などの要約。ファイル指定だけで十分な場合は省略可
 - `options.review_depth`: `low` / `medium` / `high`
-- `options.max_rounds`: 既定 `2`
+- `options.auto_deep_dive`: Round 1 後に自動深掘りを行うか。既定 `true`
 
 対象や質問が特定できない場合、adapter を呼ぶ前に通常会話で確認する。
 v1 では `needs_user_input` state は使わない。
@@ -54,7 +54,7 @@ node scripts/cross-agent-runner.mjs start-session \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --target-root "<target_root>" \
   --review-depth "medium" \
-  --max-rounds "2"
+  --auto-deep-dive "true"
 ```
 
 CLI input:
@@ -63,7 +63,7 @@ CLI input:
 - `--target-root`: 必須
 - `--review-session-id`: 任意。省略時は runner が UUID を生成する
 - `--review-depth`: 任意。省略時は `medium`
-- `--max-rounds`: 任意。省略時は `2`
+- `--auto-deep-dive`: 任意。`true` / `false`。省略時は `true`
 
 `--data-dir` は必須。plugin 文脈では SKILL から `${CLAUDE_PLUGIN_DATA}` をそのまま渡す
 (Claude Code が skill content を読み込む時点で絶対パスに展開する)。env var は Bash 経由では
@@ -160,9 +160,8 @@ runner は以下を作成する。
 - `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-N-adapter-request.json`
 
 runner は既存の `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json` に
-round、artifact metadata を append する。`deep_dive` や `recovery` など自動処理に
-属する round は `options.max_rounds` を超えて作成できない。ユーザーの追加質問である
-`follow_up` は `max_rounds` の対象外とする。
+round、artifact metadata を append する。runner は round 数による上限を持たない。
+自動継続の抑制は Skill 側が `options.auto_deep_dive` とユーザー明示の有無で判断する。
 
 ## Runner: complete-round
 
@@ -254,7 +253,7 @@ stdout には output 本文だけを出力する。
 | `status` | `cross-agent` | 全体の進行状態 |
 | `target_root` | `cross-agent` | レビュー対象 root |
 | `current_round` | `cross-agent` | Round 制御 |
-| `options` | `cross-agent` | `max_rounds` / `review_depth` など |
+| `options` | `cross-agent` | `auto_deep_dive` / `review_depth` など |
 | `context` | `cross-agent` | 各 adapter へ渡す共通入力 |
 | `rounds` | `cross-agent` | Round ごとの実行履歴 |
 | Codex agent state file | `codex-adapter` | `thread_id` / resume / Codex artifacts/errors |
@@ -289,7 +288,6 @@ cross-agent はその具体パスを request envelope や top-level state に含
   "target_root": "...",
   "current_round": 1,
   "options": {
-    "max_rounds": 2,
     "auto_deep_dive": true,
     "review_depth": "medium",
     "keep_artifacts": false
@@ -392,14 +390,14 @@ Windows の `\` をエスケープせず素で入れると parse 失敗する。
 
 ## Deep dive
 
-`max_rounds <= 1` の場合は Round 2 を実行しない。
+`auto_deep_dive` が `false` の場合、Skill は自動で Round 2 を実行しない。
 
 Round 1 の成功した出力本文を `get-round-output` で取得し、追加確認が必要な場合は `kind: "deep_dive"` の
 Round 2 を実行する。Round 2 は原則として Round 1 と同じ agent に送る。
 
 Round 2 を実行しない条件:
 
-- `max_rounds <= 1`
+- `auto_deep_dive` が `false`
 - Round 1 の `agent_result.status` が `completed` ではない
 - Round 1 の成功結果が短く、かつ明確に「問題なし」と結論している
 - ユーザー質問が単純な Yes/No で、Round 1 で十分に回答された
@@ -428,11 +426,11 @@ cross-agent は `prepare-next-round` で追加 round を作成し、adapter resp
 
 `round_kind` は以下の意味で使い分ける。
 
-| kind | 意味 | `max_rounds` |
-|---|---|---|
-| `deep_dive` | Round 1 の指摘を深掘り・反証・見落とし確認する自動深掘り | 対象 |
-| `follow_up` | 統合表示後のユーザー追加質問 | 対象外 |
-| `recovery` | adapter 失敗後の復旧・再試行 | 対象 |
+| kind | 意味 |
+|---|---|
+| `deep_dive` | Round 1 の指摘を深掘り・反証・見落とし確認する自動深掘り、またはユーザーが明示した追加深掘り |
+| `follow_up` | 統合表示後のユーザー追加質問 |
+| `recovery` | adapter 失敗後の復旧・再試行 |
 
 `prepare-next-round` は `round_kind` ごとに次の前提条件を持つ。
 
@@ -443,13 +441,9 @@ cross-agent は `prepare-next-round` で追加 round を作成し、adapter resp
 - `follow_up`: 直前 round の `agent_result.status` は `completed` を推奨するが、失敗後の
   ユーザー質問もあり得るため緩める。本文参照ができない場合があることに注意する。
 
-`max_rounds` の予算は `follow_up` を除いた round 数 (`initial_review` / `deep_dive` /
-`recovery`) で評価する。`follow_up` を挟んだことで後続の `deep_dive` / `recovery` が
-誤って詰まらないようにする。
-
 Round 3 以降は v1 では自動継続しない。ユーザーが追加質問をした場合は
-`follow_up` として扱う。ユーザーが明示的に深掘り継続を求め、かつ `max_rounds` に
-余裕がある場合だけ、追加の `deep_dive` round を作成してよい。
+`follow_up` として扱う。ユーザーが明示的に深掘り継続を求めた場合だけ、追加の
+`deep_dive` round を作成してよい。
 
 `follow_up` で agent が未指定の場合は直前 round と同じ agent を使う。ユーザーが
 別 agent を指定した場合は、その agent を round に記録し、同じ envelope 形式で

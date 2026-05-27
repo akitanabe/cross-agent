@@ -7,7 +7,6 @@ import type { AdapterResponseStatus, ArtifactRecord, CrossAgentOptions, SessionP
 const OWNER = "cross-agent";
 
 export const DEFAULT_OPTIONS: CrossAgentOptions = {
-  max_rounds: 2,
   auto_deep_dive: true,
   review_depth: "medium",
   keep_artifacts: false,
