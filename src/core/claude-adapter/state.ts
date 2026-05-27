@@ -8,12 +8,7 @@ import type {
   AdapterResponseStatus,
 } from "../shared/adapter-envelope.ts";
 import { normalizePath } from "../shared/path-utils.ts";
-import type {
-  AdapterRequestInput,
-  AdapterRequestWithDataDir,
-  ArtifactPathSet,
-  RecoverableError,
-} from "./types.ts";
+import type { AdapterRequestInput, AdapterRequestWithDataDir, ArtifactPathSet, RecoverableError } from "./types.ts";
 
 const OWNER = "claude-adapter";
 

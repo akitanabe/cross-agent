@@ -78,7 +78,9 @@ export async function completeClaudeRun(
       paths,
       code: caught.code === "ENOENT" ? "state_file_missing" : "state_file_invalid",
       message:
-        caught.code === "ENOENT" ? "session state file does not exist." : `state file is not valid JSON: ${caught.message}`,
+        caught.code === "ENOENT"
+          ? "session state file does not exist."
+          : `state file is not valid JSON: ${caught.message}`,
     });
   }
 

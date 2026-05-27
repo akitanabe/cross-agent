@@ -4,13 +4,7 @@ import { normalizePath } from "../shared/path-utils.ts";
 import { readOrCreateAgentState, readSessionState, markAgentPrepared } from "./agent-state.ts";
 import { buildClaudeContext, buildClaudeInput, writeTextFile } from "./context.ts";
 import { failPrepare } from "./workflow-failure.ts";
-import {
-  agentContextFileFor,
-  artifactDirFor,
-  artifactPaths,
-  makeError,
-  validateRequest,
-} from "./state.ts";
+import { agentContextFileFor, artifactDirFor, artifactPaths, makeError, validateRequest } from "./state.ts";
 import type {
   AdapterRequestInput,
   ClaudeAgentState,
@@ -106,7 +100,10 @@ export async function prepareClaudeRun(
 
   const contextFile = agentContextFileFor(dataDir, request.review_session_id);
   await writeTextFile(paths.inputFile, buildClaudeInput({ request, contextFile, outputFile: paths.outputFile }));
-  await writeTextFile(paths.diagnosticFile, `# Claude adapter diagnostic\n\n- status: prepared\n- round: ${request.round}\n`);
+  await writeTextFile(
+    paths.diagnosticFile,
+    `# Claude adapter diagnostic\n\n- status: prepared\n- round: ${request.round}\n`,
+  );
   await writeTextFile(contextFile, buildClaudeContext({ request, sessionState, currentPaths: paths }));
   await markAgentPrepared(dataDir, request, paths, contextFile, agentState);
 

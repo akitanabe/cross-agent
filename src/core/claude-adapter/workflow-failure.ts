@@ -1,12 +1,7 @@
 import type { AdapterResponseEnvelope } from "../shared/adapter-envelope.ts";
 import { appendAgentArtifacts, saveAgentState } from "./agent-state.ts";
 import { artifact, makeError, makeResponse, nowIso, writeDiagnostic, writeJsonAtomic } from "./state.ts";
-import type {
-  AdapterRequestWithDataDir,
-  ArtifactPathSet,
-  ClaudeAgentState,
-  ClaudeCompleteResult,
-} from "./types.ts";
+import type { AdapterRequestWithDataDir, ArtifactPathSet, ClaudeAgentState, ClaudeCompleteResult } from "./types.ts";
 import { responsePath } from "./workflow-common.ts";
 
 export class ClaudePrepareFailedError extends Error {

@@ -48,7 +48,8 @@ export function buildClaudeContext({
   if (priorRounds.length) {
     for (const round of priorRounds) {
       if (round.prompt_file) lines.push(`- prompt_file: ${toDisplayPath(round.prompt_file)}`);
-      if (round.agent_result?.output_file) lines.push(`- output_file: ${toDisplayPath(round.agent_result.output_file)}`);
+      if (round.agent_result?.output_file)
+        lines.push(`- output_file: ${toDisplayPath(round.agent_result.output_file)}`);
     }
   } else {
     lines.push(`- none`);

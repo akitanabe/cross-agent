@@ -1,12 +1,7 @@
 import type { AdapterResponseEnvelope } from "../shared/adapter-envelope.ts";
 import { artifact, makeError, makeResponse, nowIso, writeDiagnostic, writeJsonAtomic } from "./state.ts";
 import { appendAgentArtifacts, saveAgentState } from "./agent-state.ts";
-import type {
-  AdapterRequestWithDataDir,
-  ArtifactPathSet,
-  CodexAgentState,
-  CodexCompleteResult,
-} from "./types.ts";
+import type { AdapterRequestWithDataDir, ArtifactPathSet, CodexAgentState, CodexCompleteResult } from "./types.ts";
 import { responsePath } from "./workflow-common.ts";
 
 export class CodexPrepareFailedError extends Error {

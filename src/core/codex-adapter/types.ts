@@ -75,8 +75,7 @@ export type CodexPrepareOptions = {
   dataDir?: string | null;
 };
 
-export type CodexPrepareResult =
-  | { kind: "run"; path: string; status: "prepared" };
+export type CodexPrepareResult = { kind: "run"; path: string; status: "prepared" };
 
 export type CodexCompleteResult = {
   path: string;
