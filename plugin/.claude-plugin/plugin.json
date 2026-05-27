@@ -5,8 +5,7 @@
   "description": "複数の外部エージェント（Codex / Claude Subagent など）に横断的にセカンドオピニオン・批判的レビューを依頼するプラグイン。",
   "version": "1.0.0",
   "author": {
-    "name": "akitanabe",
-    "email": "tanabe@determaind.biz"
+    "name": "akitanabe"
   },
   "license": "MIT",
   "keywords": [

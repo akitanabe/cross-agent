@@ -1,10 +1,9 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "cross-agent",
+  "name": "cross-agent-marketplace",
   "description": "Cross-Agent Review plugin marketplace.",
   "owner": {
-    "name": "akitanabe",
-    "email": "tanabe@determaind.biz"
+    "name": "akitanabe"
   },
   "plugins": [
     {
@@ -13,8 +12,7 @@
       "description": "複数の外部エージェントにセカンドオピニオン・批判的レビューを依頼する Claude Code プラグイン。",
       "version": "1.0.0",
       "author": {
-        "name": "akitanabe",
-        "email": "tanabe@determaind.biz"
+        "name": "akitanabe"
       }
     }
   ]

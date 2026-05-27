@@ -87,5 +87,5 @@ GitHub から追加する場合は次を使う。
 
 ```text
 /plugin marketplace add akitanabe/cross-agent
-/plugin install cross-agent@cross-agent
+/plugin install cross-agent@cross-agent-marketplace
 ```
