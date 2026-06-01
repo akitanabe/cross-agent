@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-// src/runners/cross-agent-runner.ts
+// src/runners/agent-review-runner.ts
 import { resolve as resolve5 } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// src/core/cross-agent/cli.ts
+// src/core/agent-review/cli.ts
 import { readFile as readFile3 } from "node:fs/promises";
 import { resolve as resolve4 } from "node:path";
 
@@ -74,7 +74,7 @@ function parseCommandArgs(argv, {
   );
 }
 
-// src/core/cross-agent/state.ts
+// src/core/agent-review/state.ts
 import { readFile, rename, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 
@@ -95,8 +95,8 @@ function normalizePathList(values, platform = process.platform) {
   return values.map((value) => normalizePath(value, platform));
 }
 
-// src/core/cross-agent/state.ts
-var OWNER = "cross-agent";
+// src/core/agent-review/state.ts
+var OWNER = "agent-review";
 var DEFAULT_OPTIONS = {
   auto_deep_dive: true,
   review_depth: "medium",
@@ -185,7 +185,7 @@ function normalizeOptions(options = {}) {
   };
 }
 
-// src/core/cross-agent/workflow-common.ts
+// src/core/agent-review/workflow-common.ts
 function commandOutput(outputType, content) {
   return { output_type: outputType, content };
 }
@@ -199,7 +199,7 @@ async function readSession(dataDir, reviewSessionId) {
   return { paths, state };
 }
 
-// src/core/cross-agent/workflow-complete.ts
+// src/core/agent-review/workflow-complete.ts
 import { stat as stat2 } from "node:fs/promises";
 import { resolve as resolve2 } from "node:path";
 async function validateExistingFile(filePath, label) {
@@ -333,11 +333,11 @@ async function completeCurrentRound(input) {
   });
 }
 
-// src/core/cross-agent/workflow-prepare.ts
+// src/core/agent-review/workflow-prepare.ts
 import { writeFile as writeFile2 } from "node:fs/promises";
 import { resolve as resolve3 } from "node:path";
 
-// src/core/cross-agent/envelope.ts
+// src/core/agent-review/envelope.ts
 function buildAdapterRequest({
   reviewSessionId,
   agent,
@@ -368,7 +368,7 @@ function buildAdapterRequest({
   };
 }
 
-// src/core/cross-agent/prompts.ts
+// src/core/agent-review/prompts.ts
 function buildInitialPrompt({
   focusQuestion,
   contextFile,
@@ -425,7 +425,7 @@ ${promptText}`);
 `;
 }
 
-// src/core/cross-agent/workflow-prepare.ts
+// src/core/agent-review/workflow-prepare.ts
 async function prepareRound({
   paths,
   state,
@@ -585,7 +585,7 @@ async function prepareNextRound(input) {
   });
 }
 
-// src/core/cross-agent/workflow-round.ts
+// src/core/agent-review/workflow-round.ts
 import { readFile as readFile2 } from "node:fs/promises";
 async function getRound(input) {
   const dataDir = resolveDataDir(input.data_dir);
@@ -617,7 +617,7 @@ async function getRoundOutput(input) {
   return commandOutput("text", await readFile2(round.output_file, "utf8"));
 }
 
-// src/core/cross-agent/workflow-session.ts
+// src/core/agent-review/workflow-session.ts
 import { randomUUID } from "node:crypto";
 import { mkdir as mkdir2 } from "node:fs/promises";
 async function startSession(input) {
@@ -657,7 +657,7 @@ async function startSession(input) {
   return commandOutput("text", reviewSessionId);
 }
 
-// src/core/cross-agent/cli.ts
+// src/core/agent-review/cli.ts
 function optionInput(args) {
   const options = {};
   if (args.reviewDepth != null) options.review_depth = args.reviewDepth;
@@ -793,10 +793,10 @@ function commandFor(name) {
 }
 function usage() {
   return `Usage:
-${Object.values(commandArgs).map((command) => `  node scripts/cross-agent-runner.mjs ${command.usage}`).join("\n")}`;
+${Object.values(commandArgs).map((command) => `  node scripts/agent-review-runner.mjs ${command.usage}`).join("\n")}`;
 }
 
-// src/runners/cross-agent-runner.ts
+// src/runners/agent-review-runner.ts
 function writeCommandOutput(result) {
   if (result.output_type === "text") {
     const text = String(result.content ?? "");

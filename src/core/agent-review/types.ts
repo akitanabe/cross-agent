@@ -19,7 +19,7 @@ import type {
 
 export type OutputType = "text" | "json";
 
-export type CrossAgentOptions = {
+export type AgentReviewOptions = {
   auto_deep_dive: boolean;
   review_depth: ReviewDepth;
   keep_artifacts: boolean;
@@ -62,7 +62,7 @@ export type SessionState = {
   status: string;
   target_root: string;
   current_round: number;
-  options: CrossAgentOptions;
+  options: AgentReviewOptions;
   context?: {
     context_file: string | null;
     initial_prompt_file: string | null;
@@ -101,7 +101,7 @@ export type StartSessionInput = {
   data_dir?: string | null;
   review_session_id?: string | null;
   target_root?: string | null;
-  options?: Partial<CrossAgentOptions>;
+  options?: Partial<AgentReviewOptions>;
 };
 
 export type PrepareInitialRoundInput = {

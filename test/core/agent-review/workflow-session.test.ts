@@ -5,11 +5,11 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { sessionPaths } from "../../../src/core/cross-agent/state.ts";
-import { prepareInitialRound, prepareNextRound } from "../../../src/core/cross-agent/workflow-prepare.ts";
-import { startSession } from "../../../src/core/cross-agent/workflow-session.ts";
+import { sessionPaths } from "../../../src/core/agent-review/state.ts";
+import { prepareInitialRound, prepareNextRound } from "../../../src/core/agent-review/workflow-prepare.ts";
+import { startSession } from "../../../src/core/agent-review/workflow-session.ts";
 import { normalizePath } from "../../../src/core/shared/path-utils.ts";
-import { completeRoundFromEnvelope } from "../../helpers/cross-agent-fixtures.ts";
+import { completeRoundFromEnvelope } from "../../helpers/agent-review-fixtures.ts";
 
 test("startSession throws when data_dir is missing (no env var fallback)", async () => {
   // 公式仕様 (plugins-reference) では ${CLAUDE_PLUGIN_DATA} は skill content の
@@ -22,7 +22,7 @@ test("startSession throws when data_dir is missing (no env var fallback)", async
 });
 
 test("startSession creates empty state", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -50,7 +50,7 @@ test("startSession creates empty state", async () => {
 });
 
 test("prepareInitialRound creates prompt and adapter request", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -106,7 +106,7 @@ test("prepareInitialRound creates prompt and adapter request", async () => {
 });
 
 test("prepareNextRound appends a deep dive round and adapter request", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -176,7 +176,7 @@ test("prepareNextRound appends a deep dive round and adapter request", async () 
 });
 
 test("prepareNextRound rejects deep_dive when previous round failed", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -211,7 +211,7 @@ test("prepareNextRound rejects deep_dive when previous round failed", async () =
 });
 
 test("prepareNextRound rejects recovery when previous round completed", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -250,7 +250,7 @@ test("prepareNextRound rejects recovery when previous round completed", async ()
 });
 
 test("prepareNextRound allows explicit deep_dive after follow_up", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -305,7 +305,7 @@ test("prepareNextRound allows explicit deep_dive after follow_up", async () => {
 });
 
 test("startSession rejects unsafe review_session_id input", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");

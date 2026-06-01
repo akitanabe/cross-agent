@@ -23,7 +23,7 @@
         "Bash(node \"**/claude-adapter-runner.mjs\" prepare **)",
         "Bash(node \"**/claude-adapter-runner.mjs\" complete **)",
         "Bash(codex exec **)",
-        "Bash(node \"**/cross-agent-runner.mjs\" **)"
+        "Bash(node \"**/agent-review-runner.mjs\" **)"
       ]
     }
   }

@@ -2,8 +2,8 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { buildAdapterRequest } from "../../../src/core/cross-agent/envelope.ts";
-import { normalizeOptions } from "../../../src/core/cross-agent/state.ts";
+import { buildAdapterRequest } from "../../../src/core/agent-review/envelope.ts";
+import { normalizeOptions } from "../../../src/core/agent-review/state.ts";
 
 test("buildAdapterRequest creates v1 envelope", () => {
   const request = buildAdapterRequest({

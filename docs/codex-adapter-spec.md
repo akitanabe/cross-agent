@@ -2,7 +2,7 @@
 
 ## 概要
 
-codex-adapter は Codex CLI 実行境界を担当する。cross-agent から request envelope file path を受け取り、
+codex-adapter は Codex CLI 実行境界を担当する。agent-review から request envelope file path を受け取り、
 Codex 専用の実行 spec を作成し、codex-agent が `codex exec` / `codex exec resume` を Bash から直接実行する。
 実行後、codex-adapter は Codex 固有 state を更新して response envelope を保存する。
 
@@ -10,13 +10,13 @@ runner は Codex CLI を `spawn` しない。runner の責務は request / state
 判定、Codex exec 専用 run spec の作成、実行結果の検証、state 更新、response envelope 作成に限定する。
 Codex CLI の実行は codex-agent の Bash 実行に限定し、任意 command / 任意 argv の実行権は渡さない。
 
-cross-agent は Codex の agent state file の中身を直接変更しない。`review_session_id` から
+agent-review は Codex の agent state file の中身を直接変更しない。`review_session_id` から
 Codex の `thread_id` へのマッピング、resume の成否判定、Codex CLI の event log 保存、
 Codex 由来の artifacts/errors はこの adapter に閉じる。
 
 ## 入力
 
-cross-agent から request envelope file path を受け取る。runner の `prepare` command は `--data-dir` と
+agent-review から request envelope file path を受け取る。runner の `prepare` command は `--data-dir` と
 `--request` で指定された JSON file を読む。
 
 ```json
@@ -50,7 +50,7 @@ cross-agent から request envelope file path を受け取る。runner の `prep
 - Codex agent state file は存在しなくてもよい。存在する場合は `review_session_id` と `agent` が envelope と一致する
 
 `context_file` と `target_files` は補助情報であり、Codex に渡す本文は `prompt_file` を正とする。
-それらのパス参照は cross-agent が `prompt_file` 内に含める。
+それらのパス参照は agent-review が `prompt_file` 内に含める。
 
 ## review_depth の翻訳
 
@@ -152,7 +152,7 @@ codex-adapter が変更してよい state は自分で導出する Codex agent s
 - 機械的な `updated_at`
 
 top-level session state の `rounds[]`, `current_round`, `status`, `context`, `options` は
-cross-agent の所有物なので、codex-adapter は変更しない。
+agent-review の所有物なので、codex-adapter は変更しない。
 
 Codex agent state file の形:
 
@@ -195,12 +195,12 @@ codex-adapter の実行は `prepare`、codex-agent による Codex CLI 実行、
 15. `[runner: complete]` 必要なら diagnostic artifact を作成する
 16. `[runner: complete]` Codex agent state file の state と artifacts/errors を更新する
 17. `[runner: complete]` response envelope を `round-<N>-codex-response.json` に保存し、その file path を stdout に返す
-18. `[codex-agent]` `complete` が成功したら、完了シグナルだけを cross-agent に返す
+18. `[codex-agent]` `complete` が成功したら、完了シグナルだけを agent-review に返す
 
 `prepare` が request / state 検証で失敗し、`codex-run.json` を作れない場合は、Codex CLI を実行しない。
 この場合も runner は可能な範囲で diagnostic artifact と failed response envelope を作成する。
 ただし `prepare` の stdout に response envelope file path は返さず、runner command はエラーとして終了する。
-codex-agent はこのエラーを受けたら Codex CLI 実行や `complete` へ進まない。cross-agent は subagent 返却値に
+codex-agent はこのエラーを受けたら Codex CLI 実行や `complete` へ進まない。agent-review は subagent 返却値に
 含まれる path を再利用せず、session state の `current_round` から adapter response envelope file を導出して
 round を閉じる。
 
@@ -314,7 +314,7 @@ run spec の `thread_id` と矛盾する場合は diagnostic に記録し、adap
 ## Response envelope
 
 `output_file`, `artifacts[].path`, `error.details_file` などの path フィールドは
-forward slash 表記 (`C:/Users/...`) で保存する。受信側 (cross-agent runner) は envelope file を
+forward slash 表記 (`C:/Users/...`) で保存する。受信側 (agent-review runner) は envelope file を
 `JSON.parse` するため、Windows の `\` をそのまま埋めると `\U` 等で parse 失敗になる。
 内部 state (Codex agent state file 等) は OS ネイティブの区切りで保持してよい。
 

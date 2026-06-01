@@ -2,11 +2,11 @@ import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 
 import { normalizePath } from "../shared/path-utils.ts";
-import type { AdapterResponseStatus, ArtifactRecord, CrossAgentOptions, SessionPathSet } from "./types.ts";
+import type { AdapterResponseStatus, ArtifactRecord, AgentReviewOptions, SessionPathSet } from "./types.ts";
 
-const OWNER = "cross-agent";
+const OWNER = "agent-review";
 
-export const DEFAULT_OPTIONS: CrossAgentOptions = {
+export const DEFAULT_OPTIONS: AgentReviewOptions = {
   auto_deep_dive: true,
   review_depth: "medium",
   keep_artifacts: false,
@@ -108,14 +108,14 @@ export function sessionPaths(dataDir: string, reviewSessionId: string): SessionP
   };
 }
 
-// state に append する cross-agent 生成 artifact metadata を作る。
+// state に append する agent-review 生成 artifact metadata を作る。
 export function artifact(
   path: string,
   kind: string,
   round: number | null = null,
   agent: string | null = null,
 ): ArtifactRecord {
-  // cross-agent が作った artifact だけ owner=cross-agent として記録する。
+  // agent-review が作った artifact だけ owner=agent-review として記録する。
   return {
     path,
     kind,
@@ -127,8 +127,8 @@ export function artifact(
   };
 }
 
-// 省略された cross-agent option を既定値で補完する。
-export function normalizeOptions(options: Partial<CrossAgentOptions> = {}): CrossAgentOptions {
+// 省略された agent-review option を既定値で補完する。
+export function normalizeOptions(options: Partial<AgentReviewOptions> = {}): AgentReviewOptions {
   // Skill 側が省略した値を、state に残る安定した既定値へそろえる。
   return {
     ...DEFAULT_OPTIONS,

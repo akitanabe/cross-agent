@@ -1,5 +1,5 @@
 import { normalizePath, normalizePathList } from "../shared/path-utils.ts";
-import type { AdapterRequestEnvelope, CrossAgentOptions, RoundKind } from "./types.ts";
+import type { AdapterRequestEnvelope, AgentReviewOptions, RoundKind } from "./types.ts";
 
 // adapter に渡す request envelope v1 を組み立てる。
 export function buildAdapterRequest({
@@ -23,7 +23,7 @@ export function buildAdapterRequest({
   contextFile?: string | null;
   targetFiles?: string[];
   focusQuestion?: string | null;
-  options: CrossAgentOptions;
+  options: AgentReviewOptions;
 }): AdapterRequestEnvelope {
   // adapter 境界は v1 envelope に固定し、agent 固有の解釈は adapter 側へ任せる。
   return {

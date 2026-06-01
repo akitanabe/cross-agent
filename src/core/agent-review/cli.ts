@@ -16,7 +16,7 @@ import type {
   CommandOutput,
   CompleteCurrentRoundInput,
   CompleteRoundInput,
-  CrossAgentOptions,
+  AgentReviewOptions,
   GetRoundInput,
   PrepareInitialRoundInput,
   PrepareNextRoundInput,
@@ -54,8 +54,8 @@ type CommandDefinition = {
   run: (input: unknown) => Promise<CommandOutput>;
 };
 
-function optionInput(args: CliArgs): Partial<CrossAgentOptions> | undefined {
-  const options: Partial<CrossAgentOptions> = {};
+function optionInput(args: CliArgs): Partial<AgentReviewOptions> | undefined {
+  const options: Partial<AgentReviewOptions> = {};
   if (args.reviewDepth != null) options.review_depth = args.reviewDepth;
   if (args.autoDeepDive != null) options.auto_deep_dive = args.autoDeepDive;
   return Object.keys(options).length ? options : undefined;
@@ -203,6 +203,6 @@ export function commandFor(name: string): CommandDefinition | undefined {
 export function usage(): string {
   return `Usage:
 ${Object.values(commandArgs)
-  .map((command) => `  node scripts/cross-agent-runner.mjs ${command.usage}`)
+  .map((command) => `  node scripts/agent-review-runner.mjs ${command.usage}`)
   .join("\n")}`;
 }

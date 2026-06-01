@@ -21,7 +21,7 @@ import type {
 
 const OWNER = "codex-adapter";
 
-// cross-agent の抽象 review_depth を Codex CLI の reasoning effort に変換する。
+// agent-review の抽象 review_depth を Codex CLI の reasoning effort に変換する。
 export function effortForReviewDepth(reviewDepth: ReviewDepth | null | undefined): EffortDecision {
   if (reviewDepth === "low") return { effort: "medium", warning: null };
   if (reviewDepth === "medium") return { effort: "high", warning: null };
@@ -148,7 +148,7 @@ export function makeError(code: string, message: string, detailsFile: string | n
   };
 }
 
-// cross-agent へ返す adapter response envelope を作る。
+// agent-review へ返す adapter response envelope を作る。
 // adapter 境界の契約として、path フィールドは forward slash に統一する。
 // Windows の `\` をそのまま JSON に乗せると、後段の `JSON.parse` が `\U` 等で落ちる。
 export function makeResponse(
@@ -183,7 +183,7 @@ export async function writeDiagnostic(filePath: string, lines: Array<string | nu
 
 // request envelope と参照先ファイル/ディレクトリが実行可能な状態か検証する。
 export async function validateRequest(request: AdapterRequestInput): Promise<RecoverableError | null> {
-  // ここでは adapter 境界だけを検証する。レビュー判断の意味解釈は cross-agent の責務。
+  // ここでは adapter 境界だけを検証する。レビュー判断の意味解釈は agent-review の責務。
   const required = [
     "contract_version",
     "review_session_id",

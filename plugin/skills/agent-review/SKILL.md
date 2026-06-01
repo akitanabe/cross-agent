@@ -1,13 +1,13 @@
 ---
 name: agent-review
-description: 外部エージェント（Codex、Claude など）を選んでセカンドオピニオン・批判的レビューを依頼するスキル。プランや設計案のレビュー、コードの問題点洗い出し、判断の妥当性確認など、独立した視点が欲しいときに使用する。「セカンドオピニオンが欲しい」「別のAIに聞いてみて」「第三者の目で見て」「クロスでレビューして」「cross-agent して」などの言葉が出たら使用する。
+description: 外部エージェント（Codex、Claude など）を選んでセカンドオピニオン・批判的レビューを依頼するスキル。プランや設計案のレビュー、コードの問題点洗い出し、判断の妥当性確認など、独立した視点が欲しいときに使用する。「セカンドオピニオンが欲しい」「別のAIに聞いてみて」「第三者の目で見て」「クロスでレビューして」「agent-review して」などの言葉が出たら使用する。
 user-invocable: true
-allowed-tools: Bash(node "**/cross-agent-runner.mjs"**) Glob Write
+allowed-tools: Bash(node "**/agent-review-runner.mjs"**) Glob Write
 ---
 
 ## 役割
 
-cross-agent は外部エージェントへレビューを委譲するオーケストレーター。
+agent-review は外部エージェントへレビューを委譲するオーケストレーター。
 自分ではレビュー本文を生成せず、ユーザー依頼を整理し、共通コンテキストとプロンプトを作り、
 選択した adapter に渡し、戻ってきた出力を統合してユーザーへ提示する。
 
@@ -36,7 +36,7 @@ cross-agent は外部エージェントへレビューを委譲するオーケ�
 
 複数候補があり自動決定できない場合はユーザーへ確認する。
 
-機械的にできる session state の作成は `cross-agent-runner.mjs` に任せる。
+機械的にできる session state の作成は `agent-review-runner.mjs` に任せる。
 ユーザーが自動深掘りを不要と明示した場合は `--auto-deep-dive "false"` を渡す。
 
 `--data-dir` は全 runner 呼び出しで必須。plugin 文脈では `${CLAUDE_PLUGIN_DATA}` をそのまま渡す。
@@ -47,7 +47,7 @@ backslash 形式の Windows パスは Bash の escape 処理で壊れやすい�
 共有名やパス要素に `$` など shell 展開される文字が含まれる場合だけ single quote を使う。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session \
+node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-review-runner.mjs" start-session \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --target-root "<target_root>" \
   --review-depth "medium" \
@@ -70,7 +70,7 @@ runner が `${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/context.md` を�
 ```
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-initial \
+node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-review-runner.mjs" prepare-initial \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --review-session-id "<review_session_id>" \
   --agent "<agent>" \
@@ -93,7 +93,7 @@ runner が返した adapter request envelope file path を使う。
 subagent が完了したら、`review_session_id` から current round の完了処理を runner に任せる。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-current-round \
+node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-review-runner.mjs" complete-current-round \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --review-session-id "<review_session_id>"
 ```
@@ -101,7 +101,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-current-rou
 その後、`get-round-output` で adapter の出力本文を取得し、ユーザーへ統合結果を提示する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" get-round-output \
+node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-review-runner.mjs" get-round-output \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --review-session-id "<review_session_id>" \
   --round "1"
@@ -177,7 +177,7 @@ draft file は canonical prompt で上書きされる。
 ```
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-next-round \
+node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-review-runner.mjs" prepare-next-round \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --review-session-id "<review_session_id>" \
   --agent "<agent>" \
@@ -210,7 +210,7 @@ follow-up の prompt draft には、最低限以下を含める。
 ```
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-next-round \
+node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-review-runner.mjs" prepare-next-round \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --review-session-id "<review_session_id>" \
   --agent "<agent>" \
@@ -241,12 +241,12 @@ Round 3 以降は原則として自動継続しない。ユーザーが明示的
 Write(${CLAUDE_PLUGIN_DATA}/artifacts/*/context.md)
 Write(${CLAUDE_PLUGIN_DATA}/artifacts/*/round-*-prompt.md)
 
-# cross-agent runner（このスキル内の Bash）
-Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" start-session **)
-Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-initial **)
-Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" prepare-next-round **)
-Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" complete-current-round **)
-Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/cross-agent-runner.mjs" get-round-output **)
+# agent-review runner（このスキル内の Bash）
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-review-runner.mjs" start-session **)
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-review-runner.mjs" prepare-initial **)
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-review-runner.mjs" prepare-next-round **)
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-review-runner.mjs" complete-current-round **)
+Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-review-runner.mjs" get-round-output **)
 
 # codex-adapter（subagent 内の Bash）
 Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" prepare **)
@@ -262,11 +262,11 @@ Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/claude-adapter-runner.mjs" complete **)
 
 ## 実装メモ
 
-- `agent-review` はユーザー向けの skill 名、`cross-agent` は複数 agent を横断する orchestration layer の実装名。
-- 開発 repo の実装本体: `src/runners/cross-agent-runner.ts`
-- 配布 runner: `scripts/cross-agent-runner.mjs`
-- 仕様: https://github.com/akitanabe/cross-agent/blob/main/docs/cross-agent-spec.md
-- 開発 repo のテスト: `test/runners/cross-agent-runner.test.ts`, `test/core/cross-agent/*.test.ts`
+- `agent-review` はユーザー向け skill 名であり、レビュー orchestration layer の実装名でもある。
+- 開発 repo の実装本体: `src/runners/agent-review-runner.ts`
+- 配布 runner: `scripts/agent-review-runner.mjs`
+- 仕様: https://github.com/akitanabe/cross-agent/blob/main/docs/agent-review-spec.md
+- 開発 repo のテスト: `test/runners/agent-review-runner.test.ts`, `test/core/agent-review/*.test.ts`
 - Node.js: 24+
 
 開発 repo で runner や仕様を変更したら、少なくとも以下を実行する。

@@ -1,14 +1,14 @@
-# cross-agent 詳細仕様
+# agent-review 詳細仕様
 
 ## 概要
 
-cross-agent は外部エージェントへレビューを委譲するオーケストレーターである。
+agent-review は外部エージェントへレビューを委譲するオーケストレーターである。
 ユーザー依頼を解釈し、共通コンテキスト、prompt、adapter request envelope を作成し、
 選択した adapter に処理を委譲する。adapter response を受け取った後は top-level session
 state の round 結果を更新し、最終的な統合表示を行う。
 
 機械的な session 初期化、artifact 作成、初回 prompt 作成、追加 round の prompt 作成、
-adapter request 作成、round 完了反映は `scripts/cross-agent-runner.mjs` で行う。
+adapter request 作成、round 完了反映は `scripts/agent-review-runner.mjs` で行う。
 
 ## 入力
 
@@ -50,7 +50,7 @@ forward slash 表記に正規化する。ファイル操作には同じパス文
 review session の空 state 作成と `review_session_id` 生成は runner に任せる。
 
 ```bash
-node scripts/cross-agent-runner.mjs start-session \
+node scripts/agent-review-runner.mjs start-session \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --target-root "<target_root>" \
   --review-depth "medium" \
@@ -79,7 +79,7 @@ runner は `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json` に空の s
 対象 session は `review_session_id` から導出した既存 state file で特定する。
 
 ```bash
-node scripts/cross-agent-runner.mjs prepare-initial \
+node scripts/agent-review-runner.mjs prepare-initial \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --review-session-id "<review_session_id>" \
   --agent "codex" \
@@ -119,7 +119,7 @@ Round 2 以降の artifact、prompt、adapter request 作成は runner に任せ
 対象 session は `review_session_id` から導出した既存 state file で特定する。
 
 ```bash
-node scripts/cross-agent-runner.mjs prepare-next-round \
+node scripts/agent-review-runner.mjs prepare-next-round \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --review-session-id "<review_session_id>" \
   --agent "codex" \
@@ -170,7 +170,7 @@ runner に任せる。runner は必須の `--data-dir` と response envelope 内
 `review_session_id` から session state file を導出する。
 
 ```bash
-node scripts/cross-agent-runner.mjs complete-round \
+node scripts/agent-review-runner.mjs complete-round \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --response-file "<response-envelope.json>"
 ```
@@ -196,7 +196,7 @@ top-level session state へ重複 append しない。
 session state の `current_round` から adapter response envelope file を導出して round を閉じる。
 
 ```bash
-node scripts/cross-agent-runner.mjs complete-current-round \
+node scripts/agent-review-runner.mjs complete-current-round \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --review-session-id "<review_session_id>"
 ```
@@ -226,7 +226,7 @@ LLM が response file path を再タイプ・抽出する必要をなくすた�
 完了済み round の agent output を読み、統合表示に必要な本文を返す処理は runner に任せる。
 
 ```bash
-node scripts/cross-agent-runner.mjs get-round-output \
+node scripts/agent-review-runner.mjs get-round-output \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
   --review-session-id "<review_session_id>" \
   --round "1"
@@ -249,19 +249,19 @@ stdout には output 本文だけを出力する。
 
 | State | 所有者 | 備考 |
 |---|---|---|
-| `review_session_id` | `cross-agent` | セッション開始単位 |
-| `status` | `cross-agent` | 全体の進行状態 |
-| `target_root` | `cross-agent` | レビュー対象 root |
-| `current_round` | `cross-agent` | Round 制御 |
-| `options` | `cross-agent` | `auto_deep_dive` / `review_depth` など |
-| `context` | `cross-agent` | 各 adapter へ渡す共通入力 |
-| `rounds` | `cross-agent` | Round ごとの実行履歴 |
+| `review_session_id` | `agent-review` | セッション開始単位 |
+| `status` | `agent-review` | 全体の進行状態 |
+| `target_root` | `agent-review` | レビュー対象 root |
+| `current_round` | `agent-review` | Round 制御 |
+| `options` | `agent-review` | `auto_deep_dive` / `review_depth` など |
+| `context` | `agent-review` | 各 adapter へ渡す共通入力 |
+| `rounds` | `agent-review` | Round ごとの実行履歴 |
 | Codex agent state file | `codex-adapter` | `thread_id` / resume / Codex artifacts/errors |
 | Claude agent state file | `claude-adapter` | 蓄積 context / Claude artifacts/errors |
-| top-level `artifacts` | `cross-agent` | context / prompt / adapter request |
-| top-level `errors` | `cross-agent` | cross-agent 自身が検出したエラー |
+| top-level `artifacts` | `agent-review` | context / prompt / adapter request |
+| top-level `errors` | `agent-review` | agent-review 自身が検出したエラー |
 
-cross-agent は agent 固有 state を直接変更しない。
+agent-review は agent 固有 state を直接変更しない。
 個別 agent state file の path 導出、作成、更新、復旧判断は各 adapter に閉じる。
 
 ## 永続化場所
@@ -274,7 +274,7 @@ ${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/
 ```
 
 個別 agent state directory は各 adapter が必要になった時点で導出・作成する。
-cross-agent はその具体パスを request envelope や top-level state に含めない。
+agent-review はその具体パスを request envelope や top-level state に含めない。
 
 ## Top-level state schema v1
 
@@ -357,10 +357,10 @@ adapter は `${CLAUDE_PLUGIN_DATA}` と `review_session_id` から必要な stat
 ```
 
 response envelope は要約フィールドを持たない。
-最終的な統合要約は cross-agent が `get-round-output` で取得した本文から作る。
+最終的な統合要約は agent-review が `get-round-output` で取得した本文から作る。
 
 `output_file`, `artifacts[].path`, `error.details_file` などの path フィールドは
-forward slash で返す。cross-agent runner はこの envelope を `JSON.parse` するため、
+forward slash で返す。agent-review runner はこの envelope を `JSON.parse` するため、
 Windows の `\` をエスケープせず素で入れると parse 失敗する。adapter 側で `normalizePath`
 相当の正規化を行うこと。
 
@@ -421,7 +421,7 @@ adapter request 作成は `prepare-next-round` で runner に任せる。
 ## Round 2 以降の扱い
 
 Round 2 以降も adapter request / response envelope は Round 1 と同じ契約を使う。
-cross-agent は `prepare-next-round` で追加 round を作成し、adapter response を
+agent-review は `prepare-next-round` で追加 round を作成し、adapter response を
 通常は `complete-current-round` で閉じ、必要な出力本文を `get-round-output` で読む。
 
 `round_kind` は以下の意味で使い分ける。

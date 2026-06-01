@@ -2,7 +2,7 @@
 
 ## 概要
 
-claude-adapter は Claude subagent 実行境界を担当する。cross-agent から request envelope file path を受け取り、
+claude-adapter は Claude subagent 実行境界を担当する。agent-review から request envelope file path を受け取り、
 Claude Code の専用 subagent (`claude-agent`) でレビュー本文を生成し、Claude 固有 state を更新して
 response envelope を保存する。
 
@@ -10,12 +10,12 @@ Codex と異なり、Claude subagent は adapter 側で永続的な CLI session 
 そのため、`review_session_id` から Claude 用の蓄積 context file へマッピングし、現在 round の input から
 context file を参照させることで、過去 round の prompt/output を明示的に読ませてセッション継続を表現する。
 
-cross-agent は Claude の agent state file の中身を直接変更しない。蓄積 context、Claude 由来の
+agent-review は Claude の agent state file の中身を直接変更しない。蓄積 context、Claude 由来の
 artifacts/errors、出力保存、response envelope 作成はこの adapter に閉じる。
 
 ## 入力
 
-cross-agent から request envelope file path を受け取る。Claude agent は `claude-adapter` skill の手順に従い、
+agent-review から request envelope file path を受け取る。Claude agent は `claude-adapter` skill の手順に従い、
 runner に `--request` で指定された JSON file を渡す。
 
 ```json
@@ -47,7 +47,7 @@ runner に `--request` で指定された JSON file を渡す。
 - Claude agent state file は存在しなくてもよい。存在する場合は `review_session_id` と `agent` が envelope と一致する
 
 `prompt_file` はその round で Claude に渡す主要入力である。`context_file` と `target_files` は補助情報であり、
-cross-agent が作成する `prompt_file` 内に必要な参照情報として含まれている前提で扱う。
+agent-review が作成する `prompt_file` 内に必要な参照情報として含まれている前提で扱う。
 
 ## 実行境界
 
@@ -102,7 +102,7 @@ claude-adapter が変更してよい state は自分で導出する Claude agent
 - 機械的な `updated_at`
 
 top-level session state の `rounds[]`, `current_round`, `status`, `context`, `options` は
-cross-agent の所有物なので、claude-adapter は変更しない。
+agent-review の所有物なので、claude-adapter は変更しない。
 
 Claude agent state file の形:
 
@@ -174,8 +174,8 @@ the contents.
 - diagnostic_file: C:/.../artifacts/<review_session_id>/round-2-claude-diagnostic.md
 ```
 
-蓄積 context は Claude 版のセッション継続手段であり、cross-agent の top-level context とは別物である。
-cross-agent が作る `context_file` は共通入力、Claude agent state の `context_file` は Claude 固有の
+蓄積 context は Claude 版のセッション継続手段であり、agent-review の top-level context とは別物である。
+agent-review が作る `context_file` は共通入力、Claude agent state の `context_file` は Claude 固有の
 継続履歴 index として扱う。
 
 ## 実行 input フォーマット
@@ -217,7 +217,7 @@ C:/.../artifacts/<review_session_id>/round-<N>-claude-output.md
 
 現在 round の `prompt_file` への参照は `round-<N>-claude-input.md` に直接列挙する。過去すべての Claude round の
 `prompt_file` / `output_file` は `claude-context.md` の Required Reading に含める。共通 `context_file` や
-`target_files` は cross-agent が作る `prompt_file` に含まれている前提とし、Required Reading へは重複して列挙しない。
+`target_files` は agent-review が作る `prompt_file` に含まれている前提とし、Required Reading へは重複して列挙しない。
 過去 output は真実ではなく検証対象の履歴として扱う。`response_file` と `diagnostic_file` は通常 Required Reading に
 含めないが、復旧や失敗分析 round では含めてよい。
 
@@ -225,7 +225,7 @@ Required Reading に列挙する path は adapter 境界と同じく forward sla
 
 ## 独立視点の扱い
 
-Claude subagent には、親会話の結論や cross-agent の統合方針を前提にしないよう明示する。
+Claude subagent には、親会話の結論や agent-review の統合方針を前提にしないよう明示する。
 実行 input では、次の優先順位を固定する。
 
 1. 現在 round の `prompt_file`
@@ -234,7 +234,7 @@ Claude subagent には、親会話の結論や cross-agent の統合方針を前
 4. request envelope の構造化情報
 
 親 agent の会話上の推測、未保存の判断、統合前の結論は Claude subagent へ渡さない。
-追加 context が必要な場合は、cross-agent が `context_file` または `prompt_file` に明示的に保存してから渡す。
+追加 context が必要な場合は、agent-review が `context_file` または `prompt_file` に明示的に保存してから渡す。
 
 ## 実行仕様
 
@@ -251,13 +251,13 @@ Claude subagent には、親会話の結論や cross-agent の統合方針を前
 11. `[runner: complete]` 蓄積 context file に今回 round の `prompt_file`, `output_file`, `response_file`, `diagnostic_file` への参照を追記する
 12. `[runner: complete]` Claude agent state file の state と artifacts/errors を更新する
 13. `[runner: complete]` response envelope を `round-<N>-claude-response.json` に保存し、その file path を stdout に返す
-14. `[claude-agent]` `complete` が成功したら、完了シグナルだけを cross-agent に返す
+14. `[claude-agent]` `complete` が成功したら、完了シグナルだけを agent-review に返す
 
 `prepare` が request / state 検証で失敗し、`round-<N>-claude-input.md` を作れない場合は、
 Claude subagent の本文生成を続行しない。この場合も runner は可能な範囲で diagnostic artifact と
 failed response envelope を作成する。ただし `prepare` の stdout に response envelope file path は返さず、
 runner command はエラーとして終了する。`claude-agent` はこのエラーを受けたら本文生成や `complete` へ進まない。
-cross-agent は subagent 返却値に含まれる path を再利用せず、session state の `current_round` から
+agent-review は subagent 返却値に含まれる path を再利用せず、session state の `current_round` から
 adapter response envelope file を導出して round を閉じる。
 
 ### claude-agent の責務
@@ -297,12 +297,12 @@ node scripts/claude-adapter-runner.mjs complete \
 
 `complete` は output file を検証し、state と response envelope を更新し、stdout に
 `round-<N>-claude-response.json` の file path だけを返す。`claude-agent` はこの stdout を
-内部処理の結果確認にだけ使い、cross-agent への最終回答には含めない。
+内部処理の結果確認にだけ使い、agent-review への最終回答には含めない。
 
 ## Response envelope
 
 `output_file`, `artifacts[].path`, `error.details_file` などの path フィールドは
-forward slash 表記 (`C:/Users/...`) で保存する。受信側 (cross-agent runner) は envelope file を
+forward slash 表記 (`C:/Users/...`) で保存する。受信側 (agent-review runner) は envelope file を
 `JSON.parse` するため、Windows の `\` をそのまま埋めると `\U` 等で parse 失敗になる。
 内部 state (Claude agent state file 等) は OS ネイティブの区切りで保持してよい。
 

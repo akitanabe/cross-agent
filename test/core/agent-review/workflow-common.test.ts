@@ -5,9 +5,9 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { sessionPaths } from "../../../src/core/cross-agent/state.ts";
-import { commandOutput, readSession } from "../../../src/core/cross-agent/workflow-common.ts";
-import { startSession } from "../../../src/core/cross-agent/workflow-session.ts";
+import { sessionPaths } from "../../../src/core/agent-review/state.ts";
+import { commandOutput, readSession } from "../../../src/core/agent-review/workflow-common.ts";
+import { startSession } from "../../../src/core/agent-review/workflow-session.ts";
 
 test("commandOutput wraps typed content with output_type", () => {
   assert.deepEqual(commandOutput("json", { ok: true }), {
@@ -17,7 +17,7 @@ test("commandOutput wraps typed content with output_type", () => {
 });
 
 test("readSession loads matching state and paths", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");

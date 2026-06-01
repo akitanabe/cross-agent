@@ -1,13 +1,13 @@
 ---
 name: claude-adapter
-description: cross-agent から委譲される Claude 固有のアダプター。request envelope file path を受け取り、Claude subagent でレビュー本文を生成し、Claude 固有 state と response envelope を確定する。通常はユーザーが直接呼ばず、cross-agent オーケストレーターから呼び出される。
+description: agent-review から委譲される Claude 固有のアダプター。request envelope file path を受け取り、Claude subagent でレビュー本文を生成し、Claude 固有 state と response envelope を確定する。通常はユーザーが直接呼ばず、agent-review オーケストレーターから呼び出される。
 user-invocable: false
 allowed-tools: Read Write Bash(node "**/claude-adapter-runner.mjs" prepare **) Bash(node "**/claude-adapter-runner.mjs" complete **)
 ---
 
 ## 役割
 
-claude-adapter は Claude subagent 実行境界を担当する。cross-agent から request envelope file path を受け取り、
+claude-adapter は Claude subagent 実行境界を担当する。agent-review から request envelope file path を受け取り、
 runner の `prepare` で Claude agent が読む実行 input と蓄積 context を準備し、Claude agent がレビュー本文を
 `round-<N>-claude-output.md` に保存する。実行後は runner の `complete` で Claude 固有 state と
 response envelope を確定する。
@@ -46,7 +46,7 @@ request envelope は次の契約に従う。
 ```
 
 `prompt_file` がその round で Claude に渡す主要入力である。`context_file` と `target_files` は補助情報であり、
-cross-agent が作成する `prompt_file` 内に必要な参照情報として含まれている前提で扱う。
+agent-review が作成する `prompt_file` 内に必要な参照情報として含まれている前提で扱う。
 
 ## 実行
 
@@ -90,7 +90,7 @@ stdout に説明文、Markdown、複数行ログ、response envelope file path �
 4. request envelope の構造化情報
 
 親 agent の会話上の推測、未保存の判断、統合前の結論は前提にしない。追加 context が必要な場合は、
-cross-agent が `context_file` または `prompt_file` に明示的に保存してから渡す。
+agent-review が `context_file` または `prompt_file` に明示的に保存してから渡す。
 
 ### 3. Claude レビュー本文の保存
 
@@ -131,7 +131,7 @@ ${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-<N>-claude-diagnostic.
 ${CLAUDE_PLUGIN_DATA}/artifacts/<review_session_id>/round-<N>-claude-response.json
 ```
 
-cross-agent の top-level session state、`rounds[]`、`current_round`、`status`、`context`、`options` は
+agent-review の top-level session state、`rounds[]`、`current_round`、`status`、`context`、`options` は
 Claude adapter から直接変更しない。
 
 response envelope 内の `output_file`、`artifacts[].path`、`error.details_file` などの path は、

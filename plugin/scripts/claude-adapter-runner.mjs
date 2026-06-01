@@ -443,7 +443,8 @@ function buildClaudeContext({
   if (priorRounds.length) {
     for (const round of priorRounds) {
       if (round.prompt_file) lines.push(`- prompt_file: ${toDisplayPath(round.prompt_file)}`);
-      if (round.agent_result?.output_file) lines.push(`- output_file: ${toDisplayPath(round.agent_result.output_file)}`);
+      if (round.agent_result?.output_file)
+        lines.push(`- output_file: ${toDisplayPath(round.agent_result.output_file)}`);
     }
   } else {
     lines.push(`- none`);
@@ -675,11 +676,14 @@ async function prepareClaudeRun(request, options = {}) {
   }
   const contextFile = agentContextFileFor(dataDir, request.review_session_id);
   await writeTextFile(paths.inputFile, buildClaudeInput({ request, contextFile, outputFile: paths.outputFile }));
-  await writeTextFile(paths.diagnosticFile, `# Claude adapter diagnostic
+  await writeTextFile(
+    paths.diagnosticFile,
+    `# Claude adapter diagnostic
 
 - status: prepared
 - round: ${request.round}
-`);
+`
+  );
   await writeTextFile(contextFile, buildClaudeContext({ request, sessionState, currentPaths: paths }));
   await markAgentPrepared(dataDir, request, paths, contextFile, agentState);
   return { kind: "input", path: inputPath(paths), output_file: outputPath(paths), status: "prepared" };

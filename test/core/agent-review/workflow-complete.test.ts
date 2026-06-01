@@ -5,16 +5,16 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { sessionPaths } from "../../../src/core/cross-agent/state.ts";
-import { completeCurrentRound, completeRound } from "../../../src/core/cross-agent/workflow-complete.ts";
-import { prepareInitialRound } from "../../../src/core/cross-agent/workflow-prepare.ts";
-import { getRound, getRoundOutput } from "../../../src/core/cross-agent/workflow-round.ts";
-import { startSession } from "../../../src/core/cross-agent/workflow-session.ts";
+import { sessionPaths } from "../../../src/core/agent-review/state.ts";
+import { completeCurrentRound, completeRound } from "../../../src/core/agent-review/workflow-complete.ts";
+import { prepareInitialRound } from "../../../src/core/agent-review/workflow-prepare.ts";
+import { getRound, getRoundOutput } from "../../../src/core/agent-review/workflow-round.ts";
+import { startSession } from "../../../src/core/agent-review/workflow-session.ts";
 import { normalizePath } from "../../../src/core/shared/path-utils.ts";
-import { completeRoundFromEnvelope, writeAdapterResponse } from "../../helpers/cross-agent-fixtures.ts";
+import { completeRoundFromEnvelope, writeAdapterResponse } from "../../helpers/agent-review-fixtures.ts";
 
 test("completeRound records adapter response into state", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -52,7 +52,7 @@ test("completeRound records adapter response into state", async () => {
     assert.equal(state.rounds[0].agent_result.output_file, normalizePath(outputFile));
     assert.equal(state.rounds[0].agent_result.agent_state_file, undefined);
     assert.equal(
-      state.artifacts.files.every((entry) => entry.owner === "cross-agent"),
+      state.artifacts.files.every((entry) => entry.owner === "agent-review"),
       true,
     );
   } finally {
@@ -61,7 +61,7 @@ test("completeRound records adapter response into state", async () => {
 });
 
 test("completeCurrentRound derives the response file from current state", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -93,7 +93,7 @@ test("completeCurrentRound derives the response file from current state", async 
 });
 
 test("completeRound rejects response_file outside artifact root", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -124,7 +124,7 @@ test("completeRound rejects response_file outside artifact root", async () => {
 });
 
 test("completeRound rejects non-integer round number", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -151,7 +151,7 @@ test("completeRound rejects non-integer round number", async () => {
 });
 
 test("getRound rejects non-integer round number", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -166,7 +166,7 @@ test("getRound rejects non-integer round number", async () => {
 });
 
 test("completeRound rejects unsupported contract_version", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -195,7 +195,7 @@ test("completeRound rejects unsupported contract_version", async () => {
 });
 
 test("completeRound rejects unknown status", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -219,7 +219,7 @@ test("completeRound rejects unknown status", async () => {
 });
 
 test("completeRound rejects output_file outside artifact dir", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -247,7 +247,7 @@ test("completeRound rejects output_file outside artifact dir", async () => {
 });
 
 test("completeRound rejects completed status without output_file", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -271,7 +271,7 @@ test("completeRound rejects completed status without output_file", async () => {
 });
 
 test("completeRound rejects failed status carrying output_file", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -300,7 +300,7 @@ test("completeRound rejects failed status carrying output_file", async () => {
 });
 
 test("completeRound rejects missing output_file", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -328,7 +328,7 @@ test("completeRound rejects missing output_file", async () => {
 });
 
 test("getRound returns round state", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -372,7 +372,7 @@ test("getRound returns round state", async () => {
 });
 
 test("getRoundOutput returns text command output by default", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");

@@ -6,20 +6,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { sessionPaths } from "../../src/core/cross-agent/state.ts";
-import { prepareInitialRound, startSession } from "../../src/core/cross-agent/workflow.ts";
+import { sessionPaths } from "../../src/core/agent-review/state.ts";
+import { prepareInitialRound, startSession } from "../../src/core/agent-review/workflow.ts";
 import { normalizePath } from "../../src/core/shared/path-utils.ts";
-import { completeRoundFromEnvelope, writeAdapterResponse } from "../helpers/cross-agent-fixtures.ts";
+import { completeRoundFromEnvelope, writeAdapterResponse } from "../helpers/agent-review-fixtures.ts";
 import { runNodeScript } from "../helpers/run-node-script.ts";
 
-const runnerPath = fileURLToPath(new URL("../../plugin/scripts/cross-agent-runner.mjs", import.meta.url));
+const runnerPath = fileURLToPath(new URL("../../plugin/scripts/agent-review-runner.mjs", import.meta.url));
 
 function runRunner(args, input = "") {
   return runNodeScript(runnerPath, args, input);
 }
 
 test("start-session command writes review session id as text", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -51,7 +51,7 @@ test("start-session command writes review session id as text", async () => {
 });
 
 test("start-session command accepts raw Windows path from argv", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -76,7 +76,7 @@ test("start-session command accepts raw Windows path from argv", async () => {
 });
 
 test("prepare-next-round command writes adapter request JSON", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -129,7 +129,7 @@ test("prepare-next-round command writes adapter request JSON", async () => {
 });
 
 test("prepare-initial command reads context file and target files from argv", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -173,7 +173,7 @@ test("prepare-initial command reads context file and target files from argv", as
 });
 
 test("prepare-initial command auto reads session context file", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -208,7 +208,7 @@ test("prepare-initial command auto reads session context file", async () => {
 });
 
 test("complete-round command records adapter response from response file", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -248,7 +248,7 @@ test("complete-round command records adapter response from response file", async
 });
 
 test("complete-current-round command derives current adapter response file", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -295,7 +295,7 @@ test("complete-current-round command derives current adapter response file", asy
 });
 
 test("get-round-output command writes text by default", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");

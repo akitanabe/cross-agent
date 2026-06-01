@@ -3,8 +3,8 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { commandFor, parseArgs, usage } from "../core/cross-agent/cli.ts";
-import type { CommandOutput } from "../core/cross-agent/types.ts";
+import { commandFor, parseArgs, usage } from "../core/agent-review/cli.ts";
+import type { CommandOutput } from "../core/agent-review/types.ts";
 
 function writeCommandOutput(result: CommandOutput): void {
   if (result.output_type === "text") {

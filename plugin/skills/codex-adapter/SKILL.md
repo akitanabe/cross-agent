@@ -1,13 +1,13 @@
 ---
 name: codex-adapter
-description: cross-agent から委譲される Codex CLI 固有のアダプター。review_session_id を Codex の thread_id にマッピングしてセッションを継続し、Codex exec 専用 run spec に従ってレビューを実行する。通常はユーザーが直接呼ばず、cross-agent オーケストレーターから呼び出される。
+description: agent-review から委譲される Codex CLI 固有のアダプター。review_session_id を Codex の thread_id にマッピングしてセッションを継続し、Codex exec 専用 run spec に従ってレビューを実行する。通常はユーザーが直接呼ばず、agent-review オーケストレーターから呼び出される。
 user-invocable: false
 allowed-tools: Read Write Bash(node "**/codex-adapter-runner.mjs" prepare **) Bash(node "**/codex-adapter-runner.mjs" complete **) Bash(codex exec **)
 ---
 
 ## 役割
 
-codex-adapter は Codex CLI 実行境界を担当する。cross-agent から request envelope file path を受け取り、
+codex-adapter は Codex CLI 実行境界を担当する。agent-review から request envelope file path を受け取り、
 runner の `prepare` で Codex exec 専用 run spec を作成し、codex-agent が `codex exec` /
 `codex exec resume` を Bash から直接実行する。実行後は runner の `complete` で Codex 固有 state と
 response envelope を確定する。
