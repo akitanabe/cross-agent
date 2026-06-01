@@ -33,7 +33,7 @@ export async function prepareClaudeRun(
 
   const requestWithDataDir = { ...request, data_dir: dataDir };
   const artifactDir = artifactDirFor(dataDir, request.review_session_id ?? "unknown");
-  const paths = artifactPaths(artifactDir, request.round ?? "unknown");
+  const paths = artifactPaths(artifactDir, request.round ?? "unknown", request.agent_id ?? "unknown");
   await mkdir(artifactDir, { recursive: true });
 
   const validationError = await validateRequest(request);
@@ -88,17 +88,17 @@ export async function prepareClaudeRun(
     });
   }
 
-  if (agentState.review_session_id !== request.review_session_id || agentState.agent !== "claude") {
+  if (agentState.review_session_id !== request.review_session_id || agentState.agent_id !== request.agent_id) {
     return failPrepare({
       request: requestWithDataDir,
       agentState: null,
       paths,
       code: "state_file_invalid",
-      message: "Claude agent state file review_session_id or agent does not match request.",
+      message: "Claude agent state file review_session_id or agent_id does not match request.",
     });
   }
 
-  const contextFile = agentContextFileFor(dataDir, request.review_session_id);
+  const contextFile = agentContextFileFor(dataDir, request.review_session_id, request.agent_id);
   await writeTextFile(paths.inputFile, buildClaudeInput({ request, contextFile, outputFile: paths.outputFile }));
   await writeTextFile(
     paths.diagnosticFile,

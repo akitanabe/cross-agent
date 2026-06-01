@@ -48,7 +48,7 @@ export async function loadAgentStateForComplete(
     };
   }
 
-  if (agentState.review_session_id !== runSpec.review_session_id || agentState.agent !== "codex") {
+  if (agentState.review_session_id !== runSpec.review_session_id || agentState.agent_id !== runSpec.agent_id) {
     return {
       ok: false,
       result: await failComplete({
@@ -56,7 +56,7 @@ export async function loadAgentStateForComplete(
         agentState: null,
         paths,
         code: "state_file_invalid",
-        message: "Codex agent state file review_session_id or agent does not match run spec.",
+        message: "Codex agent state file review_session_id or agent_id does not match run spec.",
       }),
     };
   }

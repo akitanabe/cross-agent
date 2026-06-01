@@ -6,6 +6,8 @@ import type {
 } from "../shared/adapter-envelope.ts";
 
 export type ArtifactPathSet = {
+  agent_id: string;
+  adapter: "claude";
   inputFile: string;
   outputFile: string;
   diagnosticFile: string;
@@ -15,7 +17,8 @@ export type ArtifactPathSet = {
 export type ClaudeAgentState = {
   schema_version?: number;
   review_session_id: string;
-  agent: "claude";
+  agent_id: string;
+  adapter: "claude";
   status: string;
   target_root: string | null;
   context_file: string | null;
@@ -68,15 +71,19 @@ export type AdapterRequestWithDataDir = AdapterRequestInput & {
 
 export type SessionState = {
   review_session_id?: string;
+  schema_version?: number;
   rounds?: Array<{
     round?: number;
     kind?: string;
-    agent?: string;
-    prompt_file?: string;
-    agent_result?: {
-      output_file?: string | null;
-      status?: string;
-    } | null;
+    agents?: Array<{
+      agent_id?: string;
+      adapter?: string;
+      prompt_file?: string;
+      agent_result?: {
+        output_file?: string | null;
+        status?: string;
+      } | null;
+    }>;
   }>;
   context?: {
     target_files?: string[];

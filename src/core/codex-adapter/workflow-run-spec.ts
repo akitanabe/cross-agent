@@ -24,9 +24,10 @@ type LoadRunSpecResult = { ok: true; value: LoadedRunSpec } | { ok: false; resul
 
 export function makeRequestFromRunSpec(runSpec: CodexRunSpec, dataDir: string | null): AdapterRequestWithDataDir {
   return {
-    contract_version: 1,
+    contract_version: 2,
     review_session_id: runSpec.review_session_id,
-    agent: "codex",
+    agent_id: runSpec.agent_id,
+    adapter: "codex",
     round: runSpec.round,
     round_kind: "unknown",
     target_root: runSpec.target_root,
@@ -40,7 +41,7 @@ export function makeRequestFromRunSpec(runSpec: CodexRunSpec, dataDir: string | 
 }
 
 function roundFromRunFile(runFile: string): number {
-  const match = /round-(\d+)-codex-run\.json$/.exec(runFile.replaceAll("\\", "/"));
+  const match = /round-(\d+)-([A-Za-z0-9._-]+)-run\.json$/.exec(runFile.replaceAll("\\", "/"));
   return match ? Number(match[1]) : 0;
 }
 
@@ -54,9 +55,10 @@ function makeFallbackRequestForRunSpec(
     typeof object.review_session_id === "string" && object.review_session_id ? object.review_session_id : "unknown";
   const round = Number.isSafeInteger(object.round) ? (object.round as number) : roundFromRunFile(runFile);
   return {
-    contract_version: 1,
+    contract_version: 2,
     review_session_id: reviewSessionId,
-    agent: "codex",
+    agent_id: typeof object.agent_id === "string" && object.agent_id ? object.agent_id : agentIdFromRunFile(runFile),
+    adapter: "codex",
     round,
     round_kind: "unknown",
     target_root: typeof object.target_root === "string" ? object.target_root : "unknown",
@@ -73,9 +75,9 @@ function fallbackPathsForRunSpec(value: unknown, runFile: string, dataDir: strin
   const object = isObject(value) ? value : {};
   const round = Number.isSafeInteger(object.round) ? (object.round as number) : roundFromRunFile(runFile);
   if (typeof object.review_session_id === "string" && object.review_session_id) {
-    return artifactPaths(artifactDirFor(dataDir, object.review_session_id), round);
+    return artifactPaths(artifactDirFor(dataDir, object.review_session_id), round, agentIdFromRunFile(runFile));
   }
-  return artifactPaths(dirname(runFile), round);
+  return artifactPaths(dirname(runFile), round, agentIdFromRunFile(runFile));
 }
 
 function validateRunSpec(value: unknown): { runSpec: CodexRunSpec | null; message: string | null } {
@@ -87,6 +89,8 @@ function validateRunSpec(value: unknown): { runSpec: CodexRunSpec | null; messag
   }
   const requiredStrings = [
     "review_session_id",
+    "agent_id",
+    "adapter",
     "target_root",
     "prompt_file",
     "output_file",
@@ -100,6 +104,7 @@ function validateRunSpec(value: unknown): { runSpec: CodexRunSpec | null; messag
     }
   }
   if (!Number.isSafeInteger(value.round)) return { runSpec: null, message: "round must be an integer." };
+  if (value.adapter !== "codex") return { runSpec: null, message: 'adapter must be "codex".' };
   if (value.mode === "resume" && (typeof value.thread_id !== "string" || value.thread_id === "")) {
     return { runSpec: null, message: "thread_id must be a non-empty string in resume mode." };
   }
@@ -126,6 +131,8 @@ export function makeCodexRunSpec(
     schema_version: 1,
     kind: "codex_exec",
     review_session_id: request.review_session_id,
+    agent_id: request.agent_id,
+    adapter: "codex",
     round: request.round,
     mode: decision.startNew ? "initial" : "resume",
     target_root: normalizePath(request.target_root) as string,
@@ -188,7 +195,7 @@ export async function loadRunSpecForComplete(runFile: string, dataDir: string): 
   }
 
   const artifactDir = artifactDirFor(dataDir, runSpec.review_session_id);
-  const paths = artifactPaths(artifactDir, runSpec.round);
+  const paths = artifactPaths(artifactDir, runSpec.round, runSpec.agent_id);
   return { ok: true, value: { runSpec, request: makeRequestFromRunSpec(runSpec, dataDir), paths } };
 }
 
@@ -204,4 +211,8 @@ export function mismatchedRunSpecPath(runSpec: CodexRunSpec, paths: ArtifactPath
     }
   }
   return null;
+}
+function agentIdFromRunFile(runFile: string): string {
+  const match = /round-\d+-([A-Za-z0-9._-]+)-run\.json$/.exec(runFile.replaceAll("\\", "/"));
+  return match ? match[1] : "codex";
 }

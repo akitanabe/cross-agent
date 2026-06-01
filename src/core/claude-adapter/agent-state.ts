@@ -26,25 +26,30 @@ export async function saveAgentState(
   reviewSessionId: string,
   agentState: ClaudeAgentState,
 ): Promise<void> {
-  const agentStateFile = agentStateFileFor(dataDir, reviewSessionId);
+  const agentStateFile = agentStateFileFor(dataDir, reviewSessionId, agentState.agent_id);
   await mkdir(dirname(agentStateFile), { recursive: true });
   await writeJsonAtomic(agentStateFile, agentState);
 }
 
 export async function readSessionState(dataDir: string, reviewSessionId: string): Promise<SessionState> {
-  return await readJson<SessionState>(sessionStateFileFor(dataDir, reviewSessionId));
+  const state = await readJson<SessionState>(sessionStateFileFor(dataDir, reviewSessionId));
+  if (state.schema_version !== 2) {
+    throw new Error(`unsupported agent-review session schema_version ${state.schema_version ?? "missing"}; expected 2.`);
+  }
+  return state;
 }
 
 export async function readOrCreateAgentState(dataDir: string, request: AdapterRequestInput): Promise<ClaudeAgentState> {
-  const agentStateFile = agentStateFileFor(dataDir, request.review_session_id);
+  const agentStateFile = agentStateFileFor(dataDir, request.review_session_id, request.agent_id);
   return (
     (await readJsonIfExists<ClaudeAgentState>(agentStateFile)) ?? {
       schema_version: 1,
       review_session_id: request.review_session_id,
-      agent: "claude",
+      agent_id: request.agent_id,
+      adapter: "claude",
       status: "pending",
       target_root: null,
-      context_file: agentContextFileFor(dataDir, request.review_session_id),
+      context_file: agentContextFileFor(dataDir, request.review_session_id, request.agent_id),
       last_input_file: null,
       last_output_file: null,
       last_error: null,
@@ -65,7 +70,8 @@ export async function markAgentPrepared(
   Object.assign(agentState, {
     schema_version: agentState.schema_version ?? 1,
     review_session_id: request.review_session_id,
-    agent: "claude",
+    agent_id: request.agent_id,
+    adapter: "claude",
     status: "prepared",
     target_root: request.target_root,
     context_file: contextFile,
@@ -94,7 +100,8 @@ export async function markAgentCompleted({
   Object.assign(agentState, {
     schema_version: agentState.schema_version ?? 1,
     review_session_id: request.review_session_id,
-    agent: "claude",
+    agent_id: request.agent_id,
+    adapter: "claude",
     status: "active",
     target_root: request.target_root,
     context_file: contextFile,

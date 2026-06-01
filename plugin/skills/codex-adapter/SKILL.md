@@ -20,7 +20,7 @@ Codex exec 専用 spec を検証したうえで、許可された `codex exec` /
 依頼本文には、adapter request envelope JSON の file path が含まれる。
 
 ```text
-request_envelope_file: .../artifacts/<review_session_id>/round-<N>-adapter-request.json
+request_envelope_file: .../artifacts/<review_session_id>/round-<N>-<agent_id>-adapter-request.json
 ```
 
 ## 実行
@@ -39,7 +39,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" prepare \
 
 `prepare` は stdout に file path だけを返す。
 
-- `round-<N>-codex-run.json` が返った場合: Codex CLI 実行へ進む
+- `round-<N>-<agent_id>-run.json` が返った場合: Codex CLI 実行へ進む
 
 `prepare` が失敗した場合、runner は可能な範囲で failed response envelope を保存したうえでエラー終了する。
 codex-agent は runner / Bash tool のエラーとして扱い、Codex CLI 実行や `complete` へ進まない。
@@ -47,12 +47,13 @@ stdout に説明文、Markdown、複数行ログ、response envelope file path �
 
 ### 2. run spec 検証
 
-`round-<N>-codex-run.json` を読み、次を確認する。
+`round-<N>-<agent_id>-run.json` を読み、次を確認する。
 
 - `schema_version` は `1`
 - `kind` は `"codex_exec"`
 - `mode` は `"initial"` または `"resume"`
-- `review_session_id`, `round`, `target_root`, `prompt_file`, `output_file`, `event_log`, `exit_file` が存在する
+- `review_session_id`, `agent_id`, `adapter`, `round`, `target_root`, `prompt_file`, `output_file`, `event_log`, `exit_file` が存在する
+- `adapter` は `"codex"`
 - `mode == "resume"` の場合は `thread_id` が非空
 - `model_reasoning_effort` は `medium`, `high`, `xhigh` のいずれか
 - `skip_git_repo_check` は `true`
@@ -112,10 +113,10 @@ Codex CLI 実行後、runner の `complete` を呼ぶ。
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" complete \
   --data-dir "${CLAUDE_PLUGIN_DATA}" \
-  --run "<round-N-codex-run.json>"
+  --run "<round-N-agent-id-run.json>"
 ```
 
-`complete` は stdout に `round-<N>-codex-response.json` の file path だけを返す。
+`complete` は stdout に `round-<N>-<agent_id>-response.json` の file path だけを返す。
 その path は親 agent へ渡す値として扱わない。親 agent は session state から response envelope
 file path を導出するため、codex-agent は完了シグナルだけを最終回答にする。
 

@@ -29,16 +29,17 @@ test("completeRound records adapter response into state", async () => {
       review_session_id: "session-1",
       context_text: "context",
     });
-    const adapterRequest = prepareResult.envelope;
+    const adapterRequest = prepareResult.envelopes[0];
 
     const paths = sessionPaths(dataDir, "session-1");
     const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(outputFile, "ok", "utf8");
 
     const result = await completeRoundFromEnvelope(dataDir, {
-      contract_version: 1,
+      contract_version: 2,
       review_session_id: "session-1",
-      agent: "codex",
+      agent_id: "codex",
+      adapter: "codex",
       round: 1,
       status: "completed",
       output_file: outputFile,
@@ -49,8 +50,8 @@ test("completeRound records adapter response into state", async () => {
     assert.equal(result.status, "completed");
     assert.equal(adapterRequest.review_session_id, "session-1");
     const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
-    assert.equal(state.rounds[0].agent_result.output_file, normalizePath(outputFile));
-    assert.equal(state.rounds[0].agent_result.agent_state_file, undefined);
+    assert.equal(state.rounds[0].agents[0].agent_result.output_file, normalizePath(outputFile));
+    assert.equal(state.rounds[0].agents[0].agent_result.agent_state_file, undefined);
     assert.equal(
       state.artifacts.files.every((entry) => entry.owner === "agent-review"),
       true,
@@ -73,9 +74,10 @@ test("completeCurrentRound derives the response file from current state", async 
     const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(outputFile, "ok", "utf8");
     await writeAdapterResponse(join(paths.artifactDir, "round-1-codex-response.json"), {
-      contract_version: 1,
+      contract_version: 2,
       review_session_id: "session-1",
-      agent: "codex",
+      agent_id: "codex",
+      adapter: "codex",
       round: 1,
       status: "completed",
       output_file: outputFile,
@@ -87,6 +89,138 @@ test("completeCurrentRound derives the response file from current state", async 
 
     assert.equal(result.status, "completed");
     assert.equal(result.response_file, normalizePath(join(paths.artifactDir, "round-1-codex-response.json")));
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("multiple agents in one round complete independently", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({ data_dir: dataDir, review_session_id: "session-1", target_root: targetRoot });
+    const prepared = await prepareInitialRound({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      agents: [
+        { agent_id: "codex-a", adapter: "codex" },
+        { agent_id: "codex-b", adapter: "codex" },
+        { agent_id: "claude-reviewer", adapter: "claude" },
+      ],
+    });
+
+    assert.deepEqual(
+      prepared.requests.map((request) => request.agent_id),
+      ["codex-a", "codex-b", "claude-reviewer"],
+    );
+    const paths = sessionPaths(dataDir, "session-1");
+    let state = JSON.parse(await readFile(paths.stateFile, "utf8"));
+    assert.equal(state.rounds.length, 1);
+    assert.deepEqual(
+      state.rounds[0].agents.map((agent) => agent.status),
+      ["pending", "pending", "pending"],
+    );
+
+    const codexAOutput = join(paths.artifactDir, "round-1-codex-a-output.md");
+    await writeFile(codexAOutput, "codex-a output", "utf8");
+    await completeRoundFromEnvelope(dataDir, {
+      contract_version: 2,
+      review_session_id: "session-1",
+      agent_id: "codex-a",
+      adapter: "codex",
+      round: 1,
+      status: "completed",
+      output_file: codexAOutput,
+      artifacts: [],
+      error: null,
+    });
+
+    state = JSON.parse(await readFile(paths.stateFile, "utf8"));
+    assert.equal(state.rounds[0].completed_at, null);
+    assert.equal(state.rounds[0].agents.find((agent) => agent.agent_id === "codex-a").status, "completed");
+    assert.equal(state.rounds[0].agents.find((agent) => agent.agent_id === "codex-b").status, "pending");
+    assert.equal(state.rounds[0].agents.find((agent) => agent.agent_id === "claude-reviewer").status, "pending");
+
+    await assert.rejects(
+      completeCurrentRound({ data_dir: dataDir, review_session_id: "session-1" }),
+      /ambiguous or missing/,
+    );
+
+    await completeRoundFromEnvelope(dataDir, {
+      contract_version: 2,
+      review_session_id: "session-1",
+      agent_id: "codex-b",
+      adapter: "codex",
+      round: 1,
+      status: "failed",
+      output_file: null,
+      artifacts: [],
+      error: { message: "failed" },
+    });
+    await completeRoundFromEnvelope(dataDir, {
+      contract_version: 2,
+      review_session_id: "session-1",
+      agent_id: "claude-reviewer",
+      adapter: "claude",
+      round: 1,
+      status: "skipped",
+      output_file: null,
+      artifacts: [],
+      error: null,
+    });
+
+    state = JSON.parse(await readFile(paths.stateFile, "utf8"));
+    assert.ok(state.rounds[0].completed_at);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("getRoundOutput requires agent_id when multiple outputs exist", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
+  try {
+    const targetRoot = join(temp, "repo");
+    const dataDir = join(temp, "data");
+    await mkdir(targetRoot, { recursive: true });
+    await startSession({ data_dir: dataDir, review_session_id: "session-1", target_root: targetRoot });
+    await prepareInitialRound({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      agents: [
+        { agent_id: "codex-a", adapter: "codex" },
+        { agent_id: "codex-b", adapter: "codex" },
+      ],
+    });
+    const paths = sessionPaths(dataDir, "session-1");
+    for (const agentId of ["codex-a", "codex-b"]) {
+      const outputFile = join(paths.artifactDir, `round-1-${agentId}-output.md`);
+      await writeFile(outputFile, `${agentId} output`, "utf8");
+      await completeRoundFromEnvelope(dataDir, {
+        contract_version: 2,
+        review_session_id: "session-1",
+        agent_id: agentId,
+        adapter: "codex",
+        round: 1,
+        status: "completed",
+        output_file: outputFile,
+        artifacts: [],
+        error: null,
+      });
+    }
+
+    await assert.rejects(
+      getRoundOutput({ data_dir: dataDir, review_session_id: "session-1", round: 1 }),
+      /ambiguous/,
+    );
+    const output = await getRoundOutput({
+      data_dir: dataDir,
+      review_session_id: "session-1",
+      round: 1,
+      agent_id: "codex-b",
+    });
+    assert.equal(output.content, "codex-b output");
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -107,9 +241,10 @@ test("completeRound rejects response_file outside artifact root", async () => {
 
     const responseFile = join(temp, "outside-response.json");
     await writeAdapterResponse(responseFile, {
-      contract_version: 1,
+      contract_version: 2,
       review_session_id: "session-1",
-      agent: "codex",
+      agent_id: "codex",
+      adapter: "codex",
       round: 1,
       status: "failed",
       output_file: null,
@@ -135,9 +270,10 @@ test("completeRound rejects non-integer round number", async () => {
     for (const bad of ["1", 0, -1, 1.5, Number.NaN]) {
       await assert.rejects(
         completeRoundFromEnvelope(dataDir, {
-          contract_version: 1,
+          contract_version: 2,
           review_session_id: "session-1",
-          agent: "codex",
+          agent_id: "codex",
+          adapter: "codex",
           round: bad,
           status: "failed",
         }),
@@ -180,9 +316,10 @@ test("completeRound rejects unsupported contract_version", async () => {
 
     await assert.rejects(
       completeRoundFromEnvelope(dataDir, {
-        contract_version: 2,
+        contract_version: 999,
         review_session_id: "session-1",
-        agent: "codex",
+        agent_id: "codex",
+        adapter: "codex",
         round: 1,
         status: "completed",
         output_file: outputFile,
@@ -205,9 +342,10 @@ test("completeRound rejects unknown status", async () => {
 
     await assert.rejects(
       completeRoundFromEnvelope(dataDir, {
-        contract_version: 1,
+        contract_version: 2,
         review_session_id: "session-1",
-        agent: "codex",
+        agent_id: "codex",
+        adapter: "codex",
         round: 1,
         status: "succeeded",
       }),
@@ -232,9 +370,10 @@ test("completeRound rejects output_file outside artifact dir", async () => {
 
     await assert.rejects(
       completeRoundFromEnvelope(dataDir, {
-        contract_version: 1,
+        contract_version: 2,
         review_session_id: "session-1",
-        agent: "codex",
+        agent_id: "codex",
+        adapter: "codex",
         round: 1,
         status: "completed",
         output_file: strayFile,
@@ -257,9 +396,10 @@ test("completeRound rejects completed status without output_file", async () => {
 
     await assert.rejects(
       completeRoundFromEnvelope(dataDir, {
-        contract_version: 1,
+        contract_version: 2,
         review_session_id: "session-1",
-        agent: "codex",
+        agent_id: "codex",
+        adapter: "codex",
         round: 1,
         status: "completed",
       }),
@@ -285,9 +425,10 @@ test("completeRound rejects failed status carrying output_file", async () => {
 
     await assert.rejects(
       completeRoundFromEnvelope(dataDir, {
-        contract_version: 1,
+        contract_version: 2,
         review_session_id: "session-1",
-        agent: "codex",
+        agent_id: "codex",
+        adapter: "codex",
         round: 1,
         status: "failed",
         output_file: outputFile,
@@ -313,9 +454,10 @@ test("completeRound rejects missing output_file", async () => {
 
     await assert.rejects(
       completeRoundFromEnvelope(dataDir, {
-        contract_version: 1,
+        contract_version: 2,
         review_session_id: "session-1",
-        agent: "codex",
+        agent_id: "codex",
+        adapter: "codex",
         round: 1,
         status: "completed",
         output_file: missingFile,
@@ -348,9 +490,10 @@ test("getRound returns round state", async () => {
     await writeFile(outputFile, "review output", "utf8");
 
     await completeRoundFromEnvelope(dataDir, {
-      contract_version: 1,
+      contract_version: 2,
       review_session_id: "session-1",
-      agent: "codex",
+      agent_id: "codex",
+      adapter: "codex",
       round: 1,
       status: "completed",
       output_file: outputFile,
@@ -392,9 +535,10 @@ test("getRoundOutput returns text command output by default", async () => {
     await writeFile(outputFile, "review output", "utf8");
 
     await completeRoundFromEnvelope(dataDir, {
-      contract_version: 1,
+      contract_version: 2,
       review_session_id: "session-1",
-      agent: "codex",
+      agent_id: "codex",
+      adapter: "codex",
       round: 1,
       status: "completed",
       output_file: outputFile,

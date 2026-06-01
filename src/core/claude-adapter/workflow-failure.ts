@@ -52,21 +52,28 @@ async function updateFailedAgentState({ request, agentState, paths, code, messag
   Object.assign(agentState, {
     schema_version: agentState.schema_version ?? 1,
     review_session_id: request.review_session_id,
-    agent: "claude",
+    agent_id: request.agent_id,
+    adapter: "claude",
     status: "failed",
     target_root: agentState.target_root ?? request.target_root,
     last_input_file: agentState.last_input_file ?? paths.inputFile,
     last_output_file: agentState.last_output_file ?? null,
     last_error: error,
   });
-  await appendAgentArtifacts(agentState, [artifact(paths.diagnosticFile, "diagnostic", request.round)]);
+  await appendAgentArtifacts(agentState, [artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id)]);
   agentState.errors ??= [];
-  agentState.errors.push({ ...error, agent: "claude", round: request.round, created_at: nowIso() });
+  agentState.errors.push({
+    ...error,
+    agent_id: request.agent_id,
+    adapter: "claude",
+    round: request.round,
+    created_at: nowIso(),
+  });
   await saveAgentState(request.data_dir ?? ".", request.review_session_id, agentState);
 }
 
 async function handleFailure(input: FailureInput): Promise<AdapterResponseEnvelope> {
-  const diagnosticArtifact = artifact(input.paths.diagnosticFile, "diagnostic", input.request.round);
+  const diagnosticArtifact = artifact(input.paths.diagnosticFile, "diagnostic", input.request.round, input.request.agent_id);
   const error = makeError(input.code, input.message, input.paths.diagnosticFile);
   const response = makeResponse(input.request, "failed", null, [diagnosticArtifact], error);
 

@@ -55,7 +55,8 @@ async function updateFailedAgentState({ request, agentState, paths, code, messag
   Object.assign(agentState, {
     schema_version: agentState.schema_version ?? 1,
     review_session_id: request.review_session_id,
-    agent: "codex",
+    agent_id: request.agent_id,
+    adapter: "codex",
     status: "failed",
     thread_id: agentState.thread_id ?? null,
     target_root: agentState.target_root ?? request.target_root,
@@ -65,16 +66,16 @@ async function updateFailedAgentState({ request, agentState, paths, code, messag
     last_exit_file: paths.exitFile,
     last_error: error,
   });
-  await appendAgentArtifacts(agentState, [artifact(paths.diagnosticFile, "diagnostic", request.round)]);
+  await appendAgentArtifacts(agentState, [artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id)]);
   agentState.errors ??= [];
-  agentState.errors.push({ ...error, agent: "codex", round: request.round, created_at: nowIso() });
+  agentState.errors.push({ ...error, agent_id: request.agent_id, adapter: "codex", round: request.round, created_at: nowIso() });
   await saveAgentState(request.data_dir ?? ".", request.review_session_id, agentState);
 }
 
 // 失敗時の diagnostic、response envelope、可能なら agent state 更新をまとめて行う。
 async function handleFailure(input: FailureInput): Promise<AdapterResponseEnvelope> {
   // 失敗時も response envelope を返し、agent state が有効なら復旧可能な診断を追記する。
-  const diagnosticArtifact = artifact(input.paths.diagnosticFile, "diagnostic", input.request.round);
+  const diagnosticArtifact = artifact(input.paths.diagnosticFile, "diagnostic", input.request.round, input.request.agent_id);
   const error = makeError(input.code, input.message, input.paths.diagnosticFile);
   const response = makeResponse(input.request, "failed", null, [diagnosticArtifact], error);
 

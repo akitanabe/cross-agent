@@ -4,10 +4,10 @@ import type { ArtifactPathSet, CodexRunSpec } from "./types.ts";
 
 export function completedArtifacts(runSpec: CodexRunSpec, paths: ArtifactPathSet): AdapterResponseArtifact[] {
   return [
-    artifact(paths.runFile, "run_spec", runSpec.round),
-    artifact(runSpec.output_file, "agent_output", runSpec.round),
-    artifact(runSpec.event_log, "event_log", runSpec.round),
-    artifact(runSpec.exit_file, "exit_status", runSpec.round),
+    artifact(paths.runFile, "run_spec", runSpec.round, runSpec.agent_id),
+    artifact(runSpec.output_file, "agent_output", runSpec.round, runSpec.agent_id),
+    artifact(runSpec.event_log, "event_log", runSpec.round, runSpec.agent_id),
+    artifact(runSpec.exit_file, "exit_status", runSpec.round, runSpec.agent_id),
   ];
 }
 
@@ -32,5 +32,5 @@ export async function appendCompletionDiagnostic(
     runSpec.previous_target_root ? `- previous_target_root: ${runSpec.previous_target_root}` : null,
     `- target_root: ${runSpec.target_root}`,
   ]);
-  artifacts.push(artifact(paths.diagnosticFile, "diagnostic", runSpec.round));
+  artifacts.push(artifact(paths.diagnosticFile, "diagnostic", runSpec.round, runSpec.agent_id));
 }

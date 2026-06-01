@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -33,6 +33,23 @@ test("prepareCodexRun writes initial run spec", async () => {
     assert.equal(runSpec.mode, "initial");
     assert.equal(runSpec.thread_id, null);
     assert.equal(runSpec.model_reasoning_effort, "high");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("prepareCodexRun separates run spec by agent_id", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
+  try {
+    const { dataDir, request } = await createRequestFixture(temp, { agentId: "codex-a" });
+
+    const prepared = await prepareCodexRun(request, { dataDir });
+    assert.match(prepared.path, /round-1-codex-a-run\.json$/);
+
+    const runSpec = JSON.parse(await readFile(prepared.path, "utf8"));
+    assert.equal(runSpec.agent_id, "codex-a");
+    assert.equal(runSpec.adapter, "codex");
+    assert.match(runSpec.output_file, /round-1-codex-a-output\.md$/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -92,6 +109,33 @@ test("prepareCodexRun writes failure envelope when session state is missing", as
 
     assert.equal(caught?.response.status, "failed");
     assert.equal(caught?.response.error.code, "state_file_missing");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("prepareCodexRun rejects unsupported session schema version", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
+  try {
+    const { dataDir, request } = await createRequestFixture(temp);
+    await mkdir(join(dataDir, "sessions"), { recursive: true });
+    await writeFile(
+      join(dataDir, "sessions", "session-1.json"),
+      `${JSON.stringify({ schema_version: 1, review_session_id: "session-1" })}\n`,
+    );
+
+    let caught: CodexPrepareFailedError | null = null;
+    await assert.rejects(
+      async () => {
+        await prepareCodexRun(request, { dataDir });
+      },
+      (error) => {
+        caught = error as CodexPrepareFailedError;
+        return error instanceof CodexPrepareFailedError;
+      },
+    );
+    assert.equal(caught?.response.error.code, "state_file_invalid");
+    assert.match(caught?.response.error.message, /schema_version/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

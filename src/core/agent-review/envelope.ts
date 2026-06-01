@@ -4,7 +4,8 @@ import type { AdapterRequestEnvelope, AgentReviewOptions, RoundKind } from "./ty
 // adapter に渡す request envelope v1 を組み立てる。
 export function buildAdapterRequest({
   reviewSessionId,
-  agent,
+  agentId,
+  adapter,
   round,
   roundKind,
   targetRoot,
@@ -15,7 +16,8 @@ export function buildAdapterRequest({
   options,
 }: {
   reviewSessionId: string;
-  agent: string;
+  agentId: string;
+  adapter: string;
   round: number;
   roundKind: RoundKind;
   targetRoot: string;
@@ -25,11 +27,12 @@ export function buildAdapterRequest({
   focusQuestion?: string | null;
   options: AgentReviewOptions;
 }): AdapterRequestEnvelope {
-  // adapter 境界は v1 envelope に固定し、agent 固有の解釈は adapter 側へ任せる。
+  // adapter 境界では execution identity と adapter 種別を分離する。
   return {
-    contract_version: 1,
+    contract_version: 2,
     review_session_id: reviewSessionId,
-    agent,
+    agent_id: agentId,
+    adapter,
     round,
     round_kind: roundKind,
     target_root: normalizePath(targetRoot) as string,

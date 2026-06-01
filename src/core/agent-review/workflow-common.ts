@@ -1,5 +1,5 @@
 import type { CommandOutput, OutputType, SessionPathSet, SessionState } from "./types.ts";
-import { readJson, sessionPaths } from "./state.ts";
+import { readJson, sessionPaths, validateSessionStateSchema } from "./state.ts";
 
 export function commandOutput<T>(outputType: OutputType, content: T): CommandOutput<T> {
   return { output_type: outputType, content };
@@ -16,6 +16,7 @@ export async function readSession(
   if (state.review_session_id !== reviewSessionId) {
     throw new Error("state review_session_id does not match input review_session_id.");
   }
+  validateSessionStateSchema(state);
 
   return { paths, state };
 }

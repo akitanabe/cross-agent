@@ -44,19 +44,21 @@ export function sessionStateFileFor(dataDir: string, reviewSessionId: string): s
 }
 
 // data directory から、Codex 用の個別 agent state file を導出する。
-export function agentStateFileFor(dataDir: string, reviewSessionId: string): string {
-  return resolve(dataDir, "sessions", reviewSessionId, "agents", "codex.json");
+export function agentStateFileFor(dataDir: string, reviewSessionId: string, agentId = "codex"): string {
+  return resolve(dataDir, "sessions", reviewSessionId, "agents", `${agentId}.json`);
 }
 
 // round 番号から Codex adapter が生成する artifact 群のパスを組み立てる。
-export function artifactPaths(artifactDir: string, round: number | string): ArtifactPathSet {
+export function artifactPaths(artifactDir: string, round: number | string, agentId = "codex"): ArtifactPathSet {
   return {
-    runFile: resolve(artifactDir, `round-${round}-codex-run.json`),
-    outputFile: resolve(artifactDir, `round-${round}-codex-output.md`),
-    eventLog: resolve(artifactDir, `round-${round}-codex-events.jsonl`),
-    exitFile: resolve(artifactDir, `round-${round}-codex-exit.json`),
-    diagnosticFile: resolve(artifactDir, `round-${round}-codex-diagnostic.md`),
-    responseFile: resolve(artifactDir, `round-${round}-codex-response.json`),
+    agent_id: agentId,
+    adapter: "codex",
+    runFile: resolve(artifactDir, `round-${round}-${agentId}-run.json`),
+    outputFile: resolve(artifactDir, `round-${round}-${agentId}-output.md`),
+    eventLog: resolve(artifactDir, `round-${round}-${agentId}-events.jsonl`),
+    exitFile: resolve(artifactDir, `round-${round}-${agentId}-exit.json`),
+    diagnosticFile: resolve(artifactDir, `round-${round}-${agentId}-diagnostic.md`),
+    responseFile: resolve(artifactDir, `round-${round}-${agentId}-response.json`),
   };
 }
 
@@ -126,13 +128,14 @@ export function nowIso(): string {
 }
 
 // state に append する artifact metadata を作る。
-export function artifact(path: string, kind: string, round: number, agent = "codex"): AdapterResponseArtifact {
+export function artifact(path: string, kind: string, round: number, agentId = "codex"): AdapterResponseArtifact {
   return {
     path,
     kind,
     owner: OWNER,
     round,
-    agent,
+    agent_id: agentId,
+    adapter: "codex",
     created_at: nowIso(),
     temporary: false,
   };
@@ -164,9 +167,10 @@ export function makeResponse(
   const normalizedError =
     error && error.details_file ? { ...error, details_file: normalizePath(error.details_file) } : error;
   return {
-    contract_version: 1,
+    contract_version: 2,
     review_session_id: request?.review_session_id ?? null,
-    agent: "codex",
+    agent_id: request?.agent_id ?? null,
+    adapter: "codex",
     round: request?.round ?? null,
     status,
     output_file: outputFile ? normalizePath(outputFile) : outputFile,
@@ -187,7 +191,8 @@ export async function validateRequest(request: AdapterRequestInput): Promise<Rec
   const required = [
     "contract_version",
     "review_session_id",
-    "agent",
+    "agent_id",
+    "adapter",
     "round",
     "round_kind",
     "target_root",
@@ -198,11 +203,11 @@ export async function validateRequest(request: AdapterRequestInput): Promise<Rec
   if (missing.length) {
     return makeError("invalid_request_envelope", `Missing required fields: ${missing.join(", ")}`);
   }
-  if (request.contract_version !== 1) {
-    return makeError("invalid_request_envelope", "contract_version must be 1.");
+  if (request.contract_version !== 2) {
+    return makeError("invalid_request_envelope", "contract_version must be 2.");
   }
-  if (request.agent !== "codex") {
-    return makeError("invalid_request_envelope", 'agent must be "codex".');
+  if (request.adapter !== "codex") {
+    return makeError("invalid_request_envelope", 'adapter must be "codex".');
   }
 
   try {

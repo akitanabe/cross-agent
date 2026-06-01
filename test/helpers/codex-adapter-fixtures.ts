@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { sessionStateFileFor } from "../../src/core/codex-adapter/state.ts";
 
-export async function createRequestFixture(temp, { round = 1, prompt = "review this" } = {}) {
+export async function createRequestFixture(temp, { round = 1, prompt = "review this", agentId = "codex" } = {}) {
   const targetRoot = join(temp, "repo");
   const dataDir = join(temp, "data");
   const promptFile = join(temp, `prompt-${round}.md`);
@@ -13,7 +13,7 @@ export async function createRequestFixture(temp, { round = 1, prompt = "review t
   await writeFile(promptFile, prompt, "utf8");
   await writeFile(
     sessionStateFileFor(dataDir, "session-1"),
-    `${JSON.stringify({ review_session_id: "session-1" }, null, 2)}\n`,
+    `${JSON.stringify({ schema_version: 2, review_session_id: "session-1" }, null, 2)}\n`,
     "utf8",
   );
 
@@ -21,9 +21,10 @@ export async function createRequestFixture(temp, { round = 1, prompt = "review t
     dataDir,
     targetRoot,
     request: {
-      contract_version: 1,
+      contract_version: 2,
       review_session_id: "session-1",
-      agent: "codex",
+      agent_id: agentId,
+      adapter: "codex",
       round,
       round_kind: round === 1 ? "initial_review" : "follow_up",
       target_root: targetRoot,

@@ -2,10 +2,13 @@ export type ReviewDepth = "low" | "medium" | "high" | string;
 export type RoundKind = "initial_review" | "deep_dive" | "recovery" | "follow_up" | string;
 export type AdapterResponseStatus = "completed" | "failed" | "skipped";
 
-export type AdapterRequestEnvelopeV1 = {
-  contract_version: 1;
+export const SUPPORTED_ADAPTER_CONTRACT_VERSION = 2;
+
+export type AdapterRequestEnvelopeV2 = {
+  contract_version: 2;
   review_session_id: string;
-  agent: string;
+  agent_id: string;
+  adapter: string;
   round: number;
   round_kind: RoundKind;
   target_root: string;
@@ -19,14 +22,15 @@ export type AdapterRequestEnvelopeV1 = {
   };
 };
 
-export type AdapterRequestEnvelope = AdapterRequestEnvelopeV1;
+export type AdapterRequestEnvelope = AdapterRequestEnvelopeV2;
 
 export type AdapterResponseArtifact = {
   path: string;
   kind: string;
   owner?: string;
   round?: number | null;
-  agent?: string | null;
+  agent_id?: string | null;
+  adapter?: string | null;
   created_at?: string;
   temporary?: boolean;
   [key: string]: unknown;
@@ -40,10 +44,11 @@ export type AdapterResponseError = {
   [key: string]: unknown;
 } | null;
 
-export type AdapterResponseEnvelopeV1 = {
-  contract_version: 1;
+export type AdapterResponseEnvelopeV2 = {
+  contract_version: 2;
   review_session_id: string;
-  agent: string;
+  agent_id: string;
+  adapter: string;
   round: number;
   status: AdapterResponseStatus;
   output_file: string | null;
@@ -55,7 +60,8 @@ export type AdapterResponseEnvelopeV1 = {
 export type AdapterResponseEnvelope = {
   contract_version: number;
   review_session_id: string | null;
-  agent: string;
+  agent_id?: string | null;
+  adapter?: string | null;
   round: number | null;
   status: AdapterResponseStatus | string;
   output_file?: string | null;

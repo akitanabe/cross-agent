@@ -1,9 +1,9 @@
 export type {
   AdapterRequestEnvelope,
-  AdapterRequestEnvelopeV1,
+  AdapterRequestEnvelopeV2,
   AdapterResponseArtifact,
   AdapterResponseEnvelope,
-  AdapterResponseEnvelopeV1,
+  AdapterResponseEnvelopeV2,
   AdapterResponseError,
   AdapterResponseStatus,
   ReviewDepth,
@@ -31,27 +31,39 @@ export type ArtifactRecord = {
   kind: string;
   owner: string;
   round: number | null;
-  agent: string | null;
+  agent_id: string | null;
+  adapter: string | null;
   created_at: string;
   temporary: boolean;
 };
 
 export type AgentResult = {
-  agent: string;
+  agent_id: string;
+  adapter: string;
   round: number;
   status: AdapterResponseStatus | string;
   output_file: string | null;
   error: unknown;
 };
 
-export type RoundEntry = {
-  round: number;
-  kind: RoundKind;
-  agent: string;
+export type RoundAgentState = {
+  agent_id: string;
+  adapter: string;
+  status: "pending" | AdapterResponseStatus | string;
   prompt_file: string;
+  adapter_request_file: string;
+  response_file: string;
   started_at: string;
   completed_at: string | null;
   agent_result: AgentResult | null;
+};
+
+export type RoundEntry = {
+  round: number;
+  kind: RoundKind;
+  started_at: string;
+  completed_at: string | null;
+  agents: RoundAgentState[];
 };
 
 export type SessionState = {
@@ -92,9 +104,26 @@ export type CommandOutput<T = unknown> = {
   content: T;
 };
 
-export type PrepareRoundResult = CommandOutput<string> & {
+export type PrepareRequestResult = {
+  agent_id: string;
+  adapter: string;
   request_file: string;
-  envelope: AdapterRequestEnvelope;
+};
+
+export type PrepareRoundOutput = {
+  review_session_id: string;
+  round: number;
+  requests: PrepareRequestResult[];
+};
+
+export type PrepareRoundResult = CommandOutput<PrepareRoundOutput> & {
+  requests: PrepareRequestResult[];
+  envelopes: AdapterRequestEnvelope[];
+};
+
+export type AgentLaunchSpec = {
+  agent_id: string;
+  adapter: string;
 };
 
 export type StartSessionInput = {
@@ -107,7 +136,9 @@ export type StartSessionInput = {
 export type PrepareInitialRoundInput = {
   data_dir?: string | null;
   review_session_id?: string | null;
-  agent?: string | null;
+  agent_id?: string | null;
+  adapter?: string | null;
+  agents?: AgentLaunchSpec[];
   focus_question?: string | null;
   context_text?: string | null;
   target_files?: string[];
@@ -117,10 +148,13 @@ export type PrepareInitialRoundInput = {
 export type PrepareNextRoundInput = {
   data_dir?: string | null;
   review_session_id?: string | null;
-  agent?: string | null;
+  agent_id?: string | null;
+  adapter?: string | null;
+  agents?: AgentLaunchSpec[];
   round_kind?: RoundKind | null;
   prompt_text?: string | null;
   previous_round?: number;
+  previous_agent_id?: string | null;
   focus_question?: string | null;
   target_files?: string[];
 };
@@ -139,4 +173,5 @@ export type GetRoundInput = {
   data_dir?: string | null;
   review_session_id?: string | null;
   round?: number;
+  agent_id?: string | null;
 };
