@@ -3,13 +3,15 @@ import { resolve } from "node:path";
 
 import {
   ADAPTER_RESPONSE_STATUSES,
-  SUPPORTED_CONTRACT_VERSION,
+  SUPPORTED_ADAPTER_CONTRACT_VERSION,
   isPathInside,
   nowIso,
   readJson,
   resolveDataDir,
   sessionPaths,
+  validateAgentId,
   validateRoundNumber,
+  validateSessionStateSchema,
   writeJsonAtomic,
 } from "./state.ts";
 import type {
@@ -44,13 +46,15 @@ export async function validateAdapterResponse(
   paths: SessionPathSet,
   responseFile: string | null = null,
 ): Promise<void> {
-  if (response.contract_version !== SUPPORTED_CONTRACT_VERSION) {
+  if (response.contract_version !== SUPPORTED_ADAPTER_CONTRACT_VERSION) {
     throw new Error(`invalid adapter response: unsupported contract_version ${response.contract_version}`);
   }
   if (!ADAPTER_RESPONSE_STATUSES.has(response.status as AdapterResponseStatus)) {
     throw new Error(`invalid adapter response: unknown status ${response.status}`);
   }
   validateRoundNumber(response.round);
+  validateAgentId(response.agent_id);
+  if (!response.adapter) throw new Error("invalid adapter response: adapter is required.");
 
   if (responseFile) {
     if (!isPathInside(paths.artifactDir, responseFile)) {
@@ -95,7 +99,7 @@ async function completeResolvedRound({
   dataDir: string;
   agentResponse: AdapterResponseEnvelope;
   responseFile: string;
-  expected?: { reviewSessionId: string; round: number; agent: string };
+  expected?: { reviewSessionId: string; round: number; agentId: string };
 }): Promise<Record<string, unknown>> {
   const reviewSessionId = agentResponse.review_session_id;
   if (!reviewSessionId) throw new Error("review_session_id is required.");
@@ -104,8 +108,8 @@ async function completeResolvedRound({
     if (reviewSessionId !== expected.reviewSessionId) {
       throw new Error("adapter response review_session_id does not match current round.");
     }
-    if (agentResponse.round !== expected.round || agentResponse.agent !== expected.agent) {
-      throw new Error(`adapter response does not match current round: ${expected.round}/${expected.agent}`);
+    if (agentResponse.round !== expected.round || agentResponse.agent_id !== expected.agentId) {
+      throw new Error(`adapter response does not match current round: ${expected.round}/${expected.agentId}`);
     }
   }
 
@@ -116,20 +120,33 @@ async function completeResolvedRound({
   if (state.review_session_id !== reviewSessionId) {
     throw new Error("state review_session_id does not match input review_session_id.");
   }
+  validateSessionStateSchema(state);
 
-  const round = state.rounds?.find(
-    (entry) => entry.round === agentResponse.round && entry.agent === agentResponse.agent,
-  );
-  if (!round) throw new Error(`round not found: ${agentResponse.round}/${agentResponse.agent}`);
+  const round = state.rounds?.find((entry) => entry.round === agentResponse.round);
+  const agentState = round?.agents.find((entry) => entry.agent_id === agentResponse.agent_id);
+  if (!round || !agentState) {
+    throw new Error(`agent state not found: round ${agentResponse.round}, agent_id ${agentResponse.agent_id}`);
+  }
+  if (agentState.adapter !== agentResponse.adapter) {
+    throw new Error(
+      `adapter response adapter does not match state for ${agentResponse.agent_id}: ${agentState.adapter} != ${agentResponse.adapter}`,
+    );
+  }
 
-  round.completed_at = nowIso();
-  round.agent_result = {
-    agent: agentResponse.agent,
+  const completedAt = nowIso();
+  agentState.completed_at = completedAt;
+  agentState.status = agentResponse.status;
+  agentState.agent_result = {
+    agent_id: agentResponse.agent_id as string,
+    adapter: agentResponse.adapter as string,
     round: agentResponse.round as number,
     status: agentResponse.status,
     output_file: normalizePath(agentResponse.output_file ?? null) as string | null,
     error: agentResponse.error,
   };
+  if (round.agents.every((entry) => entry.status !== "pending")) {
+    round.completed_at = completedAt;
+  }
 
   state.updated_at = nowIso();
 
@@ -138,7 +155,8 @@ async function completeResolvedRound({
     review_session_id: state.review_session_id,
     state_file: paths.stateFile,
     round: agentResponse.round as number,
-    agent: agentResponse.agent,
+    agent_id: agentResponse.agent_id,
+    adapter: agentResponse.adapter,
     status: agentResponse.status,
     response_file: responseFile,
   };
@@ -157,15 +175,15 @@ export async function completeCurrentRound(input: CompleteCurrentRoundInput): Pr
 
   const { paths, state } = await readSession(dataDir, reviewSessionId);
   validateRoundNumber(state.current_round);
-  const currentRounds = (state.rounds ?? []).filter((entry) => entry.round === state.current_round);
-  if (currentRounds.length !== 1) {
-    throw new Error(`current round is ambiguous or missing: ${state.current_round}`);
+  const currentRound = (state.rounds ?? []).find((entry) => entry.round === state.current_round);
+  if (!currentRound) throw new Error(`current round is missing: ${state.current_round}`);
+  const pendingAgents = currentRound.agents.filter((entry) => entry.status === "pending");
+  if (pendingAgents.length !== 1) {
+    throw new Error(`current round pending agent is ambiguous or missing: ${state.current_round}`);
   }
 
-  const currentRound = currentRounds[0];
-  const responseFile = normalizePath(
-    resolve(paths.artifactDir, `round-${currentRound.round}-${currentRound.agent}-response.json`),
-  ) as string;
+  const pendingAgent = pendingAgents[0];
+  const responseFile = normalizePath(pendingAgent.response_file) as string;
   if (!isPathInside(paths.artifactDir, responseFile)) {
     throw new Error(`invalid adapter response: derived response_file is outside artifact dir: ${responseFile}`);
   }
@@ -177,7 +195,7 @@ export async function completeCurrentRound(input: CompleteCurrentRoundInput): Pr
     expected: {
       reviewSessionId,
       round: currentRound.round,
-      agent: currentRound.agent,
+      agentId: pendingAgent.agent_id,
     },
   });
 }

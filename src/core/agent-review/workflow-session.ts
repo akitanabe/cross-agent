@@ -2,7 +2,15 @@ import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 
 import { commandOutput } from "./workflow-common.ts";
-import { ensureDirectory, normalizeOptions, nowIso, resolveDataDir, sessionPaths, writeJsonAtomic } from "./state.ts";
+import {
+  SUPPORTED_SESSION_SCHEMA_VERSION,
+  ensureDirectory,
+  normalizeOptions,
+  nowIso,
+  resolveDataDir,
+  sessionPaths,
+  writeJsonAtomic,
+} from "./state.ts";
 import type { CommandOutput, StartSessionInput } from "./types.ts";
 import { normalizePath } from "../shared/path-utils.ts";
 
@@ -20,7 +28,7 @@ export async function startSession(input: StartSessionInput): Promise<CommandOut
   const options = normalizeOptions(input.options);
   const createdAt = nowIso();
   const state = {
-    schema_version: 1,
+    schema_version: SUPPORTED_SESSION_SCHEMA_VERSION,
     review_session_id: reviewSessionId,
     created_at: createdAt,
     updated_at: createdAt,

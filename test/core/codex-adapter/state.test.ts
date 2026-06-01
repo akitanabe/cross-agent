@@ -72,4 +72,11 @@ test("artifact path helpers use data directory layout", () => {
   assert.match(paths.exitFile.replaceAll("\\", "/"), /round-2-codex-exit\.json$/);
   assert.match(paths.diagnosticFile.replaceAll("\\", "/"), /round-2-codex-diagnostic\.md$/);
   assert.match(paths.responseFile.replaceAll("\\", "/"), /round-2-codex-response\.json$/);
+
+  const customAgentStateFile = agentStateFileFor("C:/data", "session-1", "codex-a");
+  assert.match(customAgentStateFile.replaceAll("\\", "/"), /C:\/data\/sessions\/session-1\/agents\/codex-a\.json$/);
+  const customPaths = artifactPaths(artifactDir, 2, "codex-a");
+  assert.match(customPaths.runFile.replaceAll("\\", "/"), /round-2-codex-a-run\.json$/);
+  assert.match(customPaths.outputFile.replaceAll("\\", "/"), /round-2-codex-a-output\.md$/);
+  assert.match(customPaths.responseFile.replaceAll("\\", "/"), /round-2-codex-a-response\.json$/);
 });

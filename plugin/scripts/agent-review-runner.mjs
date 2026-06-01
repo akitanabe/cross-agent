@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-// src/runners/cross-agent-runner.ts
+// src/runners/agent-review-runner.ts
 import { resolve as resolve5 } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// src/core/cross-agent/cli.ts
+// src/core/agent-review/cli.ts
 import { readFile as readFile3 } from "node:fs/promises";
 import { resolve as resolve4 } from "node:path";
 
@@ -74,7 +74,7 @@ function parseCommandArgs(argv, {
   );
 }
 
-// src/core/cross-agent/state.ts
+// src/core/agent-review/state.ts
 import { readFile, rename, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 
@@ -95,16 +95,20 @@ function normalizePathList(values, platform = process.platform) {
   return values.map((value) => normalizePath(value, platform));
 }
 
-// src/core/cross-agent/state.ts
-var OWNER = "cross-agent";
+// src/core/shared/adapter-envelope.ts
+var SUPPORTED_ADAPTER_CONTRACT_VERSION = 2;
+
+// src/core/agent-review/state.ts
+var OWNER = "agent-review";
 var DEFAULT_OPTIONS = {
   auto_deep_dive: true,
   review_depth: "medium",
   keep_artifacts: false
 };
-var SUPPORTED_CONTRACT_VERSION = 1;
+var SUPPORTED_SESSION_SCHEMA_VERSION = 2;
 var ADAPTER_RESPONSE_STATUSES = /* @__PURE__ */ new Set(["completed", "failed", "skipped"]);
 var REVIEW_SESSION_ID_RE = /^[A-Za-z0-9._-]+$/;
+var AGENT_ID_RE = /^[A-Za-z0-9._-]+$/;
 function validateReviewSessionId(reviewSessionId) {
   if (typeof reviewSessionId !== "string" || reviewSessionId.length === 0) {
     throw new Error("review_session_id must be a non-empty string.");
@@ -117,6 +121,52 @@ function validateRoundNumber(round) {
   if (typeof round !== "number" || !Number.isSafeInteger(round) || round < 1) {
     throw new Error(`invalid round: ${round}`);
   }
+}
+function validateAgentId(agentId) {
+  if (typeof agentId !== "string" || agentId.length === 0) {
+    throw new Error("agent_id must be a non-empty string.");
+  }
+  if (!AGENT_ID_RE.test(agentId) || agentId.includes("..") || agentId.includes("=")) {
+    throw new Error(`invalid agent_id: ${agentId}`);
+  }
+}
+function parseAgentLaunchSpec(value) {
+  const separator = value.indexOf("=");
+  if (separator <= 0 || separator !== value.lastIndexOf("=") || separator === value.length - 1) {
+    throw new Error(`invalid --agents value: ${value}. Expected <agent_id>=<adapter>.`);
+  }
+  const agent_id = value.slice(0, separator);
+  const adapter = value.slice(separator + 1);
+  validateAgentId(agent_id);
+  if (!adapter) throw new Error(`invalid adapter for agent_id ${agent_id}.`);
+  return { agent_id, adapter };
+}
+function normalizeAgentLaunchSpecs(input) {
+  const hasAgents = input.agents !== void 0 && input.agents !== null;
+  const hasSingle = input.agent_id != null || input.adapter != null;
+  if (hasAgents && hasSingle) {
+    throw new Error("--agents cannot be combined with --agent-id/--adapter.");
+  }
+  let agents;
+  if (hasAgents) {
+    agents = input.agents ?? [];
+    if (agents.length === 0) throw new Error("agents must include at least one entry.");
+  } else if (hasSingle) {
+    if (!input.agent_id || !input.adapter) {
+      throw new Error("--agent-id and --adapter must be specified together.");
+    }
+    agents = [{ agent_id: input.agent_id, adapter: input.adapter }];
+  } else {
+    agents = [{ agent_id: "codex", adapter: "codex" }];
+  }
+  const seen = /* @__PURE__ */ new Set();
+  for (const spec of agents) {
+    validateAgentId(spec.agent_id);
+    if (!spec.adapter) throw new Error(`adapter is required for agent_id ${spec.agent_id}.`);
+    if (seen.has(spec.agent_id)) throw new Error(`duplicate agent_id in round: ${spec.agent_id}`);
+    seen.add(spec.agent_id);
+  }
+  return agents;
 }
 function isPathInside(parent, child) {
   const parentPath = resolve(parent);
@@ -136,6 +186,13 @@ async function writeJsonAtomic(filePath, value) {
 }
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
+}
+function validateSessionStateSchema(state) {
+  if (state.schema_version !== SUPPORTED_SESSION_SCHEMA_VERSION) {
+    throw new Error(
+      `unsupported agent-review session schema_version ${state.schema_version ?? "missing"}; expected ${SUPPORTED_SESSION_SCHEMA_VERSION}.`
+    );
+  }
 }
 function resolveDataDir(inputDataDir) {
   if (!inputDataDir) {
@@ -167,13 +224,14 @@ function sessionPaths(dataDir, reviewSessionId) {
     stateFile: resolve(sessionsDir, `${reviewSessionId}.json`)
   };
 }
-function artifact(path, kind, round = null, agent = null) {
+function artifact(path, kind, round = null, agentId = null, adapter = null) {
   return {
     path,
     kind,
     owner: OWNER,
     round,
-    agent,
+    agent_id: agentId,
+    adapter,
     created_at: nowIso(),
     temporary: false
   };
@@ -185,7 +243,7 @@ function normalizeOptions(options = {}) {
   };
 }
 
-// src/core/cross-agent/workflow-common.ts
+// src/core/agent-review/workflow-common.ts
 function commandOutput(outputType, content) {
   return { output_type: outputType, content };
 }
@@ -196,10 +254,11 @@ async function readSession(dataDir, reviewSessionId) {
   if (state.review_session_id !== reviewSessionId) {
     throw new Error("state review_session_id does not match input review_session_id.");
   }
+  validateSessionStateSchema(state);
   return { paths, state };
 }
 
-// src/core/cross-agent/workflow-complete.ts
+// src/core/agent-review/workflow-complete.ts
 import { stat as stat2 } from "node:fs/promises";
 import { resolve as resolve2 } from "node:path";
 async function validateExistingFile(filePath, label) {
@@ -218,13 +277,15 @@ async function validateExistingFile(filePath, label) {
   }
 }
 async function validateAdapterResponse(response, paths, responseFile = null) {
-  if (response.contract_version !== SUPPORTED_CONTRACT_VERSION) {
+  if (response.contract_version !== SUPPORTED_ADAPTER_CONTRACT_VERSION) {
     throw new Error(`invalid adapter response: unsupported contract_version ${response.contract_version}`);
   }
   if (!ADAPTER_RESPONSE_STATUSES.has(response.status)) {
     throw new Error(`invalid adapter response: unknown status ${response.status}`);
   }
   validateRoundNumber(response.round);
+  validateAgentId(response.agent_id);
+  if (!response.adapter) throw new Error("invalid adapter response: adapter is required.");
   if (responseFile) {
     if (!isPathInside(paths.artifactDir, responseFile)) {
       throw new Error(`invalid adapter response: response_file is outside artifact dir: ${responseFile}`);
@@ -265,8 +326,8 @@ async function completeResolvedRound({
     if (reviewSessionId !== expected.reviewSessionId) {
       throw new Error("adapter response review_session_id does not match current round.");
     }
-    if (agentResponse.round !== expected.round || agentResponse.agent !== expected.agent) {
-      throw new Error(`adapter response does not match current round: ${expected.round}/${expected.agent}`);
+    if (agentResponse.round !== expected.round || agentResponse.agent_id !== expected.agentId) {
+      throw new Error(`adapter response does not match current round: ${expected.round}/${expected.agentId}`);
     }
   }
   const paths = sessionPaths(dataDir, reviewSessionId);
@@ -275,25 +336,39 @@ async function completeResolvedRound({
   if (state.review_session_id !== reviewSessionId) {
     throw new Error("state review_session_id does not match input review_session_id.");
   }
-  const round = state.rounds?.find(
-    (entry) => entry.round === agentResponse.round && entry.agent === agentResponse.agent
-  );
-  if (!round) throw new Error(`round not found: ${agentResponse.round}/${agentResponse.agent}`);
-  round.completed_at = nowIso();
-  round.agent_result = {
-    agent: agentResponse.agent,
+  validateSessionStateSchema(state);
+  const round = state.rounds?.find((entry) => entry.round === agentResponse.round);
+  const agentState = round?.agents.find((entry) => entry.agent_id === agentResponse.agent_id);
+  if (!round || !agentState) {
+    throw new Error(`agent state not found: round ${agentResponse.round}, agent_id ${agentResponse.agent_id}`);
+  }
+  if (agentState.adapter !== agentResponse.adapter) {
+    throw new Error(
+      `adapter response adapter does not match state for ${agentResponse.agent_id}: ${agentState.adapter} != ${agentResponse.adapter}`
+    );
+  }
+  const completedAt = nowIso();
+  agentState.completed_at = completedAt;
+  agentState.status = agentResponse.status;
+  agentState.agent_result = {
+    agent_id: agentResponse.agent_id,
+    adapter: agentResponse.adapter,
     round: agentResponse.round,
     status: agentResponse.status,
     output_file: normalizePath(agentResponse.output_file ?? null),
     error: agentResponse.error
   };
+  if (round.agents.every((entry) => entry.status !== "pending")) {
+    round.completed_at = completedAt;
+  }
   state.updated_at = nowIso();
   await writeJsonAtomic(paths.stateFile, state);
   return {
     review_session_id: state.review_session_id,
     state_file: paths.stateFile,
     round: agentResponse.round,
-    agent: agentResponse.agent,
+    agent_id: agentResponse.agent_id,
+    adapter: agentResponse.adapter,
     status: agentResponse.status,
     response_file: responseFile
   };
@@ -309,14 +384,14 @@ async function completeCurrentRound(input) {
   if (!reviewSessionId) throw new Error("review_session_id is required.");
   const { paths, state } = await readSession(dataDir, reviewSessionId);
   validateRoundNumber(state.current_round);
-  const currentRounds = (state.rounds ?? []).filter((entry) => entry.round === state.current_round);
-  if (currentRounds.length !== 1) {
-    throw new Error(`current round is ambiguous or missing: ${state.current_round}`);
+  const currentRound = (state.rounds ?? []).find((entry) => entry.round === state.current_round);
+  if (!currentRound) throw new Error(`current round is missing: ${state.current_round}`);
+  const pendingAgents = currentRound.agents.filter((entry) => entry.status === "pending");
+  if (pendingAgents.length !== 1) {
+    throw new Error(`current round pending agent is ambiguous or missing: ${state.current_round}`);
   }
-  const currentRound = currentRounds[0];
-  const responseFile = normalizePath(
-    resolve2(paths.artifactDir, `round-${currentRound.round}-${currentRound.agent}-response.json`)
-  );
+  const pendingAgent = pendingAgents[0];
+  const responseFile = normalizePath(pendingAgent.response_file);
   if (!isPathInside(paths.artifactDir, responseFile)) {
     throw new Error(`invalid adapter response: derived response_file is outside artifact dir: ${responseFile}`);
   }
@@ -328,19 +403,20 @@ async function completeCurrentRound(input) {
     expected: {
       reviewSessionId,
       round: currentRound.round,
-      agent: currentRound.agent
+      agentId: pendingAgent.agent_id
     }
   });
 }
 
-// src/core/cross-agent/workflow-prepare.ts
+// src/core/agent-review/workflow-prepare.ts
 import { writeFile as writeFile2 } from "node:fs/promises";
 import { resolve as resolve3 } from "node:path";
 
-// src/core/cross-agent/envelope.ts
+// src/core/agent-review/envelope.ts
 function buildAdapterRequest({
   reviewSessionId,
-  agent,
+  agentId,
+  adapter,
   round,
   roundKind,
   targetRoot,
@@ -351,9 +427,10 @@ function buildAdapterRequest({
   options
 }) {
   return {
-    contract_version: 1,
+    contract_version: 2,
     review_session_id: reviewSessionId,
-    agent,
+    agent_id: agentId,
+    adapter,
     round,
     round_kind: roundKind,
     target_root: normalizePath(targetRoot),
@@ -368,7 +445,7 @@ function buildAdapterRequest({
   };
 }
 
-// src/core/cross-agent/prompts.ts
+// src/core/agent-review/prompts.ts
 function buildInitialPrompt({
   focusQuestion,
   contextFile,
@@ -425,12 +502,67 @@ ${promptText}`);
 `;
 }
 
-// src/core/cross-agent/workflow-prepare.ts
+// src/core/agent-review/workflow-prepare.ts
+function responseFileFor(paths, round, agentId) {
+  return normalizePath(resolve3(paths.artifactDir, `round-${round}-${agentId}-response.json`));
+}
+async function writeAgentRequest({
+  paths,
+  state,
+  reviewSessionId,
+  spec,
+  round,
+  roundKind,
+  promptText,
+  contextFile,
+  targetFiles,
+  focusQuestion
+}) {
+  const promptFile = normalizePath(resolve3(paths.artifactDir, `round-${round}-${spec.agent_id}-prompt.md`));
+  await writeFile2(promptFile, promptText, "utf8");
+  const envelope = buildAdapterRequest({
+    reviewSessionId,
+    agentId: spec.agent_id,
+    adapter: spec.adapter,
+    round,
+    roundKind,
+    targetRoot: state.target_root,
+    promptFile,
+    contextFile: normalizePath(contextFile),
+    targetFiles,
+    focusQuestion,
+    options: state.options
+  });
+  const requestFile = normalizePath(
+    resolve3(paths.artifactDir, `round-${round}-${spec.agent_id}-adapter-request.json`)
+  );
+  await writeJsonAtomic(requestFile, envelope);
+  const now = nowIso();
+  return {
+    agentState: {
+      agent_id: spec.agent_id,
+      adapter: spec.adapter,
+      status: "pending",
+      prompt_file: promptFile,
+      adapter_request_file: requestFile,
+      response_file: responseFileFor(paths, round, spec.agent_id),
+      started_at: now,
+      completed_at: null,
+      agent_result: null
+    },
+    request: {
+      agent_id: spec.agent_id,
+      adapter: spec.adapter,
+      request_file: requestFile
+    },
+    envelope
+  };
+}
 async function prepareRound({
   paths,
   state,
   reviewSessionId,
-  agent,
+  agents,
   round,
   roundKind,
   promptText,
@@ -441,56 +573,70 @@ async function prepareRound({
   extraArtifacts = [],
   updateState = null
 }) {
-  const promptFile = resolve3(paths.artifactDir, `round-${round}-prompt.md`);
-  const normalizedPromptFile = normalizePath(promptFile);
-  const normalizedContextFile = normalizePath(contextFile);
-  await writeFile2(promptFile, promptText, "utf8");
-  const adapterRequest = buildAdapterRequest({
-    reviewSessionId,
-    agent,
-    round,
-    roundKind,
-    targetRoot: state.target_root,
-    promptFile: normalizedPromptFile,
-    contextFile: normalizedContextFile,
-    targetFiles,
-    focusQuestion,
-    options: state.options
-  });
-  const adapterRequestFile = resolve3(paths.artifactDir, `round-${round}-adapter-request.json`);
-  const normalizedAdapterRequestFile = normalizePath(adapterRequestFile);
-  await writeJsonAtomic(adapterRequestFile, adapterRequest);
+  const prepared = [];
+  for (const spec of agents) {
+    prepared.push(
+      await writeAgentRequest({
+        paths,
+        state,
+        reviewSessionId,
+        spec,
+        round,
+        roundKind,
+        promptText,
+        contextFile,
+        targetFiles,
+        focusQuestion
+      })
+    );
+  }
   const now = nowIso();
   state.updated_at = now;
   state.current_round = round;
-  updateState?.({ promptFile: normalizedPromptFile, now });
+  updateState?.({ promptFile: prepared[0]?.agentState.prompt_file ?? "", now });
   const roundEntry = {
     round,
     kind: roundKind,
-    agent,
-    prompt_file: normalizedPromptFile,
     started_at: now,
     completed_at: null,
-    agent_result: null
+    agents: prepared.map((entry) => entry.agentState)
   };
   if (resetRounds) {
     state.rounds = [roundEntry];
   } else {
     state.rounds ??= [];
-    state.rounds.push(roundEntry);
+    const existing = state.rounds.find((entry) => entry.round === round);
+    if (existing) {
+      const existingIds = new Set(existing.agents.map((agent) => agent.agent_id));
+      for (const agentState of roundEntry.agents) {
+        if (existingIds.has(agentState.agent_id)) throw new Error(`duplicate agent_id in round: ${agentState.agent_id}`);
+      }
+      existing.agents.push(...roundEntry.agents);
+    } else {
+      state.rounds.push(roundEntry);
+    }
   }
   state.artifacts ??= { files: [] };
   state.artifacts.files ??= [];
   state.artifacts.files.push(
     ...extraArtifacts,
-    artifact(normalizedPromptFile, "prompt", round, agent),
-    artifact(normalizedAdapterRequestFile, "adapter_request", round, agent)
+    ...prepared.flatMap((entry) => [
+      artifact(entry.agentState.prompt_file, "prompt", round, entry.agentState.agent_id, entry.agentState.adapter),
+      artifact(
+        entry.agentState.adapter_request_file,
+        "adapter_request",
+        round,
+        entry.agentState.agent_id,
+        entry.agentState.adapter
+      )
+    ])
   );
   await writeJsonAtomic(paths.stateFile, state);
+  const requests = prepared.map((entry) => entry.request);
   return {
-    ...commandOutput("text", normalizedAdapterRequestFile),
-    request_file: normalizedAdapterRequestFile,
-    envelope: adapterRequest
+    ...commandOutput("json", { review_session_id: reviewSessionId, round, requests }),
+    requests,
+    envelopes: prepared.map((entry) => entry.envelope)
   };
 }
 async function prepareInitialRound(input) {
@@ -498,7 +644,7 @@ async function prepareInitialRound(input) {
   const reviewSessionId = input.review_session_id;
   if (!reviewSessionId) throw new Error("review_session_id is required.");
   const { paths, state } = await readSession(dataDir, reviewSessionId);
-  const agent = input.agent ?? "codex";
+  const agents = normalizeAgentLaunchSpecs(input);
   const targetFiles = normalizePathList(input.target_files ?? []);
   const focusQuestion = input.focus_question ?? null;
   const contextText = input.context_text ?? null;
@@ -518,7 +664,7 @@ async function prepareInitialRound(input) {
     paths,
     state,
     reviewSessionId,
-    agent,
+    agents,
     round: 1,
     roundKind: "initial_review",
     promptText,
@@ -538,6 +684,28 @@ async function prepareInitialRound(input) {
     }
   });
 }
+function completedAgentForKind(previousRound, spec) {
+  const previousAgent = previousRound.agents.find((agent) => agent.agent_id === spec.agent_id);
+  if (!previousAgent) {
+    throw new Error(`previous round has no agent_id ${spec.agent_id}.`);
+  }
+  return previousAgent;
+}
+function previousOutputForFollowUp({
+  previousRound,
+  previousAgentId
+}) {
+  if (previousAgentId) {
+    const agent = previousRound.agents.find((entry) => entry.agent_id === previousAgentId);
+    if (!agent) throw new Error(`previous round has no previous_agent_id ${previousAgentId}.`);
+    return agent.agent_result?.output_file ?? null;
+  }
+  const agentsWithOutput = previousRound.agents.filter((agent) => agent.agent_result?.output_file);
+  if (agentsWithOutput.length > 1) {
+    throw new Error("previous output is ambiguous; specify previous_agent_id.");
+  }
+  return agentsWithOutput[0]?.agent_result?.output_file ?? null;
+}
 async function prepareNextRound(input) {
   const dataDir = resolveDataDir(input.data_dir);
   const reviewSessionId = input.review_session_id;
@@ -550,32 +718,42 @@ async function prepareNextRound(input) {
   if (input.previous_round !== void 0) validateRoundNumber(input.previous_round);
   const previousRound = input.previous_round !== void 0 ? rounds.find((entry) => entry.round === input.previous_round) : rounds.slice().reverse()[0];
   if (!previousRound) throw new Error("previous round not found.");
-  if (!previousRound.agent_result) {
-    throw new Error(`previous round is not completed: ${previousRound.round}/${previousRound.agent}`);
-  }
-  const previousResult = previousRound.agent_result;
-  const agent = input.agent ?? previousRound.agent;
+  const agents = input.agent_id != null || input.adapter != null || input.agents != null ? normalizeAgentLaunchSpecs(input) : previousRound.agents.length === 1 ? [{ agent_id: previousRound.agents[0].agent_id, adapter: previousRound.agents[0].adapter }] : (() => {
+    throw new Error("previous round has multiple agents; specify --agent-id/--adapter or --agents.");
+  })();
   const roundKind = input.round_kind ?? "follow_up";
+  for (const spec of agents) {
+    if (roundKind !== "deep_dive" && roundKind !== "recovery") continue;
+    const previousAgent = completedAgentForKind(previousRound, spec);
+    const previousResult = previousAgent.agent_result;
+    if (!previousResult) {
+      throw new Error(`previous round is not completed for agent_id ${spec.agent_id}.`);
+    }
+    if (roundKind === "deep_dive" && previousResult?.status !== "completed") {
+      throw new Error(`deep_dive requires previous status=completed for agent_id ${spec.agent_id}, got ${previousResult?.status}`);
+    }
+    if (roundKind === "recovery" && previousResult?.status !== "failed") {
+      throw new Error(`recovery requires previous status=failed for agent_id ${spec.agent_id}, got ${previousResult?.status}`);
+    }
+  }
   const focusQuestion = input.focus_question ?? state.context?.focus_question ?? null;
   const targetFiles = normalizePathList(input.target_files ?? state.context?.target_files ?? []);
   const contextFile = state.context?.context_file ?? null;
   const nextRound = Math.max(0, ...rounds.map((entry) => entry.round)) + 1;
-  if (roundKind === "deep_dive" && previousResult.status !== "completed") {
-    throw new Error(`deep_dive requires previous round status=completed, got ${previousResult.status}`);
-  }
-  if (roundKind === "recovery" && previousResult.status !== "failed") {
-    throw new Error(`recovery requires previous round status=failed, got ${previousResult.status}`);
-  }
+  const previousOutputFile = previousOutputForFollowUp({
+    previousRound,
+    previousAgentId: input.previous_agent_id ?? null
+  });
   const promptText = buildNextRoundPrompt({
     promptText: input.prompt_text,
-    previousOutputFile: previousResult.output_file ?? null,
+    previousOutputFile,
     focusQuestion
   });
   return prepareRound({
     paths,
     state,
     reviewSessionId,
-    agent,
+    agents,
     round: nextRound,
     roundKind,
     promptText,
@@ -585,27 +763,36 @@ async function prepareNextRound(input) {
   });
 }
 
-// src/core/cross-agent/workflow-round.ts
+// src/core/agent-review/workflow-round.ts
 import { readFile as readFile2 } from "node:fs/promises";
 async function getRound(input) {
   const dataDir = resolveDataDir(input.data_dir);
   const reviewSessionId = input.review_session_id;
   if (!reviewSessionId) throw new Error("review_session_id is required.");
-  const stateFile = sessionPaths(dataDir, reviewSessionId).stateFile;
-  const state = await readJson(stateFile);
-  if (state.review_session_id !== reviewSessionId) {
-    throw new Error("state review_session_id does not match input review_session_id.");
-  }
+  const { state } = await readSession(dataDir, reviewSessionId);
   const rounds = state.rounds ?? [];
   if (input.round !== void 0) validateRoundNumber(input.round);
-  const round = input.round !== void 0 ? rounds.find((entry) => entry.round === input.round) : rounds.slice().reverse().find((entry) => entry.agent_result?.output_file);
-  if (!round) throw new Error("round not found.");
-  const result = round.agent_result;
-  if (!result) throw new Error(`round is not completed: ${round.round}/${round.agent}`);
+  if (input.agent_id) validateAgentId(input.agent_id);
+  const selectedRound = input.round !== void 0 ? rounds.find((entry) => entry.round === input.round) : rounds.slice().reverse().find((entry) => entry.agents.some((agent) => agent.agent_result?.output_file));
+  if (!selectedRound) throw new Error("round not found.");
+  let selectedAgent;
+  if (input.agent_id) {
+    selectedAgent = selectedRound.agents.find((agent) => agent.agent_id === input.agent_id);
+    if (!selectedAgent) throw new Error(`agent_id not found in round ${selectedRound.round}: ${input.agent_id}`);
+  } else {
+    const agentsWithOutput = selectedRound.agents.filter((agent) => agent.agent_result?.output_file);
+    if (agentsWithOutput.length !== 1) {
+      throw new Error(`round output is ambiguous or missing: ${selectedRound.round}`);
+    }
+    selectedAgent = agentsWithOutput[0];
+  }
+  const result = selectedAgent.agent_result;
+  if (!result) throw new Error(`round is not completed: ${selectedRound.round}/${selectedAgent.agent_id}`);
   return {
     review_session_id: state.review_session_id,
-    round: round.round,
-    agent: round.agent,
+    round: selectedRound.round,
+    agent_id: selectedAgent.agent_id,
+    adapter: selectedAgent.adapter,
     status: result.status,
     output_file: result.output_file,
     error: result.error
@@ -613,11 +800,11 @@ async function getRound(input) {
 }
 async function getRoundOutput(input) {
   const round = await getRound(input);
-  if (!round.output_file) throw new Error(`round has no output_file: ${round.round}/${round.agent}`);
+  if (!round.output_file) throw new Error(`round has no output_file: ${round.round}/${round.agent_id}`);
   return commandOutput("text", await readFile2(round.output_file, "utf8"));
 }
 
-// src/core/cross-agent/workflow-session.ts
+// src/core/agent-review/workflow-session.ts
 import { randomUUID } from "node:crypto";
 import { mkdir as mkdir2 } from "node:fs/promises";
 async function startSession(input) {
@@ -632,7 +819,7 @@ async function startSession(input) {
   const options = normalizeOptions(input.options);
   const createdAt = nowIso();
   const state = {
-    schema_version: 1,
+    schema_version: SUPPORTED_SESSION_SCHEMA_VERSION,
     review_session_id: reviewSessionId,
     created_at: createdAt,
     updated_at: createdAt,
@@ -657,7 +844,7 @@ async function startSession(input) {
   return commandOutput("text", reviewSessionId);
 }
 
-// src/core/cross-agent/cli.ts
+// src/core/agent-review/cli.ts
 function optionInput(args) {
   const options = {};
   if (args.reviewDepth != null) options.review_depth = args.reviewDepth;
@@ -708,10 +895,12 @@ var commandArgs = {
     run: (input) => startSession(input)
   },
   "prepare-initial": {
-    usage: "prepare-initial --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> [--agent <agent>] [--focus-question <text>] [--context-file <path>] [--target-files <file...>]",
+    usage: "prepare-initial --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> [--agent-id <id> --adapter <adapter> | --agents <id=adapter...>] [--focus-question <text>] [--context-file <path>] [--target-files <file...>]",
     options: {
       "--review-session-id": { field: "reviewSessionId" },
-      "--agent": { field: "agent" },
+      "--agent-id": { field: "agentId" },
+      "--adapter": { field: "adapter" },
+      "--agents": { field: "agents", multiple: true },
       "--focus-question": { field: "focusQuestion" },
       "--context-file": { field: "contextFile" },
       "--target-files": { field: "targetFiles", multiple: true }
@@ -719,7 +908,9 @@ var commandArgs = {
     buildInput: async (args) => ({
       ...commonInput(args),
       review_session_id: requireOption(args, "reviewSessionId", "--review-session-id"),
-      agent: args.agent,
+      agent_id: args.agentId,
+      adapter: args.adapter,
+      agents: args.agents?.map(parseAgentLaunchSpec),
       focus_question: args.focusQuestion,
       context_text: await readPrepareInitialContext(args),
       target_files: args.targetFiles ?? []
@@ -727,23 +918,29 @@ var commandArgs = {
     run: (input) => prepareInitialRound(input)
   },
   "prepare-next-round": {
-    usage: "prepare-next-round --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> --prompt-file <path> [--agent <agent>] [--round-kind <kind>] [--previous-round <n>] [--focus-question <text>] [--target-files <file...>]",
+    usage: "prepare-next-round --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> --prompt-file <path> [--agent-id <id> --adapter <adapter> | --agents <id=adapter...>] [--round-kind <kind>] [--previous-round <n>] [--previous-agent-id <id>] [--focus-question <text>] [--target-files <file...>]",
     options: {
       "--review-session-id": { field: "reviewSessionId" },
-      "--agent": { field: "agent" },
+      "--agent-id": { field: "agentId" },
+      "--adapter": { field: "adapter" },
+      "--agents": { field: "agents", multiple: true },
       "--round-kind": { field: "roundKind" },
       "--prompt-file": { field: "promptFile" },
       "--previous-round": { field: "previousRound", parse: parseIntegerOption },
+      "--previous-agent-id": { field: "previousAgentId" },
       "--focus-question": { field: "focusQuestion" },
       "--target-files": { field: "targetFiles", multiple: true }
     },
     buildInput: async (args) => ({
       ...commonInput(args),
       review_session_id: requireOption(args, "reviewSessionId", "--review-session-id"),
-      agent: args.agent,
+      agent_id: args.agentId,
+      adapter: args.adapter,
+      agents: args.agents?.map(parseAgentLaunchSpec),
       round_kind: args.roundKind,
       prompt_text: await readOptionalTextFile(requireOption(args, "promptFile", "--prompt-file")),
       previous_round: args.previousRound,
+      previous_agent_id: args.previousAgentId,
       focus_question: args.focusQuestion,
       target_files: args.targetFiles
     }),
@@ -772,15 +969,17 @@ var commandArgs = {
     run: async (input) => commandOutput("json", await completeCurrentRound(input))
   },
   "get-round-output": {
-    usage: "get-round-output --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> [--round <n>]",
+    usage: "get-round-output --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> [--round <n>] [--agent-id <id>]",
     options: {
       "--review-session-id": { field: "reviewSessionId" },
-      "--round": { field: "round", parse: parseIntegerOption }
+      "--round": { field: "round", parse: parseIntegerOption },
+      "--agent-id": { field: "agentId" }
     },
     buildInput: async (args) => ({
       ...commonInput(args),
       review_session_id: requireOption(args, "reviewSessionId", "--review-session-id"),
-      round: args.round
+      round: args.round,
+      agent_id: args.agentId
     }),
     run: (input) => getRoundOutput(input)
   }
@@ -793,10 +992,10 @@ function commandFor(name) {
 }
 function usage() {
   return `Usage:
-${Object.values(commandArgs).map((command) => `  node scripts/cross-agent-runner.mjs ${command.usage}`).join("\n")}`;
+${Object.values(commandArgs).map((command) => `  node scripts/agent-review-runner.mjs ${command.usage}`).join("\n")}`;
 }
 
-// src/runners/cross-agent-runner.ts
+// src/runners/agent-review-runner.ts
 function writeCommandOutput(result) {
   if (result.output_type === "text") {
     const text = String(result.content ?? "");

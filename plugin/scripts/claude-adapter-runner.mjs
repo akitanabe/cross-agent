@@ -111,6 +111,12 @@ import { dirname as dirname2 } from "node:path";
 import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
+// src/core/shared/adapter-envelope.ts
+var SAFE_PATH_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
+function isSafePathSegment(value) {
+  return typeof value === "string" && value.length > 0 && SAFE_PATH_SEGMENT_RE.test(value) && !value.includes("..");
+}
+
 // src/core/shared/path-utils.ts
 function normalizePath(value, platform = process.platform) {
   if (typeof value !== "string" || value.length === 0) return value;
@@ -139,18 +145,20 @@ function sessionStateFileFor(dataDir, reviewSessionId) {
 function agentStateDirFor(dataDir, reviewSessionId) {
   return resolve(dataDir, "sessions", reviewSessionId, "agents");
 }
-function agentStateFileFor(dataDir, reviewSessionId) {
-  return resolve(agentStateDirFor(dataDir, reviewSessionId), "claude.json");
+function agentStateFileFor(dataDir, reviewSessionId, agentId = "claude") {
+  return resolve(agentStateDirFor(dataDir, reviewSessionId), `${agentId}.json`);
 }
-function agentContextFileFor(dataDir, reviewSessionId) {
-  return resolve(agentStateDirFor(dataDir, reviewSessionId), "claude-context.md");
+function agentContextFileFor(dataDir, reviewSessionId, agentId = "claude") {
+  return resolve(agentStateDirFor(dataDir, reviewSessionId), `${agentId}-context.md`);
 }
-function artifactPaths(artifactDir, round) {
+function artifactPaths(artifactDir, round, agentId = "claude") {
   return {
-    inputFile: resolve(artifactDir, `round-${round}-claude-input.md`),
-    outputFile: resolve(artifactDir, `round-${round}-claude-output.md`),
-    diagnosticFile: resolve(artifactDir, `round-${round}-claude-diagnostic.md`),
-    responseFile: resolve(artifactDir, `round-${round}-claude-response.json`)
+    agent_id: agentId,
+    adapter: "claude",
+    inputFile: resolve(artifactDir, `round-${round}-${agentId}-input.md`),
+    outputFile: resolve(artifactDir, `round-${round}-${agentId}-output.md`),
+    diagnosticFile: resolve(artifactDir, `round-${round}-${agentId}-diagnostic.md`),
+    responseFile: resolve(artifactDir, `round-${round}-${agentId}-response.json`)
   };
 }
 async function pathExists(filePath) {
@@ -177,13 +185,14 @@ async function writeJsonAtomic(filePath, value) {
 function nowIso() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
-function artifact(path, kind, round) {
+function artifact(path, kind, round, agentId = "claude") {
   return {
     path,
     kind,
     owner: OWNER,
     round,
-    agent: "claude",
+    agent_id: agentId,
+    adapter: "claude",
     created_at: nowIso(),
     temporary: false
   };
@@ -202,9 +211,10 @@ function makeResponse(request, status, outputFile, artifacts, error) {
   );
   const normalizedError = error && error.details_file ? { ...error, details_file: normalizePath(error.details_file) } : error;
   return {
-    contract_version: 1,
+    contract_version: 2,
     review_session_id: request?.review_session_id ?? null,
-    agent: "claude",
+    agent_id: request?.agent_id ?? null,
+    adapter: "claude",
     round: request?.round ?? null,
     status,
     output_file: outputFile ? normalizePath(outputFile) : outputFile,
@@ -221,7 +231,8 @@ async function validateRequest(request) {
   const required = [
     "contract_version",
     "review_session_id",
-    "agent",
+    "agent_id",
+    "adapter",
     "round",
     "round_kind",
     "target_root",
@@ -232,8 +243,14 @@ async function validateRequest(request) {
   if (missing.length) {
     return makeError("invalid_request_envelope", `Missing required fields: ${missing.join(", ")}`);
   }
-  if (request.contract_version !== 1) return makeError("invalid_request_envelope", "contract_version must be 1.");
-  if (request.agent !== "claude") return makeError("invalid_request_envelope", 'agent must be "claude".');
+  if (request.contract_version !== 2) return makeError("invalid_request_envelope", "contract_version must be 2.");
+  if (request.adapter !== "claude") return makeError("invalid_request_envelope", 'adapter must be "claude".');
+  if (!isSafePathSegment(request.review_session_id)) {
+    return makeError("invalid_request_envelope", `invalid review_session_id: ${request.review_session_id}`);
+  }
+  if (!isSafePathSegment(request.agent_id)) {
+    return makeError("invalid_request_envelope", `invalid agent_id: ${request.agent_id}`);
+  }
   try {
     const rootStat = await stat(request.target_root);
     if (!rootStat.isDirectory()) return makeError("target_root_missing", "target_root is not a directory.");
@@ -252,22 +269,27 @@ async function appendAgentArtifacts(agentState, artifacts) {
   agentState.artifacts.push(...artifacts);
 }
 async function saveAgentState(dataDir, reviewSessionId, agentState) {
-  const agentStateFile = agentStateFileFor(dataDir, reviewSessionId);
+  const agentStateFile = agentStateFileFor(dataDir, reviewSessionId, agentState.agent_id);
   await mkdir2(dirname2(agentStateFile), { recursive: true });
   await writeJsonAtomic(agentStateFile, agentState);
 }
 async function readSessionState(dataDir, reviewSessionId) {
-  return await readJson(sessionStateFileFor(dataDir, reviewSessionId));
+  const state = await readJson(sessionStateFileFor(dataDir, reviewSessionId));
+  if (state.schema_version !== 2) {
+    throw new Error(`unsupported agent-review session schema_version ${state.schema_version ?? "missing"}; expected 2.`);
+  }
+  return state;
 }
 async function readOrCreateAgentState(dataDir, request) {
-  const agentStateFile = agentStateFileFor(dataDir, request.review_session_id);
+  const agentStateFile = agentStateFileFor(dataDir, request.review_session_id, request.agent_id);
   return await readJsonIfExists(agentStateFile) ?? {
     schema_version: 1,
     review_session_id: request.review_session_id,
-    agent: "claude",
+    agent_id: request.agent_id,
+    adapter: "claude",
     status: "pending",
     target_root: null,
-    context_file: agentContextFileFor(dataDir, request.review_session_id),
+    context_file: agentContextFileFor(dataDir, request.review_session_id, request.agent_id),
     last_input_file: null,
     last_output_file: null,
     last_error: null,
@@ -280,7 +302,8 @@ async function markAgentPrepared(dataDir, request, paths, contextFile, agentStat
   Object.assign(agentState, {
     schema_version: agentState.schema_version ?? 1,
     review_session_id: request.review_session_id,
-    agent: "claude",
+    agent_id: request.agent_id,
+    adapter: "claude",
     status: "prepared",
     target_root: request.target_root,
     context_file: contextFile,
@@ -301,7 +324,8 @@ async function markAgentCompleted({
   Object.assign(agentState, {
     schema_version: agentState.schema_version ?? 1,
     review_session_id: request.review_session_id,
-    agent: "claude",
+    agent_id: request.agent_id,
+    adapter: "claude",
     status: "active",
     target_root: request.target_root,
     context_file: contextFile,
@@ -372,20 +396,27 @@ async function updateFailedAgentState({ request, agentState, paths, code, messag
   Object.assign(agentState, {
     schema_version: agentState.schema_version ?? 1,
     review_session_id: request.review_session_id,
-    agent: "claude",
+    agent_id: request.agent_id,
+    adapter: "claude",
     status: "failed",
     target_root: agentState.target_root ?? request.target_root,
     last_input_file: agentState.last_input_file ?? paths.inputFile,
     last_output_file: agentState.last_output_file ?? null,
     last_error: error
   });
-  await appendAgentArtifacts(agentState, [artifact(paths.diagnosticFile, "diagnostic", request.round)]);
+  await appendAgentArtifacts(agentState, [artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id)]);
   agentState.errors ??= [];
-  agentState.errors.push({ ...error, agent: "claude", round: request.round, created_at: nowIso() });
+  agentState.errors.push({
+    ...error,
+    agent_id: request.agent_id,
+    adapter: "claude",
+    round: request.round,
+    created_at: nowIso()
+  });
   await saveAgentState(request.data_dir ?? ".", request.review_session_id, agentState);
 }
 async function handleFailure(input) {
-  const diagnosticArtifact = artifact(input.paths.diagnosticFile, "diagnostic", input.request.round);
+  const diagnosticArtifact = artifact(input.paths.diagnosticFile, "diagnostic", input.request.round, input.request.agent_id);
   const error = makeError(input.code, input.message, input.paths.diagnosticFile);
   const response = makeResponse(input.request, "failed", null, [diagnosticArtifact], error);
   await writeFailureDiagnostic(input);
@@ -417,7 +448,9 @@ function buildClaudeContext({
   currentPaths
 }) {
   const targetFiles = uniqueStrings([...request.target_files ?? [], ...sessionState.context?.target_files ?? []]);
-  const priorRounds = (sessionState.rounds ?? []).filter((round) => round.agent === "claude" && typeof round.round === "number" && round.round < request.round).sort((left, right) => (left.round ?? 0) - (right.round ?? 0));
+  const priorRounds = (sessionState.rounds ?? []).filter((round) => typeof round.round === "number" && round.round < request.round).flatMap(
+    (round) => (round.agents ?? []).filter((agent) => agent.adapter === "claude" && agent.agent_id === request.agent_id).map((agent) => ({ round: round.round, kind: round.kind, agent }))
+  ).sort((left, right) => (left.round ?? 0) - (right.round ?? 0));
   const lines = [
     `# Claude adapter context`,
     ``,
@@ -442,8 +475,9 @@ function buildClaudeContext({
   ];
   if (priorRounds.length) {
     for (const round of priorRounds) {
-      if (round.prompt_file) lines.push(`- prompt_file: ${toDisplayPath(round.prompt_file)}`);
-      if (round.agent_result?.output_file) lines.push(`- output_file: ${toDisplayPath(round.agent_result.output_file)}`);
+      if (round.agent.prompt_file) lines.push(`- prompt_file: ${toDisplayPath(round.agent.prompt_file)}`);
+      if (round.agent.agent_result?.output_file)
+        lines.push(`- output_file: ${toDisplayPath(round.agent.agent_result.output_file)}`);
     }
   } else {
     lines.push(`- none`);
@@ -451,8 +485,9 @@ function buildClaudeContext({
   lines.push(``, `## Rounds`, ``);
   for (const round of priorRounds) {
     lines.push(`### Round ${round.round}: ${round.kind ?? "unknown"}`, ``);
-    if (round.prompt_file) lines.push(`- prompt_file: ${toDisplayPath(round.prompt_file)}`);
-    if (round.agent_result?.output_file) lines.push(`- output_file: ${toDisplayPath(round.agent_result.output_file)}`);
+    if (round.agent.prompt_file) lines.push(`- prompt_file: ${toDisplayPath(round.agent.prompt_file)}`);
+    if (round.agent.agent_result?.output_file)
+      lines.push(`- output_file: ${toDisplayPath(round.agent.agent_result.output_file)}`);
     lines.push(``);
   }
   lines.push(
@@ -520,7 +555,7 @@ async function completeClaudeRun(request, outputFile, options = {}) {
   if (!dataDir) throw new Error("--data-dir is required.");
   const requestWithDataDir = { ...request, data_dir: dataDir };
   const artifactDir = artifactDirFor(dataDir, request.review_session_id ?? "unknown");
-  const paths = artifactPaths(artifactDir, request.round ?? "unknown");
+  const paths = artifactPaths(artifactDir, request.round ?? "unknown", request.agent_id ?? "unknown");
   const validationError = await validateRequest(request);
   if (validationError) {
     return failComplete({
@@ -555,13 +590,13 @@ async function completeClaudeRun(request, outputFile, options = {}) {
       message: caught.code === "ENOENT" ? "session state file does not exist." : `state file is not valid JSON: ${caught.message}`
     });
   }
-  if (agentState.review_session_id !== request.review_session_id || agentState.agent !== "claude") {
+  if (agentState.review_session_id !== request.review_session_id || agentState.agent_id !== request.agent_id) {
     return failComplete({
       request: requestWithDataDir,
       agentState: null,
       paths,
       code: "state_file_invalid",
-      message: "Claude agent state file review_session_id or agent does not match request."
+      message: "Claude agent state file review_session_id or agent_id does not match request."
     });
   }
   if (outputFile !== normalizePath(paths.outputFile)) {
@@ -582,12 +617,12 @@ async function completeClaudeRun(request, outputFile, options = {}) {
       message: "Claude output file was not created or was empty."
     });
   }
-  const contextFile = agentContextFileFor(dataDir, request.review_session_id);
+  const contextFile = agentContextFileFor(dataDir, request.review_session_id, request.agent_id);
   await writeTextFile(contextFile, buildClaudeContext({ request, sessionState, currentPaths: paths }));
   const artifacts = [
-    artifact(paths.inputFile, "claude_input", request.round),
-    artifact(paths.outputFile, "agent_output", request.round),
-    artifact(paths.diagnosticFile, "diagnostic", request.round)
+    artifact(paths.inputFile, "claude_input", request.round, request.agent_id),
+    artifact(paths.outputFile, "agent_output", request.round, request.agent_id),
+    artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id)
   ];
   await writeDiagnostic(paths.diagnosticFile, [
     `# Claude adapter diagnostic`,
@@ -617,7 +652,7 @@ async function prepareClaudeRun(request, options = {}) {
   }
   const requestWithDataDir = { ...request, data_dir: dataDir };
   const artifactDir = artifactDirFor(dataDir, request.review_session_id ?? "unknown");
-  const paths = artifactPaths(artifactDir, request.round ?? "unknown");
+  const paths = artifactPaths(artifactDir, request.round ?? "unknown", request.agent_id ?? "unknown");
   await mkdir4(artifactDir, { recursive: true });
   const validationError = await validateRequest(request);
   if (validationError) {
@@ -664,22 +699,25 @@ async function prepareClaudeRun(request, options = {}) {
       message: `Claude agent state file is not valid JSON: ${caught.message}`
     });
   }
-  if (agentState.review_session_id !== request.review_session_id || agentState.agent !== "claude") {
+  if (agentState.review_session_id !== request.review_session_id || agentState.agent_id !== request.agent_id) {
     return failPrepare({
       request: requestWithDataDir,
       agentState: null,
       paths,
       code: "state_file_invalid",
-      message: "Claude agent state file review_session_id or agent does not match request."
+      message: "Claude agent state file review_session_id or agent_id does not match request."
     });
   }
-  const contextFile = agentContextFileFor(dataDir, request.review_session_id);
+  const contextFile = agentContextFileFor(dataDir, request.review_session_id, request.agent_id);
   await writeTextFile(paths.inputFile, buildClaudeInput({ request, contextFile, outputFile: paths.outputFile }));
-  await writeTextFile(paths.diagnosticFile, `# Claude adapter diagnostic
+  await writeTextFile(
+    paths.diagnosticFile,
+    `# Claude adapter diagnostic
 
 - status: prepared
 - round: ${request.round}
-`);
+`
+  );
   await writeTextFile(contextFile, buildClaudeContext({ request, sessionState, currentPaths: paths }));
   await markAgentPrepared(dataDir, request, paths, contextFile, agentState);
   return { kind: "input", path: inputPath(paths), output_file: outputPath(paths), status: "prepared" };

@@ -19,7 +19,12 @@ export function buildClaudeContext({
 }): string {
   const targetFiles = uniqueStrings([...(request.target_files ?? []), ...(sessionState.context?.target_files ?? [])]);
   const priorRounds = (sessionState.rounds ?? [])
-    .filter((round) => round.agent === "claude" && typeof round.round === "number" && round.round < request.round)
+    .filter((round) => typeof round.round === "number" && round.round < request.round)
+    .flatMap((round) =>
+      (round.agents ?? [])
+        .filter((agent) => agent.adapter === "claude" && agent.agent_id === request.agent_id)
+        .map((agent) => ({ round: round.round, kind: round.kind, agent })),
+    )
     .sort((left, right) => (left.round ?? 0) - (right.round ?? 0));
 
   const lines = [
@@ -47,9 +52,9 @@ export function buildClaudeContext({
 
   if (priorRounds.length) {
     for (const round of priorRounds) {
-      if (round.prompt_file) lines.push(`- prompt_file: ${toDisplayPath(round.prompt_file)}`);
-      if (round.agent_result?.output_file)
-        lines.push(`- output_file: ${toDisplayPath(round.agent_result.output_file)}`);
+      if (round.agent.prompt_file) lines.push(`- prompt_file: ${toDisplayPath(round.agent.prompt_file)}`);
+      if (round.agent.agent_result?.output_file)
+        lines.push(`- output_file: ${toDisplayPath(round.agent.agent_result.output_file)}`);
     }
   } else {
     lines.push(`- none`);
@@ -58,8 +63,9 @@ export function buildClaudeContext({
   lines.push(``, `## Rounds`, ``);
   for (const round of priorRounds) {
     lines.push(`### Round ${round.round}: ${round.kind ?? "unknown"}`, ``);
-    if (round.prompt_file) lines.push(`- prompt_file: ${toDisplayPath(round.prompt_file)}`);
-    if (round.agent_result?.output_file) lines.push(`- output_file: ${toDisplayPath(round.agent_result.output_file)}`);
+    if (round.agent.prompt_file) lines.push(`- prompt_file: ${toDisplayPath(round.agent.prompt_file)}`);
+    if (round.agent.agent_result?.output_file)
+      lines.push(`- output_file: ${toDisplayPath(round.agent.agent_result.output_file)}`);
     lines.push(``);
   }
 

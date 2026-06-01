@@ -1,11 +1,12 @@
 import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-import type {
-  AdapterResponseArtifact,
-  AdapterResponseEnvelope,
-  AdapterResponseError,
-  AdapterResponseStatus,
+import {
+  isSafePathSegment,
+  type AdapterResponseArtifact,
+  type AdapterResponseEnvelope,
+  type AdapterResponseError,
+  type AdapterResponseStatus,
 } from "../shared/adapter-envelope.ts";
 import { normalizePath } from "../shared/path-utils.ts";
 import type { AdapterRequestInput, AdapterRequestWithDataDir, ArtifactPathSet, RecoverableError } from "./types.ts";
@@ -24,20 +25,22 @@ export function agentStateDirFor(dataDir: string, reviewSessionId: string): stri
   return resolve(dataDir, "sessions", reviewSessionId, "agents");
 }
 
-export function agentStateFileFor(dataDir: string, reviewSessionId: string): string {
-  return resolve(agentStateDirFor(dataDir, reviewSessionId), "claude.json");
+export function agentStateFileFor(dataDir: string, reviewSessionId: string, agentId = "claude"): string {
+  return resolve(agentStateDirFor(dataDir, reviewSessionId), `${agentId}.json`);
 }
 
-export function agentContextFileFor(dataDir: string, reviewSessionId: string): string {
-  return resolve(agentStateDirFor(dataDir, reviewSessionId), "claude-context.md");
+export function agentContextFileFor(dataDir: string, reviewSessionId: string, agentId = "claude"): string {
+  return resolve(agentStateDirFor(dataDir, reviewSessionId), `${agentId}-context.md`);
 }
 
-export function artifactPaths(artifactDir: string, round: number | string): ArtifactPathSet {
+export function artifactPaths(artifactDir: string, round: number | string, agentId = "claude"): ArtifactPathSet {
   return {
-    inputFile: resolve(artifactDir, `round-${round}-claude-input.md`),
-    outputFile: resolve(artifactDir, `round-${round}-claude-output.md`),
-    diagnosticFile: resolve(artifactDir, `round-${round}-claude-diagnostic.md`),
-    responseFile: resolve(artifactDir, `round-${round}-claude-response.json`),
+    agent_id: agentId,
+    adapter: "claude",
+    inputFile: resolve(artifactDir, `round-${round}-${agentId}-input.md`),
+    outputFile: resolve(artifactDir, `round-${round}-${agentId}-output.md`),
+    diagnosticFile: resolve(artifactDir, `round-${round}-${agentId}-diagnostic.md`),
+    responseFile: resolve(artifactDir, `round-${round}-${agentId}-response.json`),
   };
 }
 
@@ -69,13 +72,14 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
-export function artifact(path: string, kind: string, round: number): AdapterResponseArtifact {
+export function artifact(path: string, kind: string, round: number, agentId = "claude"): AdapterResponseArtifact {
   return {
     path,
     kind,
     owner: OWNER,
     round,
-    agent: "claude",
+    agent_id: agentId,
+    adapter: "claude",
     created_at: nowIso(),
     temporary: false,
   };
@@ -103,9 +107,10 @@ export function makeResponse(
   const normalizedError =
     error && error.details_file ? { ...error, details_file: normalizePath(error.details_file) } : error;
   return {
-    contract_version: 1,
+    contract_version: 2,
     review_session_id: request?.review_session_id ?? null,
-    agent: "claude",
+    agent_id: request?.agent_id ?? null,
+    adapter: "claude",
     round: request?.round ?? null,
     status,
     output_file: outputFile ? normalizePath(outputFile) : outputFile,
@@ -123,7 +128,8 @@ export async function validateRequest(request: AdapterRequestInput): Promise<Rec
   const required = [
     "contract_version",
     "review_session_id",
-    "agent",
+    "agent_id",
+    "adapter",
     "round",
     "round_kind",
     "target_root",
@@ -134,8 +140,15 @@ export async function validateRequest(request: AdapterRequestInput): Promise<Rec
   if (missing.length) {
     return makeError("invalid_request_envelope", `Missing required fields: ${missing.join(", ")}`);
   }
-  if (request.contract_version !== 1) return makeError("invalid_request_envelope", "contract_version must be 1.");
-  if (request.agent !== "claude") return makeError("invalid_request_envelope", 'agent must be "claude".');
+  if (request.contract_version !== 2) return makeError("invalid_request_envelope", "contract_version must be 2.");
+  if (request.adapter !== "claude") return makeError("invalid_request_envelope", 'adapter must be "claude".');
+  // review_session_id / agent_id は artifact/state のパス要素になるため path traversal を防ぐ。
+  if (!isSafePathSegment(request.review_session_id)) {
+    return makeError("invalid_request_envelope", `invalid review_session_id: ${request.review_session_id}`);
+  }
+  if (!isSafePathSegment(request.agent_id)) {
+    return makeError("invalid_request_envelope", `invalid agent_id: ${request.agent_id}`);
+  }
 
   try {
     const rootStat = await stat(request.target_root);

@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { parseBooleanOption, parseCommandArgs, parseIntegerOption, requireOption } from "../shared/cli-args.ts";
-import { sessionPaths } from "./state.ts";
+import { parseAgentLaunchSpec, sessionPaths } from "./state.ts";
 import {
   commandOutput,
   completeCurrentRound,
@@ -16,7 +16,7 @@ import type {
   CommandOutput,
   CompleteCurrentRoundInput,
   CompleteRoundInput,
-  CrossAgentOptions,
+  AgentReviewOptions,
   GetRoundInput,
   PrepareInitialRoundInput,
   PrepareNextRoundInput,
@@ -33,13 +33,16 @@ type CliArgs = Record<string, unknown> & {
   reviewSessionId?: string;
   reviewDepth?: ReviewDepth;
   autoDeepDive?: boolean;
-  agent?: string;
+  agentId?: string;
+  adapter?: string;
+  agents?: string[];
   focusQuestion?: string;
   contextFile?: string;
   targetFiles?: string[];
   roundKind?: RoundKind;
   promptFile?: string;
   previousRound?: number;
+  previousAgentId?: string;
   responseFile?: string;
   round?: number;
 };
@@ -54,8 +57,8 @@ type CommandDefinition = {
   run: (input: unknown) => Promise<CommandOutput>;
 };
 
-function optionInput(args: CliArgs): Partial<CrossAgentOptions> | undefined {
-  const options: Partial<CrossAgentOptions> = {};
+function optionInput(args: CliArgs): Partial<AgentReviewOptions> | undefined {
+  const options: Partial<AgentReviewOptions> = {};
   if (args.reviewDepth != null) options.review_depth = args.reviewDepth;
   if (args.autoDeepDive != null) options.auto_deep_dive = args.autoDeepDive;
   return Object.keys(options).length ? options : undefined;
@@ -113,10 +116,12 @@ const commandArgs: Record<string, CommandDefinition> = {
   },
   "prepare-initial": {
     usage:
-      "prepare-initial --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> [--agent <agent>] [--focus-question <text>] [--context-file <path>] [--target-files <file...>]",
+      "prepare-initial --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> [--agent-id <id> --adapter <adapter> | --agents <id=adapter...>] [--focus-question <text>] [--context-file <path>] [--target-files <file...>]",
     options: {
       "--review-session-id": { field: "reviewSessionId" },
-      "--agent": { field: "agent" },
+      "--agent-id": { field: "agentId" },
+      "--adapter": { field: "adapter" },
+      "--agents": { field: "agents", multiple: true },
       "--focus-question": { field: "focusQuestion" },
       "--context-file": { field: "contextFile" },
       "--target-files": { field: "targetFiles", multiple: true },
@@ -124,7 +129,9 @@ const commandArgs: Record<string, CommandDefinition> = {
     buildInput: async (args) => ({
       ...commonInput(args),
       review_session_id: requireOption(args, "reviewSessionId", "--review-session-id") as string,
-      agent: args.agent,
+      agent_id: args.agentId,
+      adapter: args.adapter,
+      agents: args.agents?.map(parseAgentLaunchSpec),
       focus_question: args.focusQuestion,
       context_text: await readPrepareInitialContext(args),
       target_files: args.targetFiles ?? [],
@@ -133,23 +140,29 @@ const commandArgs: Record<string, CommandDefinition> = {
   },
   "prepare-next-round": {
     usage:
-      "prepare-next-round --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> --prompt-file <path> [--agent <agent>] [--round-kind <kind>] [--previous-round <n>] [--focus-question <text>] [--target-files <file...>]",
+      "prepare-next-round --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> --prompt-file <path> [--agent-id <id> --adapter <adapter> | --agents <id=adapter...>] [--round-kind <kind>] [--previous-round <n>] [--previous-agent-id <id>] [--focus-question <text>] [--target-files <file...>]",
     options: {
       "--review-session-id": { field: "reviewSessionId" },
-      "--agent": { field: "agent" },
+      "--agent-id": { field: "agentId" },
+      "--adapter": { field: "adapter" },
+      "--agents": { field: "agents", multiple: true },
       "--round-kind": { field: "roundKind" },
       "--prompt-file": { field: "promptFile" },
       "--previous-round": { field: "previousRound", parse: parseIntegerOption },
+      "--previous-agent-id": { field: "previousAgentId" },
       "--focus-question": { field: "focusQuestion" },
       "--target-files": { field: "targetFiles", multiple: true },
     },
     buildInput: async (args) => ({
       ...commonInput(args),
       review_session_id: requireOption(args, "reviewSessionId", "--review-session-id") as string,
-      agent: args.agent,
+      agent_id: args.agentId,
+      adapter: args.adapter,
+      agents: args.agents?.map(parseAgentLaunchSpec),
       round_kind: args.roundKind,
       prompt_text: await readOptionalTextFile(requireOption(args, "promptFile", "--prompt-file") as string),
       previous_round: args.previousRound,
+      previous_agent_id: args.previousAgentId,
       focus_question: args.focusQuestion,
       target_files: args.targetFiles,
     }),
@@ -178,15 +191,17 @@ const commandArgs: Record<string, CommandDefinition> = {
     run: async (input) => commandOutput("json", await completeCurrentRound(input as CompleteCurrentRoundInput)),
   },
   "get-round-output": {
-    usage: "get-round-output --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> [--round <n>]",
+    usage: "get-round-output --data-dir <CLAUDE_PLUGIN_DATA> --review-session-id <id> [--round <n>] [--agent-id <id>]",
     options: {
       "--review-session-id": { field: "reviewSessionId" },
       "--round": { field: "round", parse: parseIntegerOption },
+      "--agent-id": { field: "agentId" },
     },
     buildInput: async (args) => ({
       ...commonInput(args),
       review_session_id: requireOption(args, "reviewSessionId", "--review-session-id") as string,
       round: args.round,
+      agent_id: args.agentId,
     }),
     run: (input) => getRoundOutput(input as GetRoundInput),
   },
@@ -203,6 +218,6 @@ export function commandFor(name: string): CommandDefinition | undefined {
 export function usage(): string {
   return `Usage:
 ${Object.values(commandArgs)
-  .map((command) => `  node scripts/cross-agent-runner.mjs ${command.usage}`)
+  .map((command) => `  node scripts/agent-review-runner.mjs ${command.usage}`)
   .join("\n")}`;
 }

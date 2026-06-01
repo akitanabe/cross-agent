@@ -59,3 +59,20 @@ test("prepareClaudeRun writes failed response then rejects", async () => {
     await rm(temp, { recursive: true, force: true });
   }
 });
+
+test("prepareClaudeRun separates artifacts and context by agent_id", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "claude-adapter-"));
+  try {
+    const { dataDir, request } = await createClaudeRequestFixture(temp, { agentId: "claude-reviewer" });
+
+    const prepared = await prepareClaudeRun(request, { dataDir });
+    assert.match(prepared.path, /round-1-claude-reviewer-input\.md$/);
+    assert.match(prepared.output_file, /round-1-claude-reviewer-output\.md$/);
+
+    const contextFile = agentContextFileFor(dataDir, request.review_session_id, "claude-reviewer");
+    const context = await readFile(contextFile, "utf8");
+    assert.match(context, /# Claude adapter context/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});

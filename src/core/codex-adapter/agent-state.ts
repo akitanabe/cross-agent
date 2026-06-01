@@ -26,22 +26,29 @@ export async function saveAgentState(
   reviewSessionId: string,
   agentState: CodexAgentState,
 ): Promise<void> {
-  const agentStateFile = agentStateFileFor(dataDir, reviewSessionId);
+  const agentStateFile = agentStateFileFor(dataDir, reviewSessionId, agentState.agent_id);
   await mkdir(dirname(agentStateFile), { recursive: true });
   await writeJsonAtomic(agentStateFile, agentState);
 }
 
 export async function readSessionState(dataDir: string, reviewSessionId: string): Promise<SessionState> {
-  return await readJson<SessionState>(sessionStateFileFor(dataDir, reviewSessionId));
+  const state = await readJson<SessionState>(sessionStateFileFor(dataDir, reviewSessionId));
+  if (state.schema_version !== 2) {
+    throw new Error(
+      `unsupported agent-review session schema_version ${state.schema_version ?? "missing"}; expected 2.`,
+    );
+  }
+  return state;
 }
 
 export async function readOrCreateAgentState(dataDir: string, request: AdapterRequestInput): Promise<CodexAgentState> {
-  const agentStateFile = agentStateFileFor(dataDir, request.review_session_id);
+  const agentStateFile = agentStateFileFor(dataDir, request.review_session_id, request.agent_id);
   return (
     (await readJsonIfExists<CodexAgentState>(agentStateFile)) ?? {
       schema_version: 1,
       review_session_id: request.review_session_id,
-      agent: "codex",
+      agent_id: request.agent_id,
+      adapter: "codex",
       status: "pending",
       thread_id: null,
       target_root: null,
@@ -66,7 +73,8 @@ export async function markAgentPrepared(
   Object.assign(agentState, {
     schema_version: agentState.schema_version ?? 1,
     review_session_id: request.review_session_id,
-    agent: "codex",
+    agent_id: request.agent_id,
+    adapter: "codex",
     status: "prepared",
     target_root: agentState.target_root ?? request.target_root,
     last_run_file: paths.runFile,
@@ -96,7 +104,8 @@ export async function markAgentCompleted({
   Object.assign(agentState, {
     schema_version: agentState.schema_version ?? 1,
     review_session_id: runSpec.review_session_id,
-    agent: "codex",
+    agent_id: runSpec.agent_id,
+    adapter: "codex",
     status: "active",
     thread_id: threadId,
     target_root: runSpec.target_root,

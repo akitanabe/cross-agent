@@ -2,7 +2,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { normalizeOptions, sessionPaths } from "../../../src/core/cross-agent/state.ts";
+import { normalizeOptions, sessionPaths } from "../../../src/core/agent-review/state.ts";
 
 test("normalizeOptions fills defaults", () => {
   assert.deepEqual(normalizeOptions({ review_depth: "high" }), {

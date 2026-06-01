@@ -13,6 +13,8 @@ export type EffortDecision = {
 };
 
 export type ArtifactPathSet = {
+  agent_id: string;
+  adapter: "codex";
   runFile: string;
   outputFile: string;
   eventLog: string;
@@ -29,7 +31,8 @@ export type SessionDecision = {
 export type CodexAgentState = {
   schema_version?: number;
   review_session_id: string;
-  agent: "codex";
+  agent_id: string;
+  adapter: "codex";
   status: string;
   thread_id: string | null;
   target_root: string | null;
@@ -49,6 +52,8 @@ export type CodexRunSpec = {
   schema_version: 1;
   kind: "codex_exec";
   review_session_id: string;
+  agent_id: string;
+  adapter: "codex";
   round: number;
   mode: CodexRunSpecMode;
   target_root: string;
@@ -105,5 +110,6 @@ export type AdapterRequestWithDataDir = AdapterRequestInput & {
 
 export type SessionState = {
   review_session_id?: string;
+  schema_version?: number;
   [key: string]: unknown;
 };

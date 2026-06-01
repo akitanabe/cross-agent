@@ -27,7 +27,7 @@ export async function prepareCodexRun(
 
   const requestWithDataDir = { ...request, data_dir: dataDir };
   const artifactDir = artifactDirFor(dataDir, request.review_session_id ?? "unknown");
-  const paths = artifactPaths(artifactDir, request.round ?? "unknown");
+  const paths = artifactPaths(artifactDir, request.round ?? "unknown", request.agent_id ?? "unknown");
   await mkdir(artifactDir, { recursive: true });
 
   const validationError = await validateRequest(request);
@@ -82,13 +82,13 @@ export async function prepareCodexRun(
     });
   }
 
-  if (agentState.review_session_id !== request.review_session_id || agentState.agent !== "codex") {
+  if (agentState.review_session_id !== request.review_session_id || agentState.agent_id !== request.agent_id) {
     return failPrepare({
       request: requestWithDataDir,
       agentState: null,
       paths,
       code: "state_file_invalid",
-      message: "Codex agent state file review_session_id or agent does not match request.",
+      message: "Codex agent state file review_session_id or agent_id does not match request.",
     });
   }
 

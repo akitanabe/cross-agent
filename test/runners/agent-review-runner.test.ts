@@ -6,20 +6,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { sessionPaths } from "../../src/core/cross-agent/state.ts";
-import { prepareInitialRound, startSession } from "../../src/core/cross-agent/workflow.ts";
+import { sessionPaths } from "../../src/core/agent-review/state.ts";
+import { prepareInitialRound, startSession } from "../../src/core/agent-review/workflow.ts";
 import { normalizePath } from "../../src/core/shared/path-utils.ts";
-import { completeRoundFromEnvelope, writeAdapterResponse } from "../helpers/cross-agent-fixtures.ts";
+import { completeRoundFromEnvelope, writeAdapterResponse } from "../helpers/agent-review-fixtures.ts";
 import { runNodeScript } from "../helpers/run-node-script.ts";
 
-const runnerPath = fileURLToPath(new URL("../../plugin/scripts/cross-agent-runner.mjs", import.meta.url));
+const runnerPath = fileURLToPath(new URL("../../plugin/scripts/agent-review-runner.mjs", import.meta.url));
 
 function runRunner(args, input = "") {
   return runNodeScript(runnerPath, args, input);
 }
 
 test("start-session command writes review session id as text", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -51,7 +51,7 @@ test("start-session command writes review session id as text", async () => {
 });
 
 test("start-session command accepts raw Windows path from argv", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -76,7 +76,7 @@ test("start-session command accepts raw Windows path from argv", async () => {
 });
 
 test("prepare-next-round command writes adapter request JSON", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -95,9 +95,10 @@ test("prepare-next-round command writes adapter request JSON", async () => {
     const outputFile = join(paths.artifactDir, "round-1-codex-output.md");
     await writeFile(outputFile, "round 1 output", "utf8");
     await completeRoundFromEnvelope(dataDir, {
-      contract_version: 1,
+      contract_version: 2,
       review_session_id: "session-1",
-      agent: "codex",
+      agent_id: "codex",
+      adapter: "codex",
       round: 1,
       status: "completed",
       output_file: outputFile,
@@ -119,17 +120,18 @@ test("prepare-next-round command writes adapter request JSON", async () => {
       promptFile,
     ]);
 
-    const adapterRequest = JSON.parse(await readFile(result.stdout.trim(), "utf8"));
+    const prepareOutput = JSON.parse(result.stdout);
+    const adapterRequest = JSON.parse(await readFile(prepareOutput.requests[0].request_file, "utf8"));
     assert.equal(adapterRequest.round, 2);
     assert.equal(adapterRequest.round_kind, "deep_dive");
-    assert.match(adapterRequest.prompt_file, /round-2-prompt\.md$/);
+    assert.match(adapterRequest.prompt_file, /round-2-codex-prompt\.md$/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
 });
 
 test("prepare-initial command reads context file and target files from argv", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -148,7 +150,9 @@ test("prepare-initial command reads context file and target files from argv", as
       dataDir,
       "--review-session-id",
       "session-1",
-      "--agent",
+      "--agent-id",
+      "codex",
+      "--adapter",
       "codex",
       "--focus-question",
       "レビューして",
@@ -158,9 +162,10 @@ test("prepare-initial command reads context file and target files from argv", as
       "src\\a.ts",
     ]);
 
-    const adapterRequest = JSON.parse(await readFile(result.stdout.trim(), "utf8"));
+    const prepareOutput = JSON.parse(result.stdout);
+    const adapterRequest = JSON.parse(await readFile(prepareOutput.requests[0].request_file, "utf8"));
     assert.equal(adapterRequest.round, 1);
-    assert.equal(adapterRequest.agent, "codex");
+    assert.equal(adapterRequest.agent_id, "codex");
     assert.equal(adapterRequest.focus_question, "レビューして");
     assert.deepEqual(adapterRequest.target_files, process.platform === "win32" ? ["src/a.ts"] : ["src\\a.ts"]);
 
@@ -173,7 +178,7 @@ test("prepare-initial command reads context file and target files from argv", as
 });
 
 test("prepare-initial command auto reads session context file", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -194,11 +199,14 @@ test("prepare-initial command auto reads session context file", async () => {
       dataDir,
       "--review-session-id",
       "session-1",
-      "--agent",
+      "--agent-id",
+      "codex",
+      "--adapter",
       "codex",
     ]);
 
-    const adapterRequest = JSON.parse(await readFile(result.stdout.trim(), "utf8"));
+    const prepareOutput = JSON.parse(result.stdout);
+    const adapterRequest = JSON.parse(await readFile(prepareOutput.requests[0].request_file, "utf8"));
     assert.equal(adapterRequest.context_file, normalizePath(contextFile));
     const copiedContext = await readFile(contextFile, "utf8");
     assert.equal(copiedContext, "# Auto Context\nhello\n");
@@ -208,7 +216,7 @@ test("prepare-initial command auto reads session context file", async () => {
 });
 
 test("complete-round command records adapter response from response file", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -226,9 +234,10 @@ test("complete-round command records adapter response from response file", async
 
     const responseFile = join(paths.artifactDir, "round-1-codex-response.json");
     await writeAdapterResponse(responseFile, {
-      contract_version: 1,
+      contract_version: 2,
       review_session_id: "session-1",
-      agent: "codex",
+      agent_id: "codex",
+      adapter: "codex",
       round: 1,
       status: "completed",
       output_file: outputFile,
@@ -241,14 +250,14 @@ test("complete-round command records adapter response from response file", async
     const output = JSON.parse(result.stdout);
     assert.equal(output.status, "completed");
     const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
-    assert.equal(state.rounds[0].agent_result.output_file, normalizePath(outputFile));
+    assert.equal(state.rounds[0].agents[0].agent_result.output_file, normalizePath(outputFile));
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
 });
 
 test("complete-current-round command derives current adapter response file", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -266,9 +275,10 @@ test("complete-current-round command derives current adapter response file", asy
 
     const responseFile = join(paths.artifactDir, "round-1-codex-response.json");
     await writeAdapterResponse(responseFile, {
-      contract_version: 1,
+      contract_version: 2,
       review_session_id: "session-1",
-      agent: "codex",
+      agent_id: "codex",
+      adapter: "codex",
       round: 1,
       status: "completed",
       output_file: outputFile,
@@ -288,14 +298,14 @@ test("complete-current-round command derives current adapter response file", asy
     assert.equal(output.status, "completed");
     assert.equal(output.response_file, normalizePath(responseFile));
     const state = JSON.parse(await readFile(paths.stateFile, "utf8"));
-    assert.equal(state.rounds[0].agent_result.output_file, normalizePath(outputFile));
+    assert.equal(state.rounds[0].agents[0].agent_result.output_file, normalizePath(outputFile));
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
 });
 
 test("get-round-output command writes text by default", async () => {
-  const temp = await mkdtemp(join(tmpdir(), "cross-agent-"));
+  const temp = await mkdtemp(join(tmpdir(), "agent-review-"));
   try {
     const targetRoot = join(temp, "repo");
     const dataDir = join(temp, "data");
@@ -315,9 +325,10 @@ test("get-round-output command writes text by default", async () => {
     await writeFile(outputFile, "plain review output", "utf8");
 
     await completeRoundFromEnvelope(dataDir, {
-      contract_version: 1,
+      contract_version: 2,
       review_session_id: "session-1",
-      agent: "codex",
+      agent_id: "codex",
+      adapter: "codex",
       round: 1,
       status: "completed",
       output_file: outputFile,

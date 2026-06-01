@@ -2,7 +2,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { buildInitialPrompt, buildNextRoundPrompt } from "../../../src/core/cross-agent/prompts.ts";
+import { buildInitialPrompt, buildNextRoundPrompt } from "../../../src/core/agent-review/prompts.ts";
 
 test("buildInitialPrompt includes focus, context, target files, and review viewpoints", () => {
   const prompt = buildInitialPrompt({

@@ -1,7 +1,7 @@
 import { build } from "esbuild";
 
 const entries = [
-  ["src/runners/cross-agent-runner.ts", "plugin/scripts/cross-agent-runner.mjs"],
+  ["src/runners/agent-review-runner.ts", "plugin/scripts/agent-review-runner.mjs"],
   ["src/runners/codex-adapter-runner.ts", "plugin/scripts/codex-adapter-runner.mjs"],
   ["src/runners/claude-adapter-runner.ts", "plugin/scripts/claude-adapter-runner.mjs"],
 ];
