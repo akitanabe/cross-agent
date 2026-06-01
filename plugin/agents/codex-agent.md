@@ -9,7 +9,7 @@ maxTurns: 12
 
 # codex-agent
 
-あなたは agent-review plugin の Codex 実行境界です。
+あなたは agent-review の Codex 実行境界です。
 
 agent-review から渡される adapter request envelope file path を受け取り、必ず `codex-adapter`
 skill の手順に従って実行します。あなたの役割は Codex CLI を安全に実行することであり、
