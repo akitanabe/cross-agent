@@ -60,7 +60,9 @@ async function updateFailedAgentState({ request, agentState, paths, code, messag
     last_output_file: agentState.last_output_file ?? null,
     last_error: error,
   });
-  await appendAgentArtifacts(agentState, [artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id)]);
+  await appendAgentArtifacts(agentState, [
+    artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id),
+  ]);
   agentState.errors ??= [];
   agentState.errors.push({
     ...error,
@@ -73,7 +75,12 @@ async function updateFailedAgentState({ request, agentState, paths, code, messag
 }
 
 async function handleFailure(input: FailureInput): Promise<AdapterResponseEnvelope> {
-  const diagnosticArtifact = artifact(input.paths.diagnosticFile, "diagnostic", input.request.round, input.request.agent_id);
+  const diagnosticArtifact = artifact(
+    input.paths.diagnosticFile,
+    "diagnostic",
+    input.request.round,
+    input.request.agent_id,
+  );
   const error = makeError(input.code, input.message, input.paths.diagnosticFile);
   const response = makeResponse(input.request, "failed", null, [diagnosticArtifact], error);
 

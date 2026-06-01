@@ -52,7 +52,11 @@ async function writeAgentRequest({
   contextFile: string | null;
   targetFiles: string[];
   focusQuestion: string | null;
-}): Promise<{ agentState: RoundAgentState; request: PrepareRequestResult; envelope: ReturnType<typeof buildAdapterRequest> }> {
+}): Promise<{
+  agentState: RoundAgentState;
+  request: PrepareRequestResult;
+  envelope: ReturnType<typeof buildAdapterRequest>;
+}> {
   const promptFile = normalizePath(resolve(paths.artifactDir, `round-${round}-${spec.agent_id}-prompt.md`)) as string;
   await writeFile(promptFile, promptText, "utf8");
 
@@ -164,7 +168,8 @@ async function prepareRound({
     if (existing) {
       const existingIds = new Set(existing.agents.map((agent) => agent.agent_id));
       for (const agentState of roundEntry.agents) {
-        if (existingIds.has(agentState.agent_id)) throw new Error(`duplicate agent_id in round: ${agentState.agent_id}`);
+        if (existingIds.has(agentState.agent_id))
+          throw new Error(`duplicate agent_id in round: ${agentState.agent_id}`);
       }
       existing.agents.push(...roundEntry.agents);
     } else {
@@ -308,10 +313,14 @@ export async function prepareNextRound(input: PrepareNextRoundInput): Promise<Pr
       throw new Error(`previous round is not completed for agent_id ${spec.agent_id}.`);
     }
     if (roundKind === "deep_dive" && previousResult?.status !== "completed") {
-      throw new Error(`deep_dive requires previous status=completed for agent_id ${spec.agent_id}, got ${previousResult?.status}`);
+      throw new Error(
+        `deep_dive requires previous status=completed for agent_id ${spec.agent_id}, got ${previousResult?.status}`,
+      );
     }
     if (roundKind === "recovery" && previousResult?.status !== "failed") {
-      throw new Error(`recovery requires previous status=failed for agent_id ${spec.agent_id}, got ${previousResult?.status}`);
+      throw new Error(
+        `recovery requires previous status=failed for agent_id ${spec.agent_id}, got ${previousResult?.status}`,
+      );
     }
   }
 

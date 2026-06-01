@@ -34,7 +34,9 @@ export async function saveAgentState(
 export async function readSessionState(dataDir: string, reviewSessionId: string): Promise<SessionState> {
   const state = await readJson<SessionState>(sessionStateFileFor(dataDir, reviewSessionId));
   if (state.schema_version !== 2) {
-    throw new Error(`unsupported agent-review session schema_version ${state.schema_version ?? "missing"}; expected 2.`);
+    throw new Error(
+      `unsupported agent-review session schema_version ${state.schema_version ?? "missing"}; expected 2.`,
+    );
   }
   return state;
 }

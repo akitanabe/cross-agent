@@ -210,10 +210,7 @@ test("getRoundOutput requires agent_id when multiple outputs exist", async () =>
       });
     }
 
-    await assert.rejects(
-      getRoundOutput({ data_dir: dataDir, review_session_id: "session-1", round: 1 }),
-      /ambiguous/,
-    );
+    await assert.rejects(getRoundOutput({ data_dir: dataDir, review_session_id: "session-1", round: 1 }), /ambiguous/);
     const output = await getRoundOutput({
       data_dir: dataDir,
       review_session_id: "session-1",

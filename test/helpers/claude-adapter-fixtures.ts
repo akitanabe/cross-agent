@@ -29,7 +29,12 @@ export async function createClaudeRequestFixture(temp, { round = 1, prompt = "re
                 adapter: "claude",
                 status: "pending",
                 prompt_file: promptFile,
-                adapter_request_file: join(dataDir, "artifacts", "session-1", `round-${round}-${agentId}-adapter-request.json`),
+                adapter_request_file: join(
+                  dataDir,
+                  "artifacts",
+                  "session-1",
+                  `round-${round}-${agentId}-adapter-request.json`,
+                ),
                 response_file: join(dataDir, "artifacts", "session-1", `round-${round}-${agentId}-response.json`),
                 started_at: "2026-01-01T00:00:00.000Z",
                 completed_at: null,

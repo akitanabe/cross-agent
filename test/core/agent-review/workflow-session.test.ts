@@ -96,7 +96,10 @@ test("prepareInitialRound creates prompt and adapter request", async () => {
 
     const paths = sessionPaths(dataDir, "session-1");
     assert.equal(result.output_type, "json");
-    assert.equal(result.content.requests[0].request_file, normalizePath(join(paths.artifactDir, "round-1-codex-adapter-request.json")));
+    assert.equal(
+      result.content.requests[0].request_file,
+      normalizePath(join(paths.artifactDir, "round-1-codex-adapter-request.json")),
+    );
     assert.equal(adapterRequest.review_session_id, "session-1");
     assert.equal(adapterRequest.agent_id, "codex");
     assert.equal(adapterRequest.adapter, "codex");
