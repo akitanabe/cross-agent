@@ -1,11 +1,12 @@
 import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-import type {
-  AdapterResponseArtifact,
-  AdapterResponseEnvelope,
-  AdapterResponseError,
-  AdapterResponseStatus,
+import {
+  isSafePathSegment,
+  type AdapterResponseArtifact,
+  type AdapterResponseEnvelope,
+  type AdapterResponseError,
+  type AdapterResponseStatus,
 } from "../shared/adapter-envelope.ts";
 import { normalizePath } from "../shared/path-utils.ts";
 import type { AdapterRequestInput, AdapterRequestWithDataDir, ArtifactPathSet, RecoverableError } from "./types.ts";
@@ -141,6 +142,13 @@ export async function validateRequest(request: AdapterRequestInput): Promise<Rec
   }
   if (request.contract_version !== 2) return makeError("invalid_request_envelope", "contract_version must be 2.");
   if (request.adapter !== "claude") return makeError("invalid_request_envelope", 'adapter must be "claude".');
+  // review_session_id / agent_id は artifact/state のパス要素になるため path traversal を防ぐ。
+  if (!isSafePathSegment(request.review_session_id)) {
+    return makeError("invalid_request_envelope", `invalid review_session_id: ${request.review_session_id}`);
+  }
+  if (!isSafePathSegment(request.agent_id)) {
+    return makeError("invalid_request_envelope", `invalid agent_id: ${request.agent_id}`);
+  }
 
   try {
     const rootStat = await stat(request.target_root);

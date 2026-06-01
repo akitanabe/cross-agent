@@ -4,6 +4,16 @@ export type AdapterResponseStatus = "completed" | "failed" | "skipped";
 
 export const SUPPORTED_ADAPTER_CONTRACT_VERSION = 2;
 
+// review_session_id / agent_id は state/artifact のパス要素になる。`..` や slash で
+// data dir 外に出られないよう、ASCII 英数 + `.` `_` `-` のみを安全な path segment とみなす。
+// orchestrator (agent-review) 側でも検証するが、adapter 単体起動でも path traversal を
+// 防げるよう adapter 境界でも再検証する。
+const SAFE_PATH_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
+
+export function isSafePathSegment(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && SAFE_PATH_SEGMENT_RE.test(value) && !value.includes("..");
+}
+
 export type AdapterRequestEnvelopeV2 = {
   contract_version: 2;
   review_session_id: string;

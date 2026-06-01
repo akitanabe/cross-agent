@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { artifactDirFor, artifactPaths } from "../../../src/core/codex-adapter/state.ts";
+import { artifactDirFor, artifactPaths, validateRequest } from "../../../src/core/codex-adapter/state.ts";
 import { CodexPrepareFailedError } from "../../../src/core/codex-adapter/workflow-failure.ts";
 import { prepareCodexRun } from "../../../src/core/codex-adapter/workflow-prepare.ts";
 import { createRequestFixture } from "../../helpers/codex-adapter-fixtures.ts";
@@ -50,6 +50,32 @@ test("prepareCodexRun separates run spec by agent_id", async () => {
     assert.equal(runSpec.agent_id, "codex-a");
     assert.equal(runSpec.adapter, "codex");
     assert.match(runSpec.output_file, /round-1-codex-a-output\.md$/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("validateRequest rejects agent_id with path traversal", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
+  try {
+    const { request } = await createRequestFixture(temp);
+    for (const agentId of ["../escape", "agents/evil", ".."]) {
+      const error = await validateRequest({ ...request, agent_id: agentId });
+      assert.equal(error?.code, "invalid_request_envelope", `expected rejection for agent_id ${agentId}`);
+      assert.match(error?.message, /agent_id/);
+    }
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("validateRequest rejects review_session_id with path traversal", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
+  try {
+    const { request } = await createRequestFixture(temp);
+    const error = await validateRequest({ ...request, review_session_id: "../escape" });
+    assert.equal(error?.code, "invalid_request_envelope");
+    assert.match(error?.message, /review_session_id/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

@@ -1,12 +1,13 @@
 import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-import type {
-  AdapterResponseArtifact,
-  AdapterResponseEnvelope,
-  AdapterResponseError,
-  AdapterResponseStatus,
-  ReviewDepth,
+import {
+  isSafePathSegment,
+  type AdapterResponseArtifact,
+  type AdapterResponseEnvelope,
+  type AdapterResponseError,
+  type AdapterResponseStatus,
+  type ReviewDepth,
 } from "../shared/adapter-envelope.ts";
 import { normalizePath } from "../shared/path-utils.ts";
 import type {
@@ -208,6 +209,13 @@ export async function validateRequest(request: AdapterRequestInput): Promise<Rec
   }
   if (request.adapter !== "codex") {
     return makeError("invalid_request_envelope", 'adapter must be "codex".');
+  }
+  // review_session_id / agent_id は artifact/state のパス要素になるため path traversal を防ぐ。
+  if (!isSafePathSegment(request.review_session_id)) {
+    return makeError("invalid_request_envelope", `invalid review_session_id: ${request.review_session_id}`);
+  }
+  if (!isSafePathSegment(request.agent_id)) {
+    return makeError("invalid_request_envelope", `invalid agent_id: ${request.agent_id}`);
   }
 
   try {

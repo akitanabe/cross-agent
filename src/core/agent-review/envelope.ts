@@ -1,7 +1,7 @@
 import { normalizePath, normalizePathList } from "../shared/path-utils.ts";
 import type { AdapterRequestEnvelope, AgentReviewOptions, RoundKind } from "./types.ts";
 
-// adapter に渡す request envelope v1 を組み立てる。
+// adapter に渡す request envelope v2 を組み立てる。
 export function buildAdapterRequest({
   reviewSessionId,
   agentId,

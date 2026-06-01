@@ -104,6 +104,12 @@ writes the adapter response envelope. stdout contains only the response envelope
 import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
+// src/core/shared/adapter-envelope.ts
+var SAFE_PATH_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
+function isSafePathSegment(value) {
+  return typeof value === "string" && value.length > 0 && SAFE_PATH_SEGMENT_RE.test(value) && !value.includes("..");
+}
+
 // src/core/shared/path-utils.ts
 function normalizePath(value, platform = process.platform) {
   if (typeof value !== "string" || value.length === 0) return value;
@@ -261,6 +267,12 @@ async function validateRequest(request) {
   }
   if (request.adapter !== "codex") {
     return makeError("invalid_request_envelope", 'adapter must be "codex".');
+  }
+  if (!isSafePathSegment(request.review_session_id)) {
+    return makeError("invalid_request_envelope", `invalid review_session_id: ${request.review_session_id}`);
+  }
+  if (!isSafePathSegment(request.agent_id)) {
+    return makeError("invalid_request_envelope", `invalid agent_id: ${request.agent_id}`);
   }
   try {
     const rootStat = await stat(request.target_root);
