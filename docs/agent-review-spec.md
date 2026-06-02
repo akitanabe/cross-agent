@@ -401,7 +401,7 @@ type RoundAgentState = {
 ## Adapter request envelope v2
 
 envelope 契約（フィールド定義、検証規則、サブ構造、path 表記、エラー契約）の正準は
-[`adapter-envelope-spec.md`](adapter-envelope-spec.md)。本セクションは概要のみ示す。
+[`adapter-envelope-v2-spec.md`](adapter-envelope-v2-spec.md)。本セクションは概要のみ示す。
 
 ```json
 {
@@ -428,7 +428,7 @@ adapter は `${CLAUDE_PLUGIN_DATA}` と `review_session_id` から必要な stat
 
 ## Adapter response envelope v2
 
-サブ構造、検証規則、受信側の緩い型は [`adapter-envelope-spec.md`](adapter-envelope-spec.md) を正準とする。
+サブ構造、検証規則、受信側の緩い型は [`adapter-envelope-v2-spec.md`](adapter-envelope-v2-spec.md) を正準とする。
 
 ```json
 {
