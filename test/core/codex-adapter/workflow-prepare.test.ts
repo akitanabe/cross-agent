@@ -81,6 +81,46 @@ test("validateRequest rejects review_session_id with path traversal", async () =
   }
 });
 
+test("validateRequest rejects round that is not a positive safe integer", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
+  try {
+    const { request } = await createRequestFixture(temp);
+    for (const round of [0, -1, 1.5, "1", "../escape", Number.NaN]) {
+      const error = await validateRequest({ ...request, round });
+      assert.equal(error?.code, "invalid_request_envelope", `expected rejection for round ${round}`);
+      assert.match(error?.message, /round/);
+    }
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("prepareCodexRun keeps a malicious round out of artifact paths", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
+  try {
+    const { dataDir, request } = await createRequestFixture(temp);
+
+    let caught: CodexPrepareFailedError | null = null;
+    await assert.rejects(
+      async () => {
+        await prepareCodexRun({ ...request, round: "../../escape" }, { dataDir });
+      },
+      (error) => {
+        caught = error as CodexPrepareFailedError;
+        return error instanceof CodexPrepareFailedError;
+      },
+    );
+
+    assert.equal(caught?.response.error.code, "invalid_request_envelope");
+    assert.match(caught?.response.error.message, /round/);
+    // 不正な round は filename に混ざらず "unknown" に落ちる。
+    assert.match(caught?.path, /round-unknown-codex-response\.json$/);
+    assert.ok(!caught?.path.includes(".."), `path contains traversal: ${caught?.path}`);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("prepareCodexRun writes failure envelope then rejects", async () => {
   const temp = await mkdtemp(join(tmpdir(), "codex-adapter-"));
   try {

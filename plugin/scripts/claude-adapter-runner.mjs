@@ -116,6 +116,9 @@ var SAFE_PATH_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
 function isSafePathSegment(value) {
   return typeof value === "string" && value.length > 0 && SAFE_PATH_SEGMENT_RE.test(value) && !value.includes("..");
 }
+function isSafeRoundNumber(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
+}
 
 // src/core/shared/path-utils.ts
 function normalizePath(value, platform = process.platform) {
@@ -250,6 +253,9 @@ async function validateRequest(request) {
   }
   if (!isSafePathSegment(request.agent_id)) {
     return makeError("invalid_request_envelope", `invalid agent_id: ${request.agent_id}`);
+  }
+  if (!isSafeRoundNumber(request.round)) {
+    return makeError("invalid_request_envelope", `invalid round: ${request.round}`);
   }
   try {
     const rootStat = await stat(request.target_root);
@@ -661,7 +667,8 @@ async function prepareClaudeRun(request, options = {}) {
   }
   const requestWithDataDir = { ...request, data_dir: dataDir };
   const artifactDir = artifactDirFor(dataDir, request.review_session_id ?? "unknown");
-  const paths = artifactPaths(artifactDir, request.round ?? "unknown", request.agent_id ?? "unknown");
+  const pathRound = isSafeRoundNumber(request.round) ? request.round : "unknown";
+  const paths = artifactPaths(artifactDir, pathRound, request.agent_id ?? "unknown");
   await mkdir4(artifactDir, { recursive: true });
   const validationError = await validateRequest(request);
   if (validationError) {

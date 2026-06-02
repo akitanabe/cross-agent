@@ -139,10 +139,11 @@ export type AdapterRequestEnvelopeV2 = {
 6. `prompt_file` が存在する（存在確認のみ。不在時は両 adapter とも `prompt_file_missing`
    を返す）
 
-`round` の値契約（positive safe integer）は agent-review producer が保証する。adapter 境界は
-`round` の presence だけを検証し、safe-integer 性は再検証しない（artifact path 導出に
-そのまま使う）。adapter 単体起動で異常な `round` を渡す経路を塞ぐなら、adapter 側で
-safe-integer 検証を追加する余地がある。
+`round` は artifact filename (`round-<round>-...`) のパス要素になるため、adapter 境界でも
+positive safe integer (`>= 1`) であることを検証する（`isSafeRoundNumber`）。不正な `round`
+（0・負数・小数・文字列・`..` を含む値など）は `invalid_request_envelope` で拒否する。
+検証前に artifact path を導出する際も、安全でない `round` は filename に混ぜず `unknown` に
+落とすため、`round` 経由の path traversal は起きない。
 
 state file 突き合わせ（adapter 側）:
 
