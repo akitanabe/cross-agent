@@ -158,7 +158,7 @@ export async function validateRequest(request: AdapterRequestInput): Promise<Rec
   }
 
   if (!(await pathExists(request.prompt_file))) {
-    return makeError("invalid_request_envelope", "prompt_file does not exist.");
+    return makeError("prompt_file_missing", "prompt_file does not exist.");
   }
   return null;
 }

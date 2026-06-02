@@ -52,7 +52,7 @@ test("prepareClaudeRun writes failed response then rejects", async () => {
 
     assert.equal(caught?.path, paths.responseFile.replaceAll("\\", "/"));
     assert.equal(caught?.response.status, "failed");
-    assert.equal(caught?.response.error.code, "invalid_request_envelope");
+    assert.equal(caught?.response.error.code, "prompt_file_missing");
     const savedResponse = JSON.parse(await readFile(paths.responseFile, "utf8"));
     assert.equal(savedResponse.status, "failed");
   } finally {

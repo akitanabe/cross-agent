@@ -258,7 +258,7 @@ async function validateRequest(request) {
     return makeError("target_root_missing", "target_root does not exist.");
   }
   if (!await pathExists(request.prompt_file)) {
-    return makeError("invalid_request_envelope", "prompt_file does not exist.");
+    return makeError("prompt_file_missing", "prompt_file does not exist.");
   }
   return null;
 }
@@ -276,7 +276,9 @@ async function saveAgentState(dataDir, reviewSessionId, agentState) {
 async function readSessionState(dataDir, reviewSessionId) {
   const state = await readJson(sessionStateFileFor(dataDir, reviewSessionId));
   if (state.schema_version !== 2) {
-    throw new Error(`unsupported agent-review session schema_version ${state.schema_version ?? "missing"}; expected 2.`);
+    throw new Error(
+      `unsupported agent-review session schema_version ${state.schema_version ?? "missing"}; expected 2.`
+    );
   }
   return state;
 }
@@ -404,7 +406,9 @@ async function updateFailedAgentState({ request, agentState, paths, code, messag
     last_output_file: agentState.last_output_file ?? null,
     last_error: error
   });
-  await appendAgentArtifacts(agentState, [artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id)]);
+  await appendAgentArtifacts(agentState, [
+    artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id)
+  ]);
   agentState.errors ??= [];
   agentState.errors.push({
     ...error,
@@ -416,7 +420,12 @@ async function updateFailedAgentState({ request, agentState, paths, code, messag
   await saveAgentState(request.data_dir ?? ".", request.review_session_id, agentState);
 }
 async function handleFailure(input) {
-  const diagnosticArtifact = artifact(input.paths.diagnosticFile, "diagnostic", input.request.round, input.request.agent_id);
+  const diagnosticArtifact = artifact(
+    input.paths.diagnosticFile,
+    "diagnostic",
+    input.request.round,
+    input.request.agent_id
+  );
   const error = makeError(input.code, input.message, input.paths.diagnosticFile);
   const response = makeResponse(input.request, "failed", null, [diagnosticArtifact], error);
   await writeFailureDiagnostic(input);

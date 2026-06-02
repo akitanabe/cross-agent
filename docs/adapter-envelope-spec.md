@@ -136,8 +136,8 @@ export type AdapterRequestEnvelopeV2 = {
 3. `adapter` が当該 adapter 名（codex なら `"codex"`、claude なら `"claude"`）と一致
 4. `review_session_id` / `agent_id` が `isSafePathSegment` を満たす
 5. `target_root` が存在する directory
-6. `prompt_file` が存在する（存在確認のみ。codex は不在時に `prompt_file_missing`、
-   claude は `invalid_request_envelope` を返す）
+6. `prompt_file` が存在する（存在確認のみ。不在時は両 adapter とも `prompt_file_missing`
+   を返す）
 
 `round` の値契約（positive safe integer）は agent-review producer が保証する。adapter 境界は
 `round` の presence だけを検証し、safe-integer 性は再検証しない（artifact path 導出に
@@ -354,18 +354,16 @@ state 突き合わせ（agent-review 側）:
 
 ## エラー契約
 
-adapter が返す recoverable error の `code` は adapter ごとに定義する。両 adapter で
-共通するのは `invalid_request_envelope` と `target_root_missing`。
+request 境界検証の recoverable error は両 adapter (codex / claude) で共通の `code` を返す。
 
-| code | recoverable | adapter | 契機 |
-|---|---|---|---|
-| `invalid_request_envelope` | true | codex / claude | 必須フィールド欠落、adapter 不一致、`contract_version` 不一致、unsafe な `review_session_id` / `agent_id`、`--data-dir` 未指定、request として不正。**claude では `prompt_file` 不在もこの code** |
-| `target_root_missing` | true | codex / claude | `target_root` が存在しない、または directory でない |
-| `prompt_file_missing` | true | codex のみ | `prompt_file` が存在しない（claude は `invalid_request_envelope` を返すため非対称） |
+| code | recoverable | 契機 |
+|---|---|---|
+| `invalid_request_envelope` | true | 必須フィールド欠落、adapter 不一致、`contract_version` 不一致、unsafe な `review_session_id` / `agent_id`、`--data-dir` 未指定、request として不正 |
+| `target_root_missing` | true | `target_root` が存在しない、または directory でない |
+| `prompt_file_missing` | true | `prompt_file` が存在しない |
 
-`prompt_file` 不在時の code は adapter で非対称である点に注意する（codex は
-`prompt_file_missing`、claude は `invalid_request_envelope`）。consumer はこの error code を
-解釈しないため、契約上の互換性には影響しないが、code 自体を共通契約として扱ってはならない。
+consumer (`validateAdapterResponse`) はこれら error code を解釈しないが、request 境界の
+共通契約として両 adapter で揃える。
 
 adapter 固有の追加 code（Codex 実行失敗、Claude output 欠落 など）は各 adapter spec に
 記載する。`prepare` が request / state 検証で失敗し run spec / input を作れない場合も、
