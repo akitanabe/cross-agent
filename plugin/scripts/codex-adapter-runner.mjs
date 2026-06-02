@@ -301,7 +301,9 @@ async function saveAgentState(dataDir, reviewSessionId, agentState) {
 async function readSessionState(dataDir, reviewSessionId) {
   const state = await readJson(sessionStateFileFor(dataDir, reviewSessionId));
   if (state.schema_version !== 2) {
-    throw new Error(`unsupported agent-review session schema_version ${state.schema_version ?? "missing"}; expected 2.`);
+    throw new Error(
+      `unsupported agent-review session schema_version ${state.schema_version ?? "missing"}; expected 2.`
+    );
   }
   return state;
 }
@@ -436,13 +438,26 @@ async function updateFailedAgentState({ request, agentState, paths, code, messag
     last_exit_file: paths.exitFile,
     last_error: error
   });
-  await appendAgentArtifacts(agentState, [artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id)]);
+  await appendAgentArtifacts(agentState, [
+    artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id)
+  ]);
   agentState.errors ??= [];
-  agentState.errors.push({ ...error, agent_id: request.agent_id, adapter: "codex", round: request.round, created_at: nowIso() });
+  agentState.errors.push({
+    ...error,
+    agent_id: request.agent_id,
+    adapter: "codex",
+    round: request.round,
+    created_at: nowIso()
+  });
   await saveAgentState(request.data_dir ?? ".", request.review_session_id, agentState);
 }
 async function handleFailure(input) {
-  const diagnosticArtifact = artifact(input.paths.diagnosticFile, "diagnostic", input.request.round, input.request.agent_id);
+  const diagnosticArtifact = artifact(
+    input.paths.diagnosticFile,
+    "diagnostic",
+    input.request.round,
+    input.request.agent_id
+  );
   const error = makeError(input.code, input.message, input.paths.diagnosticFile);
   const response = makeResponse(input.request, "failed", null, [diagnosticArtifact], error);
   await writeFailureDiagnostic(input);
@@ -647,6 +662,9 @@ function validateRunSpec(value) {
   if (value.skip_git_repo_check !== true) {
     return { runSpec: null, message: "skip_git_repo_check must be true." };
   }
+  if (value.ask_for_approval !== "never") {
+    return { runSpec: null, message: 'ask_for_approval must be "never".' };
+  }
   return { runSpec: value, message: null };
 }
 function makeCodexRunSpec(request, paths, agentState) {
@@ -668,6 +686,7 @@ function makeCodexRunSpec(request, paths, agentState) {
     exit_file: normalizePath(paths.exitFile),
     model_reasoning_effort: effort,
     skip_git_repo_check: true,
+    ask_for_approval: "never",
     decision_reason: decision.reason,
     previous_thread_id: agentState.thread_id ?? null,
     previous_target_root: agentState.target_root ?? null,
