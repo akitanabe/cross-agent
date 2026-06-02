@@ -114,6 +114,7 @@ round-<N>-<agent_id>-response.json
   "exit_file": "C:/data/artifacts/session-1/round-1-codex-a-exit.json",
   "model_reasoning_effort": "high",
   "skip_git_repo_check": true,
+  "ask_for_approval": "never",
   "decision_reason": "missing_thread_id",
   "previous_thread_id": null,
   "previous_target_root": null,
@@ -140,6 +141,7 @@ resume:
   "exit_file": "C:/data/artifacts/session-1/round-2-codex-a-exit.json",
   "model_reasoning_effort": "high",
   "skip_git_repo_check": true,
+  "ask_for_approval": "never",
   "decision_reason": "resume",
   "previous_thread_id": "thread-abc",
   "previous_target_root": "C:/repo",
@@ -254,13 +256,16 @@ codex-agent は `round-<N>-<agent_id>-run.json` を読み、次を検証する�
 - `mode == "initial"` の場合は `thread_id` が `null`
 - `model_reasoning_effort` は `medium`, `high`, `xhigh` のいずれか
 - `skip_git_repo_check` は `true`
+- `ask_for_approval` は `"never"`
 
 agent は任意 command を実行せず、次の形の `codex exec` だけを Bash から直接実行する。prompt 本文は argv ではなく stdin で渡す。Codex CLI の `PROMPT` に `-` を指定し、`prompt_file` を stdin redirect する。
+
+`--ask-for-approval` は Codex CLI の top-level option として `codex` の直後に置く。現在の `codex exec --help` / `codex exec resume --help` では `--ask-for-approval` は subcommand option として受け付けられないため、`codex exec --ask-for-approval never ...` の形にはしない。sandbox mode は環境側の既定に任せ、レビュー中に必要なローカルテスト実行などを adapter 側で不必要に制限しない。レビュー用途では Codex に承認要求を出させず、承認が必要な操作は fail-fast させる。
 
 初回起動:
 
 ```bash
-codex exec \
+codex --ask-for-approval never exec \
   -C "<target_root>" \
   --json \
   --skip-git-repo-check \
@@ -275,7 +280,7 @@ codex exec \
 resume:
 
 ```bash
-codex exec resume \
+codex --ask-for-approval never exec resume \
   --json \
   --skip-git-repo-check \
   -c "model_reasoning_effort=<effort>" \
@@ -429,12 +434,12 @@ plugin permission / skill allowed-tools は次のように絞る。
   "allow": [
     "Bash(node \"**/codex-adapter-runner.mjs\" prepare **)",
     "Bash(node \"**/codex-adapter-runner.mjs\" complete **)",
-    "Bash(codex exec **)"
+    "Bash(codex --ask-for-approval never exec **)"
   ]
 }
 ```
 
-`codex exec resume ...` が `Bash(codex exec **)` に含まれること、stdin/stdout/stderr redirect を含む実行行が許可 matcher で許可されることは、`claude plugin validate` と実機実行で確認する。
+`codex --ask-for-approval never exec resume ...` が `Bash(codex --ask-for-approval never exec **)` に含まれること、stdin/stdout/stderr redirect を含む実行行が許可 matcher で許可されることは、`claude plugin validate` と実機実行で確認する。
 
 ## バージョン依存注記
 
@@ -442,6 +447,7 @@ plugin permission / skill allowed-tools は次のように絞る。
 
 - `codex exec resume` には `-C/--cd` と `--add-dir` が無い前提
 - `codex exec` / `codex exec resume` の `PROMPT` は `string | - (read stdin)` を受け取れる前提
+- `--ask-for-approval` は top-level Codex option として `codex` の直後に指定する前提
 - `--json` の先頭付近に `{"type":"thread.started","thread_id":"<id>"}` が出る前提
 
 Codex CLI 更新後に `codex exec --help` または `codex exec resume --help` の仕様が変わった場合は、この仕様を更新する。

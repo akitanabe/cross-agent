@@ -2,7 +2,7 @@
 name: codex-adapter
 description: agent-review から委譲される Codex CLI 固有のアダプター。review_session_id を Codex の thread_id にマッピングしてセッションを継続し、Codex exec 専用 run spec に従ってレビューを実行する。通常はユーザーが直接呼ばず、agent-review オーケストレーターから呼び出される。
 user-invocable: false
-allowed-tools: Read Write Bash(node "**/codex-adapter-runner.mjs" prepare **) Bash(node "**/codex-adapter-runner.mjs" complete **) Bash(codex exec **)
+allowed-tools: Read Write Bash(node "**/codex-adapter-runner.mjs" prepare **) Bash(node "**/codex-adapter-runner.mjs" complete **) Bash(codex --ask-for-approval never exec **)
 ---
 
 ## 役割
@@ -57,6 +57,7 @@ stdout に説明文、Markdown、複数行ログ、response envelope file path �
 - `mode == "resume"` の場合は `thread_id` が非空
 - `model_reasoning_effort` は `medium`, `high`, `xhigh` のいずれか
 - `skip_git_repo_check` は `true`
+- `ask_for_approval` は `"never"`
 
 run spec が不正な場合は Codex CLI を実行しない。runner の `complete` で `codex_run_spec_invalid` として
 response envelope を確定できる場合は `complete` を呼び、確定できない場合は推測で続行しない。
@@ -69,7 +70,7 @@ prompt 本文は argv ではなく stdin で渡す。Codex CLI の `PROMPT` に 
 initial:
 
 ```bash
-codex exec \
+codex --ask-for-approval never exec \
   -C "<target_root>" \
   --json \
   --skip-git-repo-check \
@@ -84,7 +85,7 @@ codex exec \
 resume:
 
 ```bash
-codex exec resume \
+codex --ask-for-approval never exec resume \
   --json \
   --skip-git-repo-check \
   -c "model_reasoning_effort=<model_reasoning_effort>" \

@@ -6,6 +6,7 @@ import type {
 } from "../shared/adapter-envelope.ts";
 
 export type CodexEffort = "medium" | "high" | "xhigh";
+export type CodexApprovalPolicy = "never";
 
 export type EffortDecision = {
   effort: CodexEffort;
@@ -64,6 +65,7 @@ export type CodexRunSpec = {
   exit_file: string;
   model_reasoning_effort: CodexEffort;
   skip_git_repo_check: true;
+  ask_for_approval: CodexApprovalPolicy;
   decision_reason?: SessionDecision["reason"];
   previous_thread_id?: string | null;
   previous_target_root?: string | null;

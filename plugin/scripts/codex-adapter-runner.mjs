@@ -668,6 +668,9 @@ function validateRunSpec(value) {
   if (value.skip_git_repo_check !== true) {
     return { runSpec: null, message: "skip_git_repo_check must be true." };
   }
+  if (value.ask_for_approval !== "never") {
+    return { runSpec: null, message: 'ask_for_approval must be "never".' };
+  }
   return { runSpec: value, message: null };
 }
 function makeCodexRunSpec(request, paths, agentState) {
@@ -689,6 +692,7 @@ function makeCodexRunSpec(request, paths, agentState) {
     exit_file: normalizePath(paths.exitFile),
     model_reasoning_effort: effort,
     skip_git_repo_check: true,
+    ask_for_approval: "never",
     decision_reason: decision.reason,
     previous_thread_id: agentState.thread_id ?? null,
     previous_target_root: agentState.target_root ?? null,
