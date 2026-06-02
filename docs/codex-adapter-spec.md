@@ -12,6 +12,9 @@ agent-review は Codex の agent state file の中身を直接変更しない。
 
 ## 入力
 
+request / response envelope の契約の正準は [`adapter-envelope-spec.md`](adapter-envelope-spec.md)。
+本書は Codex 固有の入力検証・artifact・state だけを記述する。
+
 agent-review から request envelope file path を受け取る。runner の `prepare` command は `--data-dir` と `--request` で指定された JSON file を読む。
 
 ```json
