@@ -109,6 +109,9 @@ var SAFE_PATH_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
 function isSafePathSegment(value) {
   return typeof value === "string" && value.length > 0 && SAFE_PATH_SEGMENT_RE.test(value) && !value.includes("..");
 }
+function isSafeRoundNumber(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
+}
 
 // src/core/shared/path-utils.ts
 function normalizePath(value, platform = process.platform) {
@@ -274,6 +277,9 @@ async function validateRequest(request) {
   if (!isSafePathSegment(request.agent_id)) {
     return makeError("invalid_request_envelope", `invalid agent_id: ${request.agent_id}`);
   }
+  if (!isSafeRoundNumber(request.round)) {
+    return makeError("invalid_request_envelope", `invalid round: ${request.round}`);
+  }
   try {
     const rootStat = await stat(request.target_root);
     if (!rootStat.isDirectory()) return makeError("target_root_missing", "target_root is not a directory.");
@@ -301,7 +307,9 @@ async function saveAgentState(dataDir, reviewSessionId, agentState) {
 async function readSessionState(dataDir, reviewSessionId) {
   const state = await readJson(sessionStateFileFor(dataDir, reviewSessionId));
   if (state.schema_version !== 2) {
-    throw new Error(`unsupported agent-review session schema_version ${state.schema_version ?? "missing"}; expected 2.`);
+    throw new Error(
+      `unsupported agent-review session schema_version ${state.schema_version ?? "missing"}; expected 2.`
+    );
   }
   return state;
 }
@@ -436,13 +444,26 @@ async function updateFailedAgentState({ request, agentState, paths, code, messag
     last_exit_file: paths.exitFile,
     last_error: error
   });
-  await appendAgentArtifacts(agentState, [artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id)]);
+  await appendAgentArtifacts(agentState, [
+    artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id)
+  ]);
   agentState.errors ??= [];
-  agentState.errors.push({ ...error, agent_id: request.agent_id, adapter: "codex", round: request.round, created_at: nowIso() });
+  agentState.errors.push({
+    ...error,
+    agent_id: request.agent_id,
+    adapter: "codex",
+    round: request.round,
+    created_at: nowIso()
+  });
   await saveAgentState(request.data_dir ?? ".", request.review_session_id, agentState);
 }
 async function handleFailure(input) {
-  const diagnosticArtifact = artifact(input.paths.diagnosticFile, "diagnostic", input.request.round, input.request.agent_id);
+  const diagnosticArtifact = artifact(
+    input.paths.diagnosticFile,
+    "diagnostic",
+    input.request.round,
+    input.request.agent_id
+  );
   const error = makeError(input.code, input.message, input.paths.diagnosticFile);
   const response = makeResponse(input.request, "failed", null, [diagnosticArtifact], error);
   await writeFailureDiagnostic(input);
@@ -832,7 +853,8 @@ async function prepareCodexRun(request, options = {}) {
   }
   const requestWithDataDir = { ...request, data_dir: dataDir };
   const artifactDir = artifactDirFor(dataDir, request.review_session_id ?? "unknown");
-  const paths = artifactPaths(artifactDir, request.round ?? "unknown", request.agent_id ?? "unknown");
+  const pathRound = isSafeRoundNumber(request.round) ? request.round : "unknown";
+  const paths = artifactPaths(artifactDir, pathRound, request.agent_id ?? "unknown");
   await mkdir3(artifactDir, { recursive: true });
   const validationError = await validateRequest(request);
   if (validationError) {

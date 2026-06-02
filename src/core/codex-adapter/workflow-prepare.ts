@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 
+import { isSafeRoundNumber } from "../shared/adapter-envelope.ts";
 import { normalizePath } from "../shared/path-utils.ts";
 import { readOrCreateAgentState, readSessionState, markAgentPrepared } from "./agent-state.ts";
 import { failPrepare } from "./workflow-failure.ts";
@@ -27,7 +28,9 @@ export async function prepareCodexRun(
 
   const requestWithDataDir = { ...request, data_dir: dataDir };
   const artifactDir = artifactDirFor(dataDir, request.review_session_id ?? "unknown");
-  const paths = artifactPaths(artifactDir, request.round ?? "unknown", request.agent_id ?? "unknown");
+  // validateRequest より前に path を作るため、不正な round は filename に混ぜず "unknown" に落とす。
+  const pathRound = isSafeRoundNumber(request.round) ? request.round : "unknown";
+  const paths = artifactPaths(artifactDir, pathRound, request.agent_id ?? "unknown");
   await mkdir(artifactDir, { recursive: true });
 
   const validationError = await validateRequest(request);
