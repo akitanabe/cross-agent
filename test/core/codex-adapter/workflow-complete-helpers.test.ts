@@ -1,16 +1,16 @@
 // @ts-nocheck
-import { test } from "vitest";
+
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-import {
-  completedArtifacts,
-  appendCompletionDiagnostic,
-} from "../../../src/core/codex-adapter/workflow-completion-artifacts.ts";
-import { resolveCompletedThreadId } from "../../../src/core/codex-adapter/workflow-complete-helpers.ts";
+import { test } from "vitest";
 import { artifactDirFor, artifactPaths } from "../../../src/core/codex-adapter/state.ts";
+import { resolveCompletedThreadId } from "../../../src/core/codex-adapter/workflow-complete-helpers.ts";
+import {
+  appendCompletionDiagnostic,
+  completedArtifacts,
+} from "../../../src/core/codex-adapter/workflow-completion-artifacts.ts";
 import { makeCodexRunSpec } from "../../../src/core/codex-adapter/workflow-run-spec.ts";
 import { createRequestFixture } from "../../helpers/codex-adapter-fixtures.ts";
 

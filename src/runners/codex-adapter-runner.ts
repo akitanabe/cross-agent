@@ -5,8 +5,8 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseArgs, usage } from "../core/codex-adapter/cli.ts";
-import { CodexPrepareFailedError } from "../core/codex-adapter/workflow-failure.ts";
 import { completeCodexRun, prepareCodexRun } from "../core/codex-adapter/workflow.ts";
+import { CodexPrepareFailedError } from "../core/codex-adapter/workflow-failure.ts";
 
 // CLI entrypoint。prepare / complete の結果 file path だけを stdout に出す。
 async function main(): Promise<void> {

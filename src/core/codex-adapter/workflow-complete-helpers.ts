@@ -1,6 +1,5 @@
-import { extractThreadIdFromJsonl } from "./state.ts";
 import { readOrCreateAgentState, readSessionState } from "./agent-state.ts";
-import { failComplete } from "./workflow-failure.ts";
+import { extractThreadIdFromJsonl } from "./state.ts";
 import type {
   AdapterRequestWithDataDir,
   ArtifactPathSet,
@@ -8,6 +7,7 @@ import type {
   CodexCompleteResult,
   CodexRunSpec,
 } from "./types.ts";
+import { failComplete } from "./workflow-failure.ts";
 
 export async function loadAgentStateForComplete(
   dataDir: string,

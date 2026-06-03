@@ -1,11 +1,12 @@
 // @ts-nocheck
-import { test } from "vitest";
+
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { test } from "vitest";
 
 import { createRequestFixture } from "../helpers/codex-adapter-fixtures.ts";
 

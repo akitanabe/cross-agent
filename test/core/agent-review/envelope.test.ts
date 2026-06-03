@@ -1,6 +1,7 @@
 // @ts-nocheck
-import { test } from "vitest";
+
 import assert from "node:assert/strict";
+import { test } from "vitest";
 
 import { buildAdapterRequest } from "../../../src/core/agent-review/envelope.ts";
 import { normalizeOptions } from "../../../src/core/agent-review/state.ts";

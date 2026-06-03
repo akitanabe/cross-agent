@@ -2,11 +2,11 @@ import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promis
 import { dirname, resolve } from "node:path";
 
 import {
-  isSafePathSegment,
   type AdapterResponseArtifact,
   type AdapterResponseEnvelope,
   type AdapterResponseError,
   type AdapterResponseStatus,
+  isSafePathSegment,
   type ReviewDepth,
 } from "../shared/adapter-envelope.ts";
 import { normalizePath } from "../shared/path-utils.ts";

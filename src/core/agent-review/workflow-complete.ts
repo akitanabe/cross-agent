@@ -1,13 +1,14 @@
+import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
-
+import { normalizePath } from "../shared/path-utils.ts";
 import {
   ADAPTER_RESPONSE_STATUSES,
-  SUPPORTED_ADAPTER_CONTRACT_VERSION,
   isPathInside,
   nowIso,
   readJson,
   resolveDataDir,
+  SUPPORTED_ADAPTER_CONTRACT_VERSION,
   sessionPaths,
   validateAgentId,
   validateRoundNumber,
@@ -22,11 +23,10 @@ import type {
   SessionPathSet,
   SessionState,
 } from "./types.ts";
-import { normalizePath } from "../shared/path-utils.ts";
 import { readSession } from "./workflow-common.ts";
 
 async function validateExistingFile(filePath: string, label: string): Promise<void> {
-  let entry;
+  let entry: Stats;
   try {
     entry = await stat(filePath);
   } catch (error) {

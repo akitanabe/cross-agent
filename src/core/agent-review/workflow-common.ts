@@ -1,5 +1,5 @@
-import type { CommandOutput, OutputType, SessionPathSet, SessionState } from "./types.ts";
 import { readJson, sessionPaths, validateSessionStateSchema } from "./state.ts";
+import type { CommandOutput, OutputType, SessionPathSet, SessionState } from "./types.ts";
 
 export function commandOutput<T>(outputType: OutputType, content: T): CommandOutput<T> {
   return { output_type: outputType, content };

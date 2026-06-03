@@ -3,6 +3,18 @@ import { resolve } from "node:path";
 
 import { parseBooleanOption, parseCommandArgs, parseIntegerOption, requireOption } from "../shared/cli-args.ts";
 import { parseAgentLaunchSpec, sessionPaths } from "./state.ts";
+import type {
+  AgentReviewOptions,
+  CommandOutput,
+  CompleteCurrentRoundInput,
+  CompleteRoundInput,
+  GetRoundInput,
+  PrepareInitialRoundInput,
+  PrepareNextRoundInput,
+  ReviewDepth,
+  RoundKind,
+  StartSessionInput,
+} from "./types.ts";
 import {
   commandOutput,
   completeCurrentRound,
@@ -12,18 +24,6 @@ import {
   prepareNextRound,
   startSession,
 } from "./workflow.ts";
-import type {
-  CommandOutput,
-  CompleteCurrentRoundInput,
-  CompleteRoundInput,
-  AgentReviewOptions,
-  GetRoundInput,
-  PrepareInitialRoundInput,
-  PrepareNextRoundInput,
-  ReviewDepth,
-  RoundKind,
-  StartSessionInput,
-} from "./types.ts";
 
 type CliArgs = Record<string, unknown> & {
   command?: string | null;

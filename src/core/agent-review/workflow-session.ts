@@ -1,18 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
-
-import { commandOutput } from "./workflow-common.ts";
+import { normalizePath } from "../shared/path-utils.ts";
 import {
-  SUPPORTED_SESSION_SCHEMA_VERSION,
   ensureDirectory,
   normalizeOptions,
   nowIso,
   resolveDataDir,
+  SUPPORTED_SESSION_SCHEMA_VERSION,
   sessionPaths,
   writeJsonAtomic,
 } from "./state.ts";
 import type { CommandOutput, StartSessionInput } from "./types.ts";
-import { normalizePath } from "../shared/path-utils.ts";
+import { commandOutput } from "./workflow-common.ts";
 
 export async function startSession(input: StartSessionInput): Promise<CommandOutput<string>> {
   const dataDir = resolveDataDir(input.data_dir);
