@@ -1,6 +1,7 @@
 // @ts-nocheck
-import { test } from "vitest";
+
 import assert from "node:assert/strict";
+import { test } from "vitest";
 
 import { buildInitialPrompt, buildNextRoundPrompt } from "../../../src/core/agent-review/prompts.ts";
 

@@ -1,8 +1,8 @@
 import type {
   AdapterRequestEnvelope,
   AdapterResponseArtifact,
-  AdapterResponseError,
   AdapterResponseEnvelope,
+  AdapterResponseError,
 } from "../shared/adapter-envelope.ts";
 
 export type CodexEffort = "medium" | "high" | "xhigh";

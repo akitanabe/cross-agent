@@ -2,12 +2,18 @@ import { mkdir } from "node:fs/promises";
 
 import { isSafeRoundNumber } from "../shared/adapter-envelope.ts";
 import { normalizePath } from "../shared/path-utils.ts";
-import { readOrCreateAgentState, readSessionState, markAgentPrepared } from "./agent-state.ts";
-import { failPrepare } from "./workflow-failure.ts";
+import { markAgentPrepared, readOrCreateAgentState, readSessionState } from "./agent-state.ts";
 import { artifactDirFor, artifactPaths, makeError, makeResponse, validateRequest, writeJsonAtomic } from "./state.ts";
-import { makeCodexRunSpec } from "./workflow-run-spec.ts";
-import type { AdapterRequestInput, CodexPrepareOptions, CodexPrepareResult, SessionState } from "./types.ts";
+import type {
+  AdapterRequestInput,
+  CodexAgentState,
+  CodexPrepareOptions,
+  CodexPrepareResult,
+  SessionState,
+} from "./types.ts";
 import { normalizeRequest, runPath } from "./workflow-common.ts";
+import { failPrepare } from "./workflow-failure.ts";
+import { makeCodexRunSpec } from "./workflow-run-spec.ts";
 
 export async function prepareCodexRun(
   request: AdapterRequestInput,
@@ -71,7 +77,7 @@ export async function prepareCodexRun(
     });
   }
 
-  let agentState;
+  let agentState: CodexAgentState;
   try {
     agentState = await readOrCreateAgentState(dataDir, request);
   } catch (error) {

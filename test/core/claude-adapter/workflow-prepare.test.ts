@@ -1,11 +1,17 @@
 // @ts-nocheck
-import { test } from "vitest";
+
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { test } from "vitest";
 
-import { agentContextFileFor, artifactDirFor, artifactPaths, validateRequest } from "../../../src/core/claude-adapter/state.ts";
+import {
+  agentContextFileFor,
+  artifactDirFor,
+  artifactPaths,
+  validateRequest,
+} from "../../../src/core/claude-adapter/state.ts";
 import { ClaudePrepareFailedError } from "../../../src/core/claude-adapter/workflow-failure.ts";
 import { prepareClaudeRun } from "../../../src/core/claude-adapter/workflow-prepare.ts";
 import { createClaudeRequestFixture } from "../../helpers/claude-adapter-fixtures.ts";

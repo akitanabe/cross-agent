@@ -1,6 +1,7 @@
 // @ts-nocheck
-import { expect, test } from "vitest";
+
 import assert from "node:assert/strict";
+import { expect, test } from "vitest";
 
 import { normalizePath, normalizePathList } from "../../../src/core/shared/path-utils.ts";
 

@@ -3,14 +3,13 @@
 Thumbs.db
 *.swp
 
-# プラグインの実行時状態は ${CLAUDE_PLUGIN_DATA} に置くためリポジトリには入らないが、
-# ローカル検証で誤って混入した場合に備えてガード
-sessions/
-*.session.json
-
 # 一時ファイル
 *.tmp
 *.log
 
 # Node.js
 node_modules/
+
+# Coding Agent
+.codex/
+.claude/

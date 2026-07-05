@@ -1,12 +1,12 @@
 // @ts-nocheck
-import { test } from "vitest";
+
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-import { prepareClaudeRun } from "../../../src/core/claude-adapter/workflow-prepare.ts";
+import { test } from "vitest";
 import { completeClaudeRun } from "../../../src/core/claude-adapter/workflow-complete.ts";
+import { prepareClaudeRun } from "../../../src/core/claude-adapter/workflow-prepare.ts";
 import { createClaudeRequestFixture } from "../../helpers/claude-adapter-fixtures.ts";
 
 test("completeClaudeRun writes completed response", async () => {

@@ -2,9 +2,8 @@ import { mkdir } from "node:fs/promises";
 
 import { isSafeRoundNumber } from "../shared/adapter-envelope.ts";
 import { normalizePath } from "../shared/path-utils.ts";
-import { readOrCreateAgentState, readSessionState, markAgentPrepared } from "./agent-state.ts";
+import { markAgentPrepared, readOrCreateAgentState, readSessionState } from "./agent-state.ts";
 import { buildClaudeContext, buildClaudeInput, writeTextFile } from "./context.ts";
-import { failPrepare } from "./workflow-failure.ts";
 import { agentContextFileFor, artifactDirFor, artifactPaths, makeError, validateRequest } from "./state.ts";
 import type {
   AdapterRequestInput,
@@ -14,6 +13,7 @@ import type {
   SessionState,
 } from "./types.ts";
 import { inputPath, normalizeRequest, outputPath } from "./workflow-common.ts";
+import { failPrepare } from "./workflow-failure.ts";
 
 export async function prepareClaudeRun(
   request: AdapterRequestInput,

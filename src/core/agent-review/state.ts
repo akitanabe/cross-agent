@@ -1,8 +1,7 @@
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-
-import { normalizePath } from "../shared/path-utils.ts";
 import { SUPPORTED_ADAPTER_CONTRACT_VERSION } from "../shared/adapter-envelope.ts";
+import { normalizePath } from "../shared/path-utils.ts";
 import type {
   AdapterResponseStatus,
   AgentLaunchSpec,

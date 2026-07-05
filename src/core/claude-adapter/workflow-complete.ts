@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 import { normalizePath } from "../shared/path-utils.ts";
 import { markAgentCompleted, readOrCreateAgentState, readSessionState } from "./agent-state.ts";
 import { buildClaudeContext, writeTextFile } from "./context.ts";
-import { failComplete } from "./workflow-failure.ts";
 import {
   agentContextFileFor,
   artifact,
@@ -23,6 +22,7 @@ import type {
   SessionState,
 } from "./types.ts";
 import { normalizeRequest, responsePath } from "./workflow-common.ts";
+import { failComplete } from "./workflow-failure.ts";
 
 async function readNonEmptyOutput(filePath: string): Promise<string | null> {
   if (!(await pathExists(filePath))) return null;
