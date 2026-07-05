@@ -6,7 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
 
-import { agentContextFileFor, artifactDirFor, artifactPaths } from "../../../src/core/claude-adapter/state.ts";
+import {
+  agentContextFileFor,
+  artifactDirFor,
+  artifactPaths,
+  validateRequest,
+} from "../../../src/core/claude-adapter/state.ts";
 import { ClaudePrepareFailedError } from "../../../src/core/claude-adapter/workflow-failure.ts";
 import { prepareClaudeRun } from "../../../src/core/claude-adapter/workflow-prepare.ts";
 import { createClaudeRequestFixture } from "../../helpers/claude-adapter-fixtures.ts";
@@ -33,6 +38,45 @@ test("prepareClaudeRun writes input and context files", async () => {
   }
 });
 
+test("validateRequest rejects round that is not a positive safe integer", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "claude-adapter-"));
+  try {
+    const { request } = await createClaudeRequestFixture(temp);
+    for (const round of [0, -1, 1.5, "1", "../escape", Number.NaN]) {
+      const error = await validateRequest({ ...request, round });
+      assert.equal(error?.code, "invalid_request_envelope", `expected rejection for round ${round}`);
+      assert.match(error?.message, /round/);
+    }
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("prepareClaudeRun keeps a malicious round out of artifact paths", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "claude-adapter-"));
+  try {
+    const { dataDir, request } = await createClaudeRequestFixture(temp);
+
+    let caught: ClaudePrepareFailedError | null = null;
+    await assert.rejects(
+      async () => {
+        await prepareClaudeRun({ ...request, round: "../../escape" }, { dataDir });
+      },
+      (error) => {
+        caught = error as ClaudePrepareFailedError;
+        return error instanceof ClaudePrepareFailedError;
+      },
+    );
+
+    assert.equal(caught?.response.error.code, "invalid_request_envelope");
+    assert.match(caught?.response.error.message, /round/);
+    assert.match(caught?.path, /round-unknown-claude-response\.json$/);
+    assert.ok(!caught?.path.includes(".."), `path contains traversal: ${caught?.path}`);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("prepareClaudeRun writes failed response then rejects", async () => {
   const temp = await mkdtemp(join(tmpdir(), "claude-adapter-"));
   try {
@@ -53,7 +97,7 @@ test("prepareClaudeRun writes failed response then rejects", async () => {
 
     assert.equal(caught?.path, paths.responseFile.replaceAll("\\", "/"));
     assert.equal(caught?.response.status, "failed");
-    assert.equal(caught?.response.error.code, "invalid_request_envelope");
+    assert.equal(caught?.response.error.code, "prompt_file_missing");
     const savedResponse = JSON.parse(await readFile(paths.responseFile, "utf8"));
     assert.equal(savedResponse.status, "failed");
   } finally {

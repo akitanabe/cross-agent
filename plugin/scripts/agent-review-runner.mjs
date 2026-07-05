@@ -78,6 +78,9 @@ function parseCommandArgs(argv, {
 import { readFile, rename, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 
+// src/core/shared/adapter-envelope.ts
+var SUPPORTED_ADAPTER_CONTRACT_VERSION = 2;
+
 // src/core/shared/path-utils.ts
 function normalizePath(value, platform = process.platform) {
   if (typeof value !== "string" || value.length === 0) return value;
@@ -94,9 +97,6 @@ function normalizePathList(values, platform = process.platform) {
   if (!Array.isArray(values)) return values;
   return values.map((value) => normalizePath(value, platform));
 }
-
-// src/core/shared/adapter-envelope.ts
-var SUPPORTED_ADAPTER_CONTRACT_VERSION = 2;
 
 // src/core/agent-review/state.ts
 var OWNER = "agent-review";

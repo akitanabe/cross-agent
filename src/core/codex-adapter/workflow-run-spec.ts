@@ -22,6 +22,7 @@ type LoadedRunSpec = {
 
 type LoadRunSpecResult = { ok: true; value: LoadedRunSpec } | { ok: false; result: CodexCompleteResult };
 
+// complete 処理が run spec だけから response envelope の request 情報を復元する。
 export function makeRequestFromRunSpec(runSpec: CodexRunSpec, dataDir: string | null): AdapterRequestWithDataDir {
   return {
     contract_version: 2,
@@ -40,11 +41,13 @@ export function makeRequestFromRunSpec(runSpec: CodexRunSpec, dataDir: string | 
   };
 }
 
+// 壊れた run spec でも診断 artifact 名を安定させるため、file name から round を推定する。
 function roundFromRunFile(runFile: string): number {
   const match = /round-(\d+)-([A-Za-z0-9._-]+)-run\.json$/.exec(runFile.replaceAll("\\", "/"));
   return match ? Number(match[1]) : 0;
 }
 
+// invalid run spec の failure response を作るため、使える値だけで最小 request を組み立てる。
 function makeFallbackRequestForRunSpec(
   value: unknown,
   runFile: string,
@@ -71,6 +74,7 @@ function makeFallbackRequestForRunSpec(
   };
 }
 
+// invalid run spec の診断出力先を、session id があれば data dir から、なければ run file 位置から導出する。
 function fallbackPathsForRunSpec(value: unknown, runFile: string, dataDir: string): ArtifactPathSet {
   const object = isObject(value) ? value : {};
   const round = Number.isSafeInteger(object.round) ? (object.round as number) : roundFromRunFile(runFile);
@@ -80,6 +84,7 @@ function fallbackPathsForRunSpec(value: unknown, runFile: string, dataDir: strin
   return artifactPaths(dirname(runFile), round, agentIdFromRunFile(runFile));
 }
 
+// codex-agent が安全な専用 spec だけを実行できるよう、必須 field と固定 policy を検証する。
 function validateRunSpec(value: unknown): { runSpec: CodexRunSpec | null; message: string | null } {
   if (!isObject(value)) return { runSpec: null, message: "codex run spec must be an object." };
   if (value.schema_version !== 1) return { runSpec: null, message: "schema_version must be 1." };
@@ -117,9 +122,13 @@ function validateRunSpec(value: unknown): { runSpec: CodexRunSpec | null; messag
   if (value.skip_git_repo_check !== true) {
     return { runSpec: null, message: "skip_git_repo_check must be true." };
   }
+  if (value.ask_for_approval !== "never") {
+    return { runSpec: null, message: 'ask_for_approval must be "never".' };
+  }
   return { runSpec: value as CodexRunSpec, message: null };
 }
 
+// request と Codex agent state から、codex-agent が実行する initial/resume 専用 spec を作る。
 export function makeCodexRunSpec(
   request: AdapterRequestInput,
   paths: ArtifactPathSet,
@@ -143,6 +152,7 @@ export function makeCodexRunSpec(
     exit_file: normalizePath(paths.exitFile) as string,
     model_reasoning_effort: effort,
     skip_git_repo_check: true,
+    ask_for_approval: "never",
     decision_reason: decision.reason,
     previous_thread_id: agentState.thread_id ?? null,
     previous_target_root: agentState.target_root ?? null,
@@ -150,6 +160,7 @@ export function makeCodexRunSpec(
   };
 }
 
+// codex-agent が保存した終了 artifact から、Codex CLI の終了コードだけを読み出す。
 export async function readCodexExit(exitFile: string): Promise<CodexExitResult> {
   const exitResult = await readJson<unknown>(exitFile);
   if (!isObject(exitResult) || !Number.isInteger(exitResult.code)) {
@@ -158,6 +169,7 @@ export async function readCodexExit(exitFile: string): Promise<CodexExitResult> 
   return { code: exitResult.code as number };
 }
 
+// complete の入口で run spec を読み、invalid な場合は recoverable failure response に変換する。
 export async function loadRunSpecForComplete(runFile: string, dataDir: string): Promise<LoadRunSpecResult> {
   let rawRunSpec: unknown;
   try {
@@ -199,6 +211,7 @@ export async function loadRunSpecForComplete(runFile: string, dataDir: string): 
   return { ok: true, value: { runSpec, request: makeRequestFromRunSpec(runSpec, dataDir), paths } };
 }
 
+// run spec 内の artifact path が data dir から導出される期待値と一致するか検査する。
 export function mismatchedRunSpecPath(runSpec: CodexRunSpec, paths: ArtifactPathSet): string | null {
   const expectedPaths = {
     output_file: paths.outputFile,
@@ -212,6 +225,8 @@ export function mismatchedRunSpecPath(runSpec: CodexRunSpec, paths: ArtifactPath
   }
   return null;
 }
+
+// fallback response 用に、run file 名から agent_id を推定する。
 function agentIdFromRunFile(runFile: string): string {
   const match = /round-\d+-([A-Za-z0-9._-]+)-run\.json$/.exec(runFile.replaceAll("\\", "/"));
   return match ? match[1] : "codex";

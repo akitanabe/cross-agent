@@ -100,16 +100,6 @@ complete validates Codex CLI artifacts written by codex-agent, updates Codex age
 writes the adapter response envelope. stdout contains only the response envelope file path.`;
 }
 
-// src/core/codex-adapter/state.ts
-import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-
-// src/core/shared/adapter-envelope.ts
-var SAFE_PATH_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
-function isSafePathSegment(value) {
-  return typeof value === "string" && value.length > 0 && SAFE_PATH_SEGMENT_RE.test(value) && !value.includes("..");
-}
-
 // src/core/shared/path-utils.ts
 function normalizePath(value, platform = process.platform) {
   if (typeof value !== "string" || value.length === 0) return value;
@@ -122,9 +112,52 @@ function normalizePath(value, platform = process.platform) {
   if (msys) normalized = `${msys[1].toUpperCase()}:${normalized.slice(2)}`;
   return normalized;
 }
-function normalizePathList(values, platform = process.platform) {
+
+// src/core/codex-adapter/workflow-common.ts
+function normalizeEnvelopePath(value) {
+  return typeof value === "string" && value.includes("\\") ? normalizePath(value, "win32") : normalizePath(value);
+}
+function normalizeEnvelopePathList(values) {
   if (!Array.isArray(values)) return values;
-  return values.map((value) => normalizePath(value, platform));
+  return values.map((value) => normalizeEnvelopePath(value));
+}
+function isObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function normalizeRequest(request) {
+  return {
+    ...request,
+    target_root: normalizeEnvelopePath(request.target_root),
+    prompt_file: normalizeEnvelopePath(request.prompt_file),
+    context_file: normalizeEnvelopePath(request.context_file),
+    target_files: normalizeEnvelopePathList(request.target_files)
+  };
+}
+function responsePath(paths) {
+  return normalizeEnvelopePath(paths.responseFile);
+}
+function runPath(paths) {
+  return normalizeEnvelopePath(paths.runFile);
+}
+
+// src/core/codex-adapter/workflow-complete.ts
+import { readFile as readFile2 } from "node:fs/promises";
+
+// src/core/codex-adapter/agent-state.ts
+import { mkdir as mkdir2 } from "node:fs/promises";
+import { dirname as dirname2 } from "node:path";
+
+// src/core/codex-adapter/state.ts
+import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+
+// src/core/shared/adapter-envelope.ts
+var SAFE_PATH_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
+function isSafePathSegment(value) {
+  return typeof value === "string" && value.length > 0 && SAFE_PATH_SEGMENT_RE.test(value) && !value.includes("..");
+}
+function isSafeRoundNumber(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
 }
 
 // src/core/codex-adapter/state.ts
@@ -274,6 +307,9 @@ async function validateRequest(request) {
   if (!isSafePathSegment(request.agent_id)) {
     return makeError("invalid_request_envelope", `invalid agent_id: ${request.agent_id}`);
   }
+  if (!isSafeRoundNumber(request.round)) {
+    return makeError("invalid_request_envelope", `invalid round: ${request.round}`);
+  }
   try {
     const rootStat = await stat(request.target_root);
     if (!rootStat.isDirectory()) return makeError("target_root_missing", "target_root is not a directory.");
@@ -287,8 +323,6 @@ async function validateRequest(request) {
 }
 
 // src/core/codex-adapter/agent-state.ts
-import { mkdir as mkdir2 } from "node:fs/promises";
-import { dirname as dirname2 } from "node:path";
 async function appendAgentArtifacts(agentState, artifacts) {
   agentState.artifacts ??= [];
   agentState.artifacts.push(...artifacts);
@@ -367,26 +401,6 @@ async function markAgentCompleted({
   });
   await appendAgentArtifacts(agentState, artifacts);
   await saveAgentState(dataDir, runSpec.review_session_id, agentState);
-}
-
-// src/core/codex-adapter/workflow-common.ts
-function isObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function normalizeRequest(request) {
-  return {
-    ...request,
-    target_root: normalizePath(request.target_root),
-    prompt_file: normalizePath(request.prompt_file),
-    context_file: normalizePath(request.context_file),
-    target_files: normalizePathList(request.target_files)
-  };
-}
-function responsePath(paths) {
-  return normalizePath(paths.responseFile);
-}
-function runPath(paths) {
-  return normalizePath(paths.runFile);
 }
 
 // src/core/codex-adapter/workflow-failure.ts
@@ -473,9 +487,6 @@ async function failComplete(input) {
   const response = await handleFailure(input);
   return { path: responsePath(input.paths), response };
 }
-
-// src/core/codex-adapter/workflow-complete.ts
-import { readFile as readFile2 } from "node:fs/promises";
 
 // src/core/codex-adapter/workflow-complete-helpers.ts
 async function loadAgentStateForComplete(dataDir, runSpec, request, paths) {
@@ -662,6 +673,9 @@ function validateRunSpec(value) {
   if (value.skip_git_repo_check !== true) {
     return { runSpec: null, message: "skip_git_repo_check must be true." };
   }
+  if (value.ask_for_approval !== "never") {
+    return { runSpec: null, message: 'ask_for_approval must be "never".' };
+  }
   return { runSpec: value, message: null };
 }
 function makeCodexRunSpec(request, paths, agentState) {
@@ -683,6 +697,7 @@ function makeCodexRunSpec(request, paths, agentState) {
     exit_file: normalizePath(paths.exitFile),
     model_reasoning_effort: effort,
     skip_git_repo_check: true,
+    ask_for_approval: "never",
     decision_reason: decision.reason,
     previous_thread_id: agentState.thread_id ?? null,
     previous_target_root: agentState.target_root ?? null,
@@ -847,7 +862,8 @@ async function prepareCodexRun(request, options = {}) {
   }
   const requestWithDataDir = { ...request, data_dir: dataDir };
   const artifactDir = artifactDirFor(dataDir, request.review_session_id ?? "unknown");
-  const paths = artifactPaths(artifactDir, request.round ?? "unknown", request.agent_id ?? "unknown");
+  const pathRound = isSafeRoundNumber(request.round) ? request.round : "unknown";
+  const paths = artifactPaths(artifactDir, pathRound, request.agent_id ?? "unknown");
   await mkdir3(artifactDir, { recursive: true });
   const validationError = await validateRequest(request);
   if (validationError) {

@@ -14,6 +14,14 @@ export function isSafePathSegment(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && SAFE_PATH_SEGMENT_RE.test(value) && !value.includes("..");
 }
 
+// round は artifact filename (`round-<round>-...`) のパス要素になる。文字列や負数、小数、
+// `..` を含む値が混入すると filename が壊れたり path traversal の恐れがあるため、
+// positive safe integer だけを安全な round とみなす。agent-review の validateRoundNumber と
+// 同じ範囲を、adapter 単体起動でも再検証できるよう共有する。
+export function isSafeRoundNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
+}
+
 export type AdapterRequestEnvelopeV2 = {
   contract_version: 2;
   review_session_id: string;

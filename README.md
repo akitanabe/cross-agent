@@ -26,6 +26,7 @@ cross-agent/
 │       ├── codex-adapter-runner.mjs # Codex adapter runner
 │       └── claude-adapter-runner.mjs # Claude adapter runner
 ├── docs/
+│   ├── adapter-envelope-v2-spec.md   # request/response envelope V2 契約（正準）
 │   ├── agent-review-spec.md          # agent-review 詳細仕様
 │   ├── codex-adapter-spec.md        # codex-adapter 詳細仕様
 │   └── claude-adapter-spec.md       # claude-adapter 詳細仕様
@@ -52,6 +53,10 @@ cross-agent/
   継続性を表現する
 - **状態の永続化先**: `${CLAUDE_PLUGIN_DATA}/sessions/<review_session_id>.json`
   （`${CLAUDE_PLUGIN_ROOT}` は更新時に変わる ephemeral なため使わない）
+- **envelope 契約（V2）**: agent-review と各 adapter 間の request/response envelope は
+  `contract_version: 2` で固定し、契約の正準を [`docs/adapter-envelope-v2-spec.md`](docs/adapter-envelope-v2-spec.md)
+  に集約する。トップレベルのスキーマは共通で、`artifacts[]` / `error` の中身は adapter 固有。
+  consumer は `output_file`（レビュー本文）の読み取りとトップレベル検証だけを共通インターフェースとする
 
 ## ローカルでの動作確認
 

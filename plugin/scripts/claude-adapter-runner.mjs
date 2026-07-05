@@ -103,6 +103,52 @@ complete validates the Claude output artifact, updates Claude agent state, and w
 response envelope. stdout contains only the response envelope file path.`;
 }
 
+// src/core/shared/path-utils.ts
+function normalizePath(value, platform = process.platform) {
+  if (typeof value !== "string" || value.length === 0) return value;
+  if (platform !== "win32") return value;
+  const isUnc = /^[\\/]{2}[^\\/]+[\\/][^\\/]+/.test(value);
+  const uncPath = isUnc ? "//" : "";
+  const path = isUnc ? value.slice(2) : value;
+  let normalized = uncPath + path.replace(/\\/g, "/");
+  const msys = /^\/([a-zA-Z])(\/|$)/.exec(normalized);
+  if (msys) normalized = `${msys[1].toUpperCase()}:${normalized.slice(2)}`;
+  return normalized;
+}
+
+// src/core/claude-adapter/workflow-common.ts
+function normalizeEnvelopePath(value) {
+  return typeof value === "string" && value.includes("\\") ? normalizePath(value, "win32") : normalizePath(value);
+}
+function normalizeEnvelopePathList(values) {
+  if (!Array.isArray(values)) return values;
+  return values.map((value) => normalizeEnvelopePath(value));
+}
+function normalizeRequest(request) {
+  return {
+    ...request,
+    target_root: normalizeEnvelopePath(request.target_root),
+    prompt_file: normalizeEnvelopePath(request.prompt_file),
+    context_file: normalizeEnvelopePath(request.context_file),
+    target_files: normalizeEnvelopePathList(request.target_files)
+  };
+}
+function responsePath(paths) {
+  return normalizeEnvelopePath(paths.responseFile);
+}
+function inputPath(paths) {
+  return normalizeEnvelopePath(paths.inputFile);
+}
+function outputPath(paths) {
+  return normalizeEnvelopePath(paths.outputFile);
+}
+function toDisplayPath(filePath) {
+  return normalizeEnvelopePath(filePath) ?? "";
+}
+
+// src/core/claude-adapter/workflow-complete.ts
+import { readFile as readFile2 } from "node:fs/promises";
+
 // src/core/claude-adapter/agent-state.ts
 import { mkdir as mkdir2 } from "node:fs/promises";
 import { dirname as dirname2 } from "node:path";
@@ -116,22 +162,8 @@ var SAFE_PATH_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
 function isSafePathSegment(value) {
   return typeof value === "string" && value.length > 0 && SAFE_PATH_SEGMENT_RE.test(value) && !value.includes("..");
 }
-
-// src/core/shared/path-utils.ts
-function normalizePath(value, platform = process.platform) {
-  if (typeof value !== "string" || value.length === 0) return value;
-  if (platform !== "win32") return value;
-  const isUnc = /^[\\/]{2}[^\\/]+[\\/][^\\/]+/.test(value);
-  const uncPath = isUnc ? "//" : "";
-  const path = isUnc ? value.slice(2) : value;
-  let normalized = uncPath + path.replace(/\\/g, "/");
-  const msys = /^\/([a-zA-Z])(\/|$)/.exec(normalized);
-  if (msys) normalized = `${msys[1].toUpperCase()}:${normalized.slice(2)}`;
-  return normalized;
-}
-function normalizePathList(values, platform = process.platform) {
-  if (!Array.isArray(values)) return values;
-  return values.map((value) => normalizePath(value, platform));
+function isSafeRoundNumber(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
 }
 
 // src/core/claude-adapter/state.ts
@@ -251,6 +283,9 @@ async function validateRequest(request) {
   if (!isSafePathSegment(request.agent_id)) {
     return makeError("invalid_request_envelope", `invalid agent_id: ${request.agent_id}`);
   }
+  if (!isSafeRoundNumber(request.round)) {
+    return makeError("invalid_request_envelope", `invalid round: ${request.round}`);
+  }
   try {
     const rootStat = await stat(request.target_root);
     if (!rootStat.isDirectory()) return makeError("target_root_missing", "target_root is not a directory.");
@@ -258,7 +293,7 @@ async function validateRequest(request) {
     return makeError("target_root_missing", "target_root does not exist.");
   }
   if (!await pathExists(request.prompt_file)) {
-    return makeError("invalid_request_envelope", "prompt_file does not exist.");
+    return makeError("prompt_file_missing", "prompt_file does not exist.");
   }
   return null;
 }
@@ -338,112 +373,6 @@ async function markAgentCompleted({
   await appendAgentArtifacts(agentState, artifacts);
   await saveAgentState(dataDir, request.review_session_id, agentState);
 }
-
-// src/core/claude-adapter/workflow-common.ts
-function normalizeRequest(request) {
-  return {
-    ...request,
-    target_root: normalizePath(request.target_root),
-    prompt_file: normalizePath(request.prompt_file),
-    context_file: normalizePath(request.context_file),
-    target_files: normalizePathList(request.target_files)
-  };
-}
-function responsePath(paths) {
-  return normalizePath(paths.responseFile);
-}
-function inputPath(paths) {
-  return normalizePath(paths.inputFile);
-}
-function outputPath(paths) {
-  return normalizePath(paths.outputFile);
-}
-function toDisplayPath(filePath) {
-  return normalizePath(filePath) ?? "";
-}
-
-// src/core/claude-adapter/workflow-failure.ts
-var ClaudePrepareFailedError = class extends Error {
-  path;
-  response;
-  constructor(path, response) {
-    super(response.error?.message ?? "Claude prepare failed.");
-    this.name = "ClaudePrepareFailedError";
-    this.path = path;
-    this.response = response;
-  }
-};
-async function writeFailureDiagnostic({
-  request,
-  paths,
-  code,
-  message,
-  extraDiagnostics = []
-}) {
-  await writeDiagnostic(paths.diagnosticFile, [
-    `# Claude adapter diagnostic`,
-    ``,
-    `- status: failed`,
-    `- code: ${code}`,
-    `- message: ${message}`,
-    `- round: ${request.round}`,
-    `- target_root: ${request.target_root}`,
-    ...extraDiagnostics
-  ]);
-}
-async function updateFailedAgentState({ request, agentState, paths, code, message }) {
-  if (!agentState) return;
-  const error = makeError(code, message, paths.diagnosticFile);
-  agentState.updated_at = nowIso();
-  Object.assign(agentState, {
-    schema_version: agentState.schema_version ?? 1,
-    review_session_id: request.review_session_id,
-    agent_id: request.agent_id,
-    adapter: "claude",
-    status: "failed",
-    target_root: agentState.target_root ?? request.target_root,
-    last_input_file: agentState.last_input_file ?? paths.inputFile,
-    last_output_file: agentState.last_output_file ?? null,
-    last_error: error
-  });
-  await appendAgentArtifacts(agentState, [
-    artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id)
-  ]);
-  agentState.errors ??= [];
-  agentState.errors.push({
-    ...error,
-    agent_id: request.agent_id,
-    adapter: "claude",
-    round: request.round,
-    created_at: nowIso()
-  });
-  await saveAgentState(request.data_dir ?? ".", request.review_session_id, agentState);
-}
-async function handleFailure(input) {
-  const diagnosticArtifact = artifact(
-    input.paths.diagnosticFile,
-    "diagnostic",
-    input.request.round,
-    input.request.agent_id
-  );
-  const error = makeError(input.code, input.message, input.paths.diagnosticFile);
-  const response = makeResponse(input.request, "failed", null, [diagnosticArtifact], error);
-  await writeFailureDiagnostic(input);
-  await updateFailedAgentState(input);
-  await writeJsonAtomic(input.paths.responseFile, response);
-  return response;
-}
-async function failPrepare(input) {
-  const response = await handleFailure(input);
-  throw new ClaudePrepareFailedError(responsePath(input.paths), response);
-}
-async function failComplete(input) {
-  const response = await handleFailure(input);
-  return { path: responsePath(input.paths), response };
-}
-
-// src/core/claude-adapter/workflow-complete.ts
-import { readFile as readFile2 } from "node:fs/promises";
 
 // src/core/claude-adapter/context.ts
 import { mkdir as mkdir3, writeFile as writeFile2 } from "node:fs/promises";
@@ -549,6 +478,86 @@ function buildClaudeInput({
 async function writeTextFile(filePath, text) {
   await mkdir3(dirname3(filePath), { recursive: true });
   await writeFile2(filePath, text, "utf8");
+}
+
+// src/core/claude-adapter/workflow-failure.ts
+var ClaudePrepareFailedError = class extends Error {
+  path;
+  response;
+  constructor(path, response) {
+    super(response.error?.message ?? "Claude prepare failed.");
+    this.name = "ClaudePrepareFailedError";
+    this.path = path;
+    this.response = response;
+  }
+};
+async function writeFailureDiagnostic({
+  request,
+  paths,
+  code,
+  message,
+  extraDiagnostics = []
+}) {
+  await writeDiagnostic(paths.diagnosticFile, [
+    `# Claude adapter diagnostic`,
+    ``,
+    `- status: failed`,
+    `- code: ${code}`,
+    `- message: ${message}`,
+    `- round: ${request.round}`,
+    `- target_root: ${request.target_root}`,
+    ...extraDiagnostics
+  ]);
+}
+async function updateFailedAgentState({ request, agentState, paths, code, message }) {
+  if (!agentState) return;
+  const error = makeError(code, message, paths.diagnosticFile);
+  agentState.updated_at = nowIso();
+  Object.assign(agentState, {
+    schema_version: agentState.schema_version ?? 1,
+    review_session_id: request.review_session_id,
+    agent_id: request.agent_id,
+    adapter: "claude",
+    status: "failed",
+    target_root: agentState.target_root ?? request.target_root,
+    last_input_file: agentState.last_input_file ?? paths.inputFile,
+    last_output_file: agentState.last_output_file ?? null,
+    last_error: error
+  });
+  await appendAgentArtifacts(agentState, [
+    artifact(paths.diagnosticFile, "diagnostic", request.round, request.agent_id)
+  ]);
+  agentState.errors ??= [];
+  agentState.errors.push({
+    ...error,
+    agent_id: request.agent_id,
+    adapter: "claude",
+    round: request.round,
+    created_at: nowIso()
+  });
+  await saveAgentState(request.data_dir ?? ".", request.review_session_id, agentState);
+}
+async function handleFailure(input) {
+  const diagnosticArtifact = artifact(
+    input.paths.diagnosticFile,
+    "diagnostic",
+    input.request.round,
+    input.request.agent_id
+  );
+  const error = makeError(input.code, input.message, input.paths.diagnosticFile);
+  const response = makeResponse(input.request, "failed", null, [diagnosticArtifact], error);
+  await writeFailureDiagnostic(input);
+  await updateFailedAgentState(input);
+  await writeJsonAtomic(input.paths.responseFile, response);
+  return response;
+}
+async function failPrepare(input) {
+  const response = await handleFailure(input);
+  throw new ClaudePrepareFailedError(responsePath(input.paths), response);
+}
+async function failComplete(input) {
+  const response = await handleFailure(input);
+  return { path: responsePath(input.paths), response };
 }
 
 // src/core/claude-adapter/workflow-complete.ts
@@ -661,7 +670,8 @@ async function prepareClaudeRun(request, options = {}) {
   }
   const requestWithDataDir = { ...request, data_dir: dataDir };
   const artifactDir = artifactDirFor(dataDir, request.review_session_id ?? "unknown");
-  const paths = artifactPaths(artifactDir, request.round ?? "unknown", request.agent_id ?? "unknown");
+  const pathRound = isSafeRoundNumber(request.round) ? request.round : "unknown";
+  const paths = artifactPaths(artifactDir, pathRound, request.agent_id ?? "unknown");
   await mkdir4(artifactDir, { recursive: true });
   const validationError = await validateRequest(request);
   if (validationError) {

@@ -301,7 +301,7 @@ Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-review-runner.mjs" get-round-outp
 # codex-adapter（subagent 内の Bash）
 Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" prepare **)
 Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-adapter-runner.mjs" complete **)
-Bash(codex exec **)
+Bash(codex --ask-for-approval never exec **)
 
 # claude-adapter（subagent 内の Bash）
 Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/claude-adapter-runner.mjs" prepare **)

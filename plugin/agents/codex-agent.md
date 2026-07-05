@@ -29,7 +29,7 @@ request_envelope_file: .../artifacts/<review_session_id>/round-<N>-adapter-reque
 2. `prepare` が失敗した場合は runner が failed response envelope を保存済みとみなし、runner / Bash tool のエラーとして扱って Codex CLI 実行や `complete` へ進まない。
 3. `prepare` が `round-<N>-codex-run.json` を返した場合は、その JSON を読む。
 4. `codex-run.json` が Codex exec 専用 spec として妥当か確認する。
-5. `mode == "initial"` なら `codex exec`、`mode == "resume"` なら `codex exec resume` を Bash から直接実行する。
+5. `mode == "initial"` なら `codex --ask-for-approval never exec`、`mode == "resume"` なら `codex --ask-for-approval never exec resume` を Bash から直接実行する。
 6. prompt 本文は argv ではなく stdin で渡し、stdout/stderr は run spec の `event_log` に保存する。
 7. Bash tool が返した Codex CLI の終了コードを run spec の `exit_file` に JSON として保存する。
 8. Codex CLI が失敗していても、必ず `complete` を呼ぶ。

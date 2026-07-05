@@ -2,11 +2,12 @@ import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promis
 import { dirname, resolve } from "node:path";
 
 import {
+  isSafePathSegment,
+  isSafeRoundNumber,
   type AdapterResponseArtifact,
   type AdapterResponseEnvelope,
   type AdapterResponseError,
   type AdapterResponseStatus,
-  isSafePathSegment,
 } from "../shared/adapter-envelope.ts";
 import { normalizePath } from "../shared/path-utils.ts";
 import type { AdapterRequestInput, AdapterRequestWithDataDir, ArtifactPathSet, RecoverableError } from "./types.ts";
@@ -149,6 +150,10 @@ export async function validateRequest(request: AdapterRequestInput): Promise<Rec
   if (!isSafePathSegment(request.agent_id)) {
     return makeError("invalid_request_envelope", `invalid agent_id: ${request.agent_id}`);
   }
+  // round も artifact filename のパス要素になるため、positive safe integer に限定する。
+  if (!isSafeRoundNumber(request.round)) {
+    return makeError("invalid_request_envelope", `invalid round: ${request.round}`);
+  }
 
   try {
     const rootStat = await stat(request.target_root);
@@ -158,7 +163,7 @@ export async function validateRequest(request: AdapterRequestInput): Promise<Rec
   }
 
   if (!(await pathExists(request.prompt_file))) {
-    return makeError("invalid_request_envelope", "prompt_file does not exist.");
+    return makeError("prompt_file_missing", "prompt_file does not exist.");
   }
   return null;
 }
